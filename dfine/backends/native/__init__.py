@@ -7,7 +7,8 @@ upstream so released checkpoints load without a remap.
 
 from __future__ import annotations
 
+from .dfine_decoder import DFINETransformer
 from .hgnetv2 import HGNetv2
 from .hybrid_encoder import HybridEncoder
 
-__all__ = ["HGNetv2", "HybridEncoder"]
+__all__ = ["DFINETransformer", "HGNetv2", "HybridEncoder"]

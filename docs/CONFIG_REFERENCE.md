@@ -62,6 +62,7 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 | Param | Type | Default | Description |
 |---|---|---|---|
 | `num_queries` | int | 300 | Object queries. |
+| `decoder_dim_feedforward` | int | 1024 | Decoder FFN dim (512 for N; separate from `encoder_dim_feedforward`). |
 | `decoder_layers` | int | 6 | Decoder layers (`num_layers`; 4 for M, 3 for S/N). |
 | `eval_idx` | int | -1 | Layer used at eval; negative = from end (aux-layer scaling). |
 | `num_levels` | int | 3 | Multi-scale feature levels. |

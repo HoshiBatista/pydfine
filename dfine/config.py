@@ -61,6 +61,7 @@ class DFINEConfig:
 
     # --- 4. Decoder (DFINETransformer) --------------------------------------
     num_queries: int = 300  # object queries
+    decoder_dim_feedforward: int = 1024  # decoder FFN dim (512 for N; separate from enc)
     decoder_layers: int = 6  # decoder layers (num_layers; 4 for M, 3 for S/N)
     eval_idx: int = -1  # layer used at eval; negative = from end
     num_levels: int = 3  # multi-scale feature levels
@@ -223,6 +224,7 @@ SIZE_PRESETS: dict[str, dict[str, Any]] = {
         "hidden_dim": 128,
         "use_encoder_idx": [1],
         "encoder_dim_feedforward": 512,
+        "decoder_dim_feedforward": 512,
         "encoder_expansion": 0.34,
         "depth_mult": 0.5,
         "feat_channels": [128, 128],

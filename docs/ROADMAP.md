@@ -64,7 +64,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done.
 - [x] Port `HybridEncoder` into `dfine/backends/native/hybrid_encoder.py` (AIFI +
       CCFM/GELAN; `get_activation` moved to `ops.py`; `+ from_config`). Shape +
       backbone→encoder integration tests green for all presets.
-- [ ] Port `DFINETransformer` (+ FDR head, LQE, denoising).
+- [x] Port `DFINETransformer` (+ FDR head, LQE, denoising) into
+      `dfine/backends/native/dfine_decoder.py`, with `box_ops.py`, `dfine_utils.py`,
+      `denoising.py`, and extended `ops.py` (inverse_sigmoid, bias_init,
+      deformable_attention_core_func_v2). Added `decoder_dim_feedforward` config field
+      (512 for N, else 1024). Shape + full backbone→encoder→decoder pipeline tests green.
 - [ ] Port `HungarianMatcher` + `DFINECriterion` (VFL/L1/GIoU/FGL/DDF).
 - [ ] Port `DFINEPostProcessor`.
 - [ ] Weight-remap loader: upstream `.pth` → native modules; parity test per size.
