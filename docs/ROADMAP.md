@@ -57,9 +57,13 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done.
 - [ ] `DFINE.val()` via COCO evaluator → returns metrics dict.
 - [ ] Overfit-one-batch test (loss → ~0) as a training smoke test.
 
-## Phase 5 — Native backend (Path A) — optional, for full ownership/parity
-- [ ] Port `HGNetv2` into `dfine/backends/native/backbone.py` (strip registry).
-- [ ] Port `HybridEncoder`.
+## Phase 5 — Native backend (Path A) — **primary path** (decision 2026-07-11)
+- [x] Port `HGNetv2` into `dfine/backends/native/hgnetv2.py` (strip registry; +
+      `from_config`, name normalization, `out_channels`/`out_strides`; `common.py`
+      holds `FrozenBatchNorm2d`). Shape tests green for all presets.
+- [x] Port `HybridEncoder` into `dfine/backends/native/hybrid_encoder.py` (AIFI +
+      CCFM/GELAN; `get_activation` moved to `ops.py`; `+ from_config`). Shape +
+      backbone→encoder integration tests green for all presets.
 - [ ] Port `DFINETransformer` (+ FDR head, LQE, denoising).
 - [ ] Port `HungarianMatcher` + `DFINECriterion` (VFL/L1/GIoU/FGL/DDF).
 - [ ] Port `DFINEPostProcessor`.
