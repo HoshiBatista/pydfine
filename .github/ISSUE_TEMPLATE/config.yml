@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Upstream D-FINE
+    url: https://github.com/Peterande/D-FINE
+    about: Questions about the original model, weights, or paper.
+  - name: Roadmap
+    url: https://github.com/Peterande/D-FINE/blob/main/docs/ROADMAP.md
+    about: Planned work and current phase — check before filing a feature request.

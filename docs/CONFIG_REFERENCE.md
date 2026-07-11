@@ -100,20 +100,22 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 
 | Param | Type | Default | Description |
 |---|---|---|---|
-| `cost_class` | float | 2.0 | Classification match cost (⚠verify). |
-| `cost_bbox` | float | 5.0 | L1 box match cost (⚠verify). |
-| `cost_giou` | float | 2.0 | GIoU match cost (⚠verify). |
+| `cost_class` | float | 2.0 | Classification match cost. |
+| `cost_bbox` | float | 5.0 | L1 box match cost. |
+| `cost_giou` | float | 2.0 | GIoU match cost. |
+| `matcher_alpha` | float | 0.25 | Matcher focal alpha (distinct from criterion `alpha`). |
+| `matcher_gamma` | float | 2.0 | Matcher focal gamma. |
 
 ## 7. Losses (DFINECriterion) — training only
 
 | Param | Type | Default | Description |
 |---|---|---|---|
 | `loss_vfl_weight` | float | 1.0 | Varifocal classification loss. |
-| `loss_bbox_weight` | float | 5.0 | L1 box loss (⚠verify). |
-| `loss_giou_weight` | float | 2.0 | GIoU loss (⚠verify). |
-| `loss_fgl_weight` | float | ⚠verify | Fine-grained localization (DFL) loss. |
-| `loss_ddf_weight` | float | ⚠verify | GO-LSD decoupled distillation loss. |
-| `focal_alpha` | float | 0.75 | Focal/VFL alpha (⚠verify). |
+| `loss_bbox_weight` | float | 5.0 | L1 box loss. |
+| `loss_giou_weight` | float | 2.0 | GIoU loss. |
+| `loss_fgl_weight` | float | 0.15 | Fine-grained localization (DFL) loss. |
+| `loss_ddf_weight` | float | 1.5 | GO-LSD decoupled distillation loss. |
+| `focal_alpha` | float | 0.75 | Focal/VFL alpha (criterion `alpha`). |
 | `focal_gamma` | float | 2.0 | Focal/VFL gamma (⚠verify). |
 | `ddf_temperature` | float | 0.05 | GO-LSD temperature (`T_init≈5e-2`). |
 | `aux_loss` | bool | True | Supervise auxiliary decoder layers. |
@@ -162,23 +164,34 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 
 ## 11. Per-size presets (`SIZE_PRESETS`)
 
-Confirm against upstream configs while implementing `DFINEConfig.preset(size)`.
+**Verified** against `D-FINE/configs/dfine/dfine_hgnetv2_{n,s,m,l,x}_coco.yml` +
+`include/dfine_hgnetv2.yml` + `include/optimizer.yml` (2026-07-11). This table now
+matches `dfine/config.py::SIZE_PRESETS` exactly. **Note N is structurally different:
+it is a 2-level pyramid at `hidden_dim=128`, not 3-level/256.**
 
 | field | n | s | m | l | x |
 |---|---|---|---|---|---|
 | `backbone` | hgnetv2_b0 | hgnetv2_b0 | hgnetv2_b2 | hgnetv2_b4 | hgnetv2_b5 |
-| `use_lab` | True | True | False⚠ | False | False |
-| `hidden_dim` | 256 | 256 | 256 | 256 | 384 |
-| `encoder_dim_feedforward` | 1024 | 1024 | 1024 | 1024 | 2048 |
-| `feat_channels` | [256]*3 | [256]*3 | [256]*3 | [256]*3 | [384]*3 |
-| `in_channels` | [256,512,1024] | [256,512,1024] | ⚠verify | [512,1024,2048] | [512,1024,2048] |
+| `use_lab` | True | True | True | False | False |
+| `num_levels` | **2** | 3 | 3 | 3 | 3 |
+| `hidden_dim` | **128** | 256 | 256 | 256 | 384 |
+| `return_idx` | [2,3] | [1,2,3] | [1,2,3] | [1,2,3] | [1,2,3] |
+| `in_channels` | [512,1024] | [256,512,1024] | [384,768,1536] | [512,1024,2048] | [512,1024,2048] |
+| `feat_strides` | [16,32] | [8,16,32] | [8,16,32] | [8,16,32] | [8,16,32] |
+| `feat_channels` | [128,128] | [256]*3 | [256]*3 | [256]*3 | [384]*3 |
+| `num_points` | [6,6] | [3,6,3] | [3,6,3] | [3,6,3] | [3,6,3] |
+| `use_encoder_idx` | [1] | [2] | [2] | [2] | [2] |
+| `encoder_dim_feedforward` | 512 | 1024 | 1024 | 1024 | 2048 |
 | `decoder_layers` | 3 | 3 | 4 | 6 | 6 |
-| `depth_mult` | ⚠ | 0.34 | ⚠ | 1.0 | 1.0 |
-| `encoder_expansion` | ⚠ | 0.5 | ⚠ | 1.0 | 1.0 |
+| `depth_mult` | 0.5 | 0.34 | 0.67 | 1.0 | 1.0 |
+| `encoder_expansion` | 0.34 | 0.5 | 1.0 | 1.0 | 1.0 |
 | `reg_scale` | 4 | 4 | 4 | 4 | 8 |
-| `epochs` | ⚠ | 132 (120+4n) | ⚠ | 72 (+2) | 72 (+2) |
-| `lr` | 2e-4 | 2e-4 | 2e-4 | 2.5e-4 | 2.5e-4 |
+| `freeze_at` / `freeze_norm` | -1 / F | -1 / F | -1 / F | 0 / T | 0 / T |
+| `epochs` (incl. no-aug tail) | 160 | 132 | 132 | 80 | 80 |
+| `lr` | 8e-4 | 2e-4 | 2e-4 | 2.5e-4 | 2.5e-4 |
+| `lr_backbone` | 4e-4 | 1e-4 | 2e-5 | 1.25e-5 | 2.5e-6 |
 | `weight_decay` | 1e-4 | 1e-4 | 1e-4 | 1.25e-4 | 1.25e-4 |
+| `base_size_repeat` | None | 20 | 6 | 4 | 3 |
 
 ## 12. Checkpoint presets (weights)
 

@@ -47,9 +47,18 @@ model = DFINE(
 
 ## Status
 
-Early construction. This repository currently contains the **specification and
-agent-guidance docs** that drive the build, plus an inference-core scaffold.
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's done and what's next.
+Early construction. Done so far: the **config-first core** — `DFINEConfig` (every
+model/training param as a typed field), verified `n/s/m/l/x` presets, validation, the
+checkpoint registry, and the `dfine models` CLI. The inference/training backends
+(`predict`/`train`/`val`/`export`) are next. See [`docs/ROADMAP.md`](docs/ROADMAP.md)
+for the full status.
+
+```python
+from dfine import DFINEConfig
+
+cfg = DFINEConfig.preset("l", num_classes=3)   # verified upstream defaults
+cfg = DFINEConfig.preset("n")                  # 2-level, hidden_dim=128
+```
 
 ## Why this exists
 

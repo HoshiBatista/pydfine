@@ -1,0 +1,33 @@
+name: Bug report
+description: Report something that doesn't work as expected.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest code / command that triggers it.
+      render: python
+    validations:
+      required: true
+  - type: input
+    id: config
+    attributes:
+      label: Model config
+      description: Preset and any overrides, e.g. `DFINEConfig.preset("l", num_classes=3)`.
+    validations:
+      required: false
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Output of `python -V`, `pip show dfine torch transformers`, and OS.
+    validations:
+      required: true

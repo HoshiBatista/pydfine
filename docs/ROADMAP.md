@@ -9,20 +9,24 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done.
 ---
 
 ## Phase 0 — Project scaffolding
-- [x] Package skeleton (`dfine/`, `pyproject.toml`, CLI).
-- [x] `Results`/`Boxes`, weight download/cache, input loading, COCO names.
+- [x] Package skeleton (`dfine/`, `pyproject.toml`, CLI `dfine models`).
+- [ ] `Results`/`Boxes`, weight download/cache, input loading, COCO names. *(moved to
+      Phase 2 — these need the backend; only `registry.py` exists so far.)*
 - [x] Agent docs: `README`, `AGENTS.md`, `CLAUDE.md`, `docs/*`.
-- [ ] Add `dev` extras (`ruff`, `pytest`) + `ruff`/`pytest` config in `pyproject.toml`.
-- [ ] Add `tests/` with a smoke test and CI workflow.
+- [x] Add `dev` extras (`ruff`, `pytest`) + `ruff`/`pytest` config in `pyproject.toml`.
+- [x] Add `tests/` with a smoke test.
+- [x] CI workflow (`.github/workflows/ci.yml`) running `ruff` + `pytest` (py3.9–3.13).
+- [x] Repo tooling: `.pre-commit-config.yaml`, PR/issue templates, `dependabot.yml`,
+      `CONTRIBUTING.md`.
 
 ## Phase 1 — Config-first core (the headline feature)
-- [ ] Implement `dfine/config.py`: `DFINEConfig` frozen dataclass with **every** field
+- [x] Implement `dfine/config.py`: `DFINEConfig` frozen dataclass with **every** field
       from `docs/CONFIG_REFERENCE.md`, full type hints + one-line docstrings.
-- [ ] `DFINEConfig.preset(size, **overrides)` + `SIZE_PRESETS` table (§11 of reference).
-- [ ] Config validation (`__post_init__`): ranges, list lengths, cross-field checks
+- [x] `DFINEConfig.preset(size, **overrides)` + `SIZE_PRESETS` table (§11 of reference).
+- [x] Config validation (`__post_init__`): ranges, list lengths, cross-field checks
       (e.g. `len(in_channels)==len(feat_strides)==num_levels`).
 - [ ] `DFINEConfig.from_yaml()/.to_yaml()` interop (optional path only).
-- [ ] Tests: preset field values match reference; validation rejects bad configs.
+- [x] Tests: preset field values match reference; validation rejects bad configs.
 
 ## Phase 2 — Backend abstraction + working inference
 - [ ] `dfine/backends/__init__.py`: `Backend` protocol (`build`, `predict`, `state_dict`,
@@ -74,3 +78,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done.
 - (add dated notes here as you learn things that affect later phases)
 - Backend default is **Path B (transformers)** until Phase 5 parity lands; keep the
   public `DFINE(...)` API identical across backends.
+- **2026-07-11** — Implemented `config.py`. Preset values were verified field-by-field
+  against `D-FINE/configs/dfine/*.yml` (not the paper tables). Corrections vs the old
+  `CONFIG_REFERENCE.md` §11, now applied there too:
+  - **N is a 2-level model**: `num_levels=2`, `hidden_dim=128`, `in_channels=[512,1024]`,
+    `feat_strides=[16,32]`, `use_encoder_idx=[1]`, `encoder_dim_feedforward=512`,
+    `feat_channels=[128,128]`, `num_points=[6,6]`, `return_idx=[2,3]`. (Was listed as
+    3-level/256.)
+  - **M** uses `use_lab=True`, `in_channels=[384,768,1536]`, `depth_mult=0.67`.
+  - Backbone LRs: N 4e-4, S 1e-4, M 2e-5, L 1.25e-5, X 2.5e-6. Epochs: N 160, S/M 132,
+    L/X 80. Loss weights: fgl 0.15, ddf 1.5. Matcher alpha 0.25 (criterion alpha 0.75).
+  - Docs were at repo root but every link points to `docs/*`; moved the three specs
+    into `docs/`. README's "inference-core scaffold" claim was aspirational — no
+    `dfine/` existed; scaffold is now real but Results/Boxes/downloads remain Phase 2.

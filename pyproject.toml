@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dfine"
+version = "0.0.1"
+description = "Ultralytics-style, config-first Python library for the D-FINE real-time object detector."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "pydfine contributors" }]
+keywords = ["d-fine", "object-detection", "detr", "computer-vision", "pytorch"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Core install stays light: the config-first surface (DFINEConfig, presets, CLI
+# `dfine models`) is pure-Python and needs no torch. Heavy deps live in extras so
+# `pip install dfine` doesn't force a torch build on users who only inspect configs.
+dependencies = [
+    "numpy>=1.21",
+]
+
+[project.optional-dependencies]
+# Path B backend + inference/training (added in later phases).
+torch = [
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "transformers>=4.48",
+    "pillow>=9.0",
+    "huggingface_hub>=0.24",
+]
+export = [
+    "onnx>=1.14",
+    "onnxruntime>=1.16",
+    "onnxsim>=0.4",
+]
+dev = [
+    "ruff>=0.7",
+    "pytest>=7.0",
+    "pre-commit>=3.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/Peterande/D-FINE"
+Upstream = "https://github.com/Peterande/D-FINE"
+Paper = "https://arxiv.org/abs/2410.13842"
+
+[project.scripts]
+dfine = "dfine.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["dfine*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+# The upstream clone is a reference checkout, not our code — never lint/format it.
+# force-exclude makes the exclude apply even when pre-commit passes explicit paths.
+extend-exclude = ["D-FINE", "reference"]
+force-exclude = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
