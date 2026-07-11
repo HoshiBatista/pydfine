@@ -76,8 +76,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done.
 
 ## Notes / decisions log
 - (add dated notes here as you learn things that affect later phases)
-- Backend default is **Path B (transformers)** until Phase 5 parity lands; keep the
-  public `DFINE(...)` API identical across backends.
+- ~~Backend default is Path B (transformers) until Phase 5 parity lands.~~
+- **2026-07-11 — DECISION: go Path A (native port) directly**, per repo owner. We
+  port the needed modules out of `D-FINE/src/` and rewrite them YAML/registry-free,
+  wired from `DFINEConfig`. `transformers` is therefore **not** a dependency (upstream
+  `src/` never imports it). Phase 5 (native backend) is effectively pulled forward to
+  become the primary work; the `backends/` boundary is kept so a wrapper could still
+  be added later. Deps split into `requirements*.txt`: core = torch/torchvision/
+  numpy/pillow; train adds scipy (matcher) + faster-coco-eval (val).
 - **2026-07-11** — Implemented `config.py`. Preset values were verified field-by-field
   against `D-FINE/configs/dfine/*.yml` (not the paper tables). Corrections vs the old
   `CONFIG_REFERENCE.md` §11, now applied there too:

@@ -1,0 +1,9 @@
+# Core runtime — enough to build a model and run inference (predict).
+# Install:  pip install -r requirements.txt
+#
+# NOTE on torch: the default PyPI wheels are CPU/CUDA-auto. For a specific CUDA
+# build, install torch/torchvision first from https://pytorch.org, then run this file.
+torch>=2.0.1
+torchvision>=0.15.2
+numpy>=1.21
+pillow>=9.0

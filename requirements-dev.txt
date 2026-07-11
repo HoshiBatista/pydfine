@@ -1,0 +1,7 @@
+# Developer tooling (linting, tests, hooks). Includes core so the package imports.
+# Install:  pip install -r requirements-dev.txt
+-r requirements.txt
+
+ruff>=0.7
+pytest>=7.0
+pre-commit>=3.5

@@ -1,0 +1,8 @@
+# Training + validation extras (on top of core).
+# Install:  pip install -r requirements-train.txt
+-r requirements.txt
+
+scipy>=1.10               # Hungarian matcher (linear_sum_assignment)
+faster-coco-eval>=1.6.6   # COCO-style mAP evaluation (val)
+tensorboard>=2.13         # optional training logs
+pyyaml>=6.0               # optional: DFINEConfig.from_yaml/.to_yaml interop
