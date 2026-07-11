@@ -3,10 +3,10 @@
 This is the **source of truth** for public parameter names, groups, and defaults.
 Every param here becomes a field on `DFINEConfig` and a `DFINE(...)` kwarg.
 
-Defaults below are taken from upstream configs + the paper. Values marked
-`⚠verify` must be confirmed against upstream `src/` or `transformers` `DFineConfig`
-during porting (don't ship them unverified). Where upstream and the HF port differ in
-naming, the **left column is our public name**; note the HF alias in the description.
+Defaults below are taken from upstream `D-FINE/configs/*.yml` + `src/` + the paper.
+Values marked `⚠verify` must be confirmed against upstream before shipping. The
+**left column is our public name**; where it differs from the upstream constructor
+arg, the description notes the upstream name.
 
 Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly in
 `DFINE(...)` overrides the preset.
@@ -28,7 +28,7 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 
 | Param | Type | Default | Description |
 |---|---|---|---|
-| `backbone` | str | `"hgnetv2_b4"` | Variant `b0..b5` (HF alias: `backbone_config.name` = `B0..B5`). |
+| `backbone` | str | `"hgnetv2_b4"` | Variant `b0..b5` (maps to upstream `HGNetv2.name` = `B0..B5`). |
 | `backbone_pretrained` | bool | True | Load ImageNet-pretrained backbone weights. |
 | `return_idx` | list[int] | `[1,2,3]` | Backbone stages fed to the encoder. |
 | `freeze_at` | int | -1 | Freeze stages up to this index (-1 = none). |
@@ -67,11 +67,11 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 | `eval_idx` | int | -1 | Layer used at eval; negative = from end (aux-layer scaling). |
 | `num_levels` | int | 3 | Multi-scale feature levels. |
 | `feat_channels` | list[int] | `[256,256,256]` | Per-level channels (`[384]*3` for X). |
-| `num_points` | list[int] | `[3,6,3]` | Deformable sampling points per level (⚠verify per size). |
-| `decoder_nhead` | int | 8 | Decoder attention heads (⚠verify alias). |
-| `decoder_offset_scale` | float | 0.5 | Deformable-attn offset scale (HF: `decoder_offset_scale`). |
-| `decoder_method` | str | "default" | `"default"\|"discrete"` deformable sampling. |
-| `layer_scale` | float | 1.0 | Hidden-dim scale for later decoder layers (HF). |
+| `num_points` | list[int] | `[3,6,3]` | Deformable sampling points per level (`[6,6]` for N). |
+| `decoder_nhead` | int | 8 | Decoder attention heads (upstream `nhead`). |
+| `decoder_offset_scale` | float | 0.5 | Deformable-attn offset scale. Upstream hard-codes 0.5; not currently wired to the module. |
+| `decoder_method` | str | "default" | `"default"\|"discrete"` deformable sampling (upstream `cross_attn_method`). |
+| `layer_scale` | float | 1.0 | Hidden-dim scale for the wide (aux) decoder layers. |
 
 ### 4a. Fine-grained Distribution Refinement (FDR)
 
@@ -79,15 +79,17 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 |---|---|---|---|
 | `reg_max` | int | 32 | Bins per box edge in the regression distribution. |
 | `reg_scale` | float | 4.0 | Weighting-function scale (8 for X and obj365 variants). |
-| `up` | float | 0.5 | Upper bound of the Weighting Function (HF alias `up`). ⚠verify |
-| `down` | float | ⚠verify | Lower bound of the Weighting Function. |
+
+> `up` (upper bound of W(n)) is **not** a config field: upstream fixes it as a frozen
+> `nn.Parameter(0.5)` inside `DFINETransformer`, so we do the same. There is no `down`
+> parameter — the lower bound is derived symmetrically inside `weighting_function`.
 
 ### 4b. Location Quality Estimator (LQE)
 
 | Param | Type | Default | Description |
 |---|---|---|---|
-| `lqe_hidden_dim` | int | 64 | LQE MLP hidden dim (HF default 64). |
-| `lqe_layers` | int | 2 | LQE MLP layers (HF default 2). |
+| `lqe_hidden_dim` | int | 64 | LQE MLP hidden dim (upstream hard-codes 64). |
+| `lqe_layers` | int | 2 | LQE MLP layers (upstream hard-codes 2). |
 
 ## 5. Denoising (contrastive DN queries)
 

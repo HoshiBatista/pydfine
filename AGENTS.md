@@ -40,7 +40,7 @@ model.predict(...); model.train(...); model.val(...); model.export(...)
    line and appears in `docs/CONFIG_REFERENCE.md`.
 7. **Small, testable units.** Each ported module gets a shape/parity test.
 
-## 3. Two build paths — pick one per module, prefer B unless noted
+## 3. Two build paths — we chose Path A (see decision below)
 
 - **Path A — Port upstream `src/` into pure Python.** Copy the `nn.Module`s
   (HGNetv2, HybridEncoder, DFINETransformer, matcher, criterion, postprocessor),
@@ -52,13 +52,15 @@ model.predict(...); model.train(...); model.val(...); model.export(...)
   free; we own only the ergonomics layer (config presets, predict/train/val/export,
   Results, augmentation, downloads).
 
-**Default recommendation:** start with **Path B** to get an end-to-end working
-`predict`/`train` fast, using `transformers`' `DFineConfig` field list as the
-authoritative parameter set. Keep an adapter boundary (`dfine/backends/`) so Path A
-(our own port) can be dropped in later without changing the public `DFINE` API.
-`docs/CONFIG_REFERENCE.md` lists params for both so the surface is identical.
+**Decision (2026-07-11): we are building Path A** — porting upstream `src/` directly
+into `dfine/backends/native/` for byte-exact parity with the released `.pth`. This
+means `transformers` is **not** a dependency. Progress so far: `HGNetv2`,
+`HybridEncoder`, `DFINETransformer` (FDR/LQE/denoising) are ported and shape-tested;
+next is the postprocessor + assembly. See `docs/ROADMAP.md` Phase 5.
 
-Whichever path: the **public API and parameter names must not depend on the backend.**
+The `dfine/backends/` boundary is still kept so a `transformers` wrapper (Path B)
+could be added later without touching the public `DFINE` API. Whichever path: the
+**public API and parameter names must not depend on the backend.**
 
 ## 4. Repository layout (target)
 
@@ -72,9 +74,17 @@ dfine/
   downloads.py         # weight cache/download (exists in scaffold)
   data.py              # input loading + COCO names (exists in scaffold)
   backends/
-    __init__.py        # get_backend(config) -> Backend
-    transformers.py    # Path B backend
-    native/            # Path A port (nn modules) — added later
+    __init__.py        # backend package docstring (get_backend(config) -> Backend, TBD)
+    native/            # Path A port — DONE so far: backbone, encoder, decoder
+      common.py        #   FrozenBatchNorm2d
+      ops.py           #   get_activation, inverse_sigmoid, deformable attn core, ...
+      box_ops.py       #   box conversions, IoU/GIoU
+      dfine_utils.py   #   FDR weighting_function / distance2bbox
+      denoising.py     #   contrastive denoising (training)
+      hgnetv2.py       #   HGNetv2 backbone (B0-B6)
+      hybrid_encoder.py#   HybridEncoder (AIFI + CCFM/GELAN)
+      dfine_decoder.py #   DFINETransformer (FDR head, LQE)
+    # transformers.py  # Path B wrapper — optional, not planned yet
   train/
     trainer.py         # training loop, EMA, AMP, param groups, schedulers
     augment.py         # RandomPhotometricDistort, ZoomOut, IoUCrop, MultiScale...
@@ -139,8 +149,8 @@ dfine models                   # sanity: list presets
 - Do **not** reintroduce YAML configs or the upstream registry into the public path.
 - Do **not** change public parameter names/semantics to match an internal backend;
   adapt the backend instead.
-- Do **not** fabricate default values — verify against upstream `src/` or
-  `transformers` `DFineConfig`. If unsure, mark `# TODO(verify)` and open a roadmap note.
+- Do **not** fabricate default values — verify against upstream `D-FINE/src/` or its
+  `configs/*.yml`. If unsure, mark `# TODO(verify)` and open a roadmap note.
 - Do **not** vendor code without keeping its Apache-2.0 `LICENSE` + attribution.
 - Do **not** hard-code paths, secrets, or a specific CUDA device.
 

@@ -28,15 +28,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done.
 - [ ] `DFINEConfig.from_yaml()/.to_yaml()` interop (optional path only).
 - [x] Tests: preset field values match reference; validation rejects bad configs.
 
-## Phase 2 — Backend abstraction + working inference
-- [ ] `dfine/backends/__init__.py`: `Backend` protocol (`build`, `predict`, `state_dict`,
-      `load_state_dict`, `to_deploy`) + `get_backend(config)`.
-- [ ] `dfine/backends/transformers.py` (**Path B**): build `DFineForObjectDetection`
-      from `DFINEConfig`, load pretrained by name, expose the deploy contract from
-      `docs/ARCHITECTURE.md` §3.
-- [ ] Rewrite `DFINE` (`model.py`) to build via `get_backend(config)` — remove the
-      YAML/`YAMLConfig` path from the public flow.
-- [ ] `DFINE.predict()/__call__` returns `Results`; batched; conf filter.
+## Phase 2 — Assembled model + working inference (native, Path A)
+Note: much of the native port is done under Phase 5 already. This phase wires the
+ported modules into one model behind the public API.
+- [ ] `native/postprocessor.py`: port `DFINEPostProcessor` (top-k decode to xyxy in
+      original scale). See Phase 5.
+- [ ] `native/dfine.py`: assemble backbone+encoder+decoder+postproc into one
+      `nn.Module` with the deploy-forward contract from `docs/ARCHITECTURE.md` §3.
+- [ ] Weight-remap loader: load upstream `.pth` into the assembled model.
+- [ ] `dfine/model.py` — the public `DFINE` class; `predict()/__call__` returns
+      `Results`; batched; conf filter. Input loading + preprocessing.
+- [ ] `Results`/`Boxes` (`.boxes.xyxy/.conf/.cls`, `.plot()/.save()`) + weight download.
 - [ ] `DFINE.predict_video()`.
 - [ ] Parity test: `DFINE(size="s").load("dfine-s")` on a sample image ≈ upstream boxes.
 

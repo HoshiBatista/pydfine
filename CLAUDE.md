@@ -22,8 +22,11 @@ model is configured by **typed Python params on one class (`DFINE`)** — no YAM
 - **One task per change set.** Keep diffs small and reviewable; don't refactor
   unrelated code in the same pass.
 - **Verify, don't guess.** When a default value or layer shape is uncertain, check
-  upstream `src/` or `transformers` `DFineConfig` rather than inventing it. Mark
+  upstream `D-FINE/src/` (or its `configs/*.yml`) rather than inventing it. Mark
   `# TODO(verify)` if you truly can't confirm, and add a roadmap note.
+- **Path A is the active path.** We port upstream modules into
+  `dfine/backends/native/` (registry/YAML stripped, `from_config(cfg)` added),
+  preserving layer/param names for `.pth` parity. `transformers` is not a dependency.
 - **Parity is the bar.** A preset model must load the matching upstream `.pth` and
   reproduce its output. Prefer adding a parity test over asserting it works.
 - **Keep the public API backend-agnostic** (see AGENTS.md §3). Backends live behind

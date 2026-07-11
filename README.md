@@ -47,11 +47,18 @@ model = DFINE(
 
 ## Status
 
-Early construction. Done so far: the **config-first core** — `DFINEConfig` (every
-model/training param as a typed field), verified `n/s/m/l/x` presets, validation, the
-checkpoint registry, and the `dfine models` CLI. The inference/training backends
-(`predict`/`train`/`val`/`export`) are next. See [`docs/ROADMAP.md`](docs/ROADMAP.md)
-for the full status.
+Early construction, but the model core is in. Done so far:
+
+- **Config-first core** — `DFINEConfig` (every model/training param as a typed field),
+  verified `n/s/m/l/x` presets, validation, checkpoint registry, `dfine models` CLI.
+- **Native model port (Path A)** under `dfine/backends/native/` — the full
+  **backbone → encoder → decoder** stack ported from upstream `src/` with the
+  YAML/registry layer stripped: `HGNetv2`, `HybridEncoder`, and `DFINETransformer`
+  (FDR head, LQE, contrastive denoising). Layer/param names preserved so released
+  `.pth` load unchanged. Each module builds from the config via `from_config(cfg)`.
+
+Next: postprocessor + a single assembled `DFINE` model, then `predict`/`train`/
+`val`/`export`. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
 
 ```python
 from dfine import DFINEConfig
@@ -59,6 +66,25 @@ from dfine import DFINEConfig
 cfg = DFINEConfig.preset("l", num_classes=3)   # verified upstream defaults
 cfg = DFINEConfig.preset("n")                  # 2-level, hidden_dim=128
 ```
+
+The ported modules already run end-to-end (needs the `torch` extra installed):
+
+```python
+import torch
+from dfine import DFINEConfig
+from dfine.backends.native import HGNetv2, HybridEncoder, DFINETransformer
+
+cfg = DFINEConfig.preset("l", num_classes=80)
+backbone = HGNetv2.from_config(cfg).eval()
+encoder = HybridEncoder.from_config(cfg).eval()
+decoder = DFINETransformer.from_config(cfg).eval()
+
+out = decoder(encoder(backbone(torch.randn(1, 3, cfg.imgsz, cfg.imgsz))))
+# out["pred_logits"]: (1, 300, 80)   out["pred_boxes"]: (1, 300, 4)  [cxcywh, 0..1]
+```
+
+> The one-class `DFINE(...)` façade at the top of this README is the target public
+> API; it lands once the modules above are assembled behind the postprocessor.
 
 ## Why this exists
 

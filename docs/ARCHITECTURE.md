@@ -43,6 +43,24 @@ layer's sharpened distribution back into earlier layers via a decoupled distilla
 | Loss | `DFINECriterion` | VFL + L1 + GIoU + FGL(DFL) + DDF(GO-LSD) | loss weights, focal `alpha`/`gamma`, DDF temperature |
 | Postproc | `DFINEPostProcessor` | top-k decode to xyxy in original scale | `num_top_queries`, `remap_mscoco_category` |
 
+### Native port status (Path A) — where each module lives now
+
+We port these into `dfine/backends/native/`, one file per upstream module, with the
+registry/YAML stripped and a `from_config(cfg)` constructor added. Status:
+
+| Upstream class | Our file | Status |
+|---|---|---|
+| `HGNetv2` | `native/hgnetv2.py` | ✅ ported + shape tests |
+| `HybridEncoder` | `native/hybrid_encoder.py` | ✅ ported + shape tests |
+| `DFINETransformer` | `native/dfine_decoder.py` | ✅ ported + shape tests |
+| `HungarianMatcher` | `native/matcher.py` | ⬜ next (training) |
+| `DFINECriterion` | `native/criterion.py` | ⬜ next (training) |
+| `DFINEPostProcessor` | `native/postprocessor.py` | ⬜ next (inference) |
+
+Shared helpers: `native/common.py` (FrozenBatchNorm2d), `native/ops.py`
+(activations, deformable-attn core, inverse_sigmoid…), `native/box_ops.py`,
+`native/dfine_utils.py` (FDR), `native/denoising.py`.
+
 ## 3. Data flow contract (what the deploy model returns)
 
 The deploy-mode forward (used for inference and export) is:

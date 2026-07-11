@@ -14,9 +14,14 @@ Thanks for helping build a config-first, ultralytics-style wrapper around D-FINE
 ## Dev setup
 
 ```bash
-python -m pip install -e ".[dev]"   # editable install + ruff/pytest/pre-commit
-pre-commit install                  # run hooks automatically on commit
+python -m pip install -e ".[dev]"          # ruff/pytest/pre-commit (config tests only)
+python -m pip install -e ".[dev,torch]"    # + torch: runs the native model tests too
+pre-commit install                         # run hooks automatically on commit
 ```
+
+The config/CLI tests need no torch; the backbone/encoder/decoder tests
+(`test_backbone.py`, `test_encoder.py`, `test_decoder.py`) `importorskip("torch")`,
+so install the `torch` extra (or `requirements.txt`) to exercise them.
 
 ## Before you push
 
