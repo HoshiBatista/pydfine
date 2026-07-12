@@ -10,8 +10,8 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done.
 
 ## Phase 0 — Project scaffolding
 - [x] Package skeleton (`dfine/`, `pyproject.toml`, CLI `dfine models`).
-- [ ] `Results`/`Boxes`, weight download/cache, input loading, COCO names. *(moved to
-      Phase 2 — these need the backend; only `registry.py` exists so far.)*
+- [x] `Results`/`Boxes`, weight download/cache, input loading, COCO names. *(done in
+      Phase 2: `results.py`, `downloads.py`, `model.py`.)*
 - [x] Agent docs: `README`, `AGENTS.md`, `CLAUDE.md`, `docs/*`.
 - [x] Add `dev` extras (`ruff`, `pytest`) + `ruff`/`pytest` config in `pyproject.toml`.
 - [x] Add `tests/` with a smoke test.
@@ -39,9 +39,15 @@ ported modules into one model behind the public API.
 - [x] Weight-remap loader (`native/loader.py`): `load_checkpoint` /
       `extract_state_dict` unwrap upstream `.pth` (EMA-preferred, `module.`-strip)
       and `strict=True` load — no key remap needed (names preserved).
-- [ ] `dfine/model.py` — the public `DFINE` class; `predict()/__call__` returns
-      `Results`; batched; conf filter. Input loading + preprocessing.
-- [ ] `Results`/`Boxes` (`.boxes.xyxy/.conf/.cls`, `.plot()/.save()`) + weight download.
+- [x] `dfine/model.py` — the public `DFINE` class; `predict()/__call__` returns
+      `Results`; batched; conf filter; input loading (path/PIL/ndarray/list) +
+      `Resize(imgsz)+ToTensor` preprocessing (matches upstream `torch_inf.py`).
+      Config-first ctor (`DFINE(size=..., **overrides)`), `.load(name|path)`,
+      `.from_pretrained(name)`, device auto-select; `train/val/export/predict_video`
+      are phase-stubbed. Exposed lazily from `dfine/__init__.py` (base import stays
+      torch-free).
+- [x] `Results`/`Boxes` (`.boxes.xyxy/.conf/.cls`, `.plot()/.save()`, `__len__`,
+      iterate) in `dfine/results.py`. Weight download/cache = `dfine/downloads.py`.
 - [ ] `DFINE.predict_video()`.
 - [ ] Parity test: `DFINE(size="s").load("dfine-s")` on a sample image ≈ upstream boxes.
 
@@ -83,6 +89,12 @@ ported modules into one model behind the public API.
       assembled `native/dfine.py`). Offline round-trip test + opt-in real-`.pth`
       strict-parity test (`DFINE_TEST_CKPT`/`DFINE_TEST_SIZE`). Verified against a
       real released-format N checkpoint: strict load, 0 missing/0 unexpected.
+- [~] Per-size parity across n/s/m/l/x. Catalogue (`registry.py`) now carries
+      `num_classes` per checkpoint + `resolve_weights(size, dataset)` /
+      `config_for()` "which model to use" logic; `downloads.py` caches assets;
+      `DFINE.from_pretrained(name)` ties it together. Parametrized parity test
+      (`test_per_size_coco_parity`, gated on `DFINE_WEIGHTS_DIR`) is wired but not
+      yet run against all 5 downloaded COCO `.pth` — that's the remaining tick.
 - [ ] Make native the default backend once parity holds across n/s/m/l/x.
 
 ## Phase 6 — Polish
@@ -130,4 +142,26 @@ ported modules into one model behind the public API.
   `eval_spatial_size`, so `imgsz` must match the checkpoint's train resolution (640,
   the preset default = all official COCO releases) or strict load fails on those two
   buffers. Parity proven offline against a real released-format N `.pth` (0 missing/0
-  unexpected). Next: per-size parity across s/m/l/x + make native the default backend.
+  unexpected).
+- **2026-07-12** — Checkpoint "which model to use" logic. `registry.py` now maps each
+  released asset to a `CheckpointSpec(size, dataset, num_classes, filename, url)`.
+  Three dataset variants: `coco`/`obj2coco` → 80 classes, `obj365` → 366 (the *only*
+  dataset-dependent arch diff; reg_scale=8 is X-only and already in that preset).
+  **Availability is not uniform: N is COCO-only** — upstream released no obj2coco/obj365
+  for N, so `resolve_weights("n", "obj365")` raises listing what N *does* have.
+  `config_for()` builds the matching config (wires obj365's 366-class head);
+  `downloads.py` caches assets (`$DFINE_CACHE_DIR`, atomic .part rename);
+  `DFINE.from_pretrained(name, **overrides)` = resolve→config→download→strict-load
+  (sets `backbone_pretrained=False` so the ImageNet backbone isn't fetched then
+  overwritten). Per-size COCO parity test is parametrized + gated on `DFINE_WEIGHTS_DIR`;
+  run it with the 5 downloaded COCO `.pth` to close the parity tick.
+- **2026-07-12** — Public API landed (`model.py` + `results.py`), the headline
+  `DFINE(...)` façade from the README. `DFINE(size=..., **overrides)` is config-first
+  (device is a runtime kwarg, not a config field); `.predict(source, conf, imgsz)`
+  loads path/PIL/ndarray/list → `Resize(imgsz)+ToTensor` (no mean/std norm, matches
+  upstream `torch_inf.py`) → native model → postprocessor → `list[Results]`. Boxes
+  come back in original pixel scale (postprocessor already rescales). `.load()` takes a
+  catalogue name **or** a local path. Names default to COCO-80 when `num_classes==80`
+  and no `class_names`. Public symbols are lazy-loaded in `__init__.py` so a bare
+  `import dfine` stays torch-free. Next open Phase-2 items: `predict_video` + the
+  sample-image upstream-boxes parity test.

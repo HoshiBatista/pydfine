@@ -57,8 +57,12 @@ Early construction, but the model core is in. Done so far:
   (FDR head, LQE, contrastive denoising). Layer/param names preserved so released
   `.pth` load unchanged. Each module builds from the config via `from_config(cfg)`.
 
-Next: postprocessor + a single assembled `DFINE` model, then `predict`/`train`/
-`val`/`export`. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
+- **Working inference** — assembled `DFINE` model + `DFINEPostProcessor`, upstream
+  `.pth` loading (`registry`/`downloads`, `from_pretrained`), and the public
+  `DFINE(...).predict(...) -> Results` API (`.boxes.xyxy/.conf/.cls`, `.plot()/.save()`).
+
+Next: `predict_video`, then `export` (Phase 3) and `train`/`val` (Phase 4). See
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
 
 ```python
 from dfine import DFINEConfig
@@ -83,8 +87,9 @@ out = decoder(encoder(backbone(torch.randn(1, 3, cfg.imgsz, cfg.imgsz))))
 # out["pred_logits"]: (1, 300, 80)   out["pred_boxes"]: (1, 300, 4)  [cxcywh, 0..1]
 ```
 
-> The one-class `DFINE(...)` façade at the top of this README is the target public
-> API; it lands once the modules above are assembled behind the postprocessor.
+> The one-class `DFINE(...)` façade at the top of this README now works for
+> **inference** (`predict`/`load`/`from_pretrained`). `train`/`val`/`export` are
+> phase-stubbed and raise a clear "arriving in Phase N" until implemented.
 
 ## Why this exists
 

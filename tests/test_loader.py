@@ -96,6 +96,33 @@ def test_model_load_method(tmp_path):
 
 
 # --- opt-in real-weight parity -----------------------------------------------
+#
+# Two ways to supply weights (both skipped when absent, so CI stays green):
+#  * DFINE_TEST_CKPT[+DFINE_TEST_SIZE]  — one explicit .pth (any dataset).
+#  * DFINE_WEIGHTS_DIR                  — a dir of released .pth; the per-size
+#    parametrized test loads whichever files are present.
+
+
+def _strict_parity(path, size, expect_num_classes=None):
+    """Build the matching model, strict-load, run a forward pass. Returns outputs."""
+    from dfine.registry import config_for
+
+    sd = extract_state_dict(torch.load(path, map_location="cpu", weights_only=False))
+    num_classes = sd["decoder.enc_score_head.weight"].shape[0]
+    if expect_num_classes is not None:
+        assert num_classes == expect_num_classes, f"{path}: head has {num_classes} classes"
+
+    # config_for wires size + num_classes exactly like the release (imgsz=640).
+    cfg = config_for(f"dfine-{size}", num_classes=num_classes, backbone_pretrained=False)
+    model = DFINE.from_config(cfg).eval()
+    missing, unexpected = load_checkpoint(model, path, strict=True)
+    assert missing == [] and unexpected == [], f"{path}: missing={missing} unexpected={unexpected}"
+
+    with torch.no_grad():
+        out = model(torch.randn(1, 3, cfg.imgsz, cfg.imgsz))
+    assert out["pred_logits"].shape[-1] == num_classes
+    assert torch.isfinite(out["pred_boxes"]).all()
+    return out
 
 
 @pytest.mark.skipif(
@@ -103,20 +130,19 @@ def test_model_load_method(tmp_path):
     reason="set DFINE_TEST_CKPT to a real .pth to run weight parity",
 )
 def test_real_checkpoint_strict_parity():
-    path = os.environ["DFINE_TEST_CKPT"]
-    size = os.environ.get("DFINE_TEST_SIZE", "n")
+    _strict_parity(os.environ["DFINE_TEST_CKPT"], os.environ.get("DFINE_TEST_SIZE", "n"))
 
-    # Read num_classes straight off the released head so the preset matches.
-    raw = torch.load(path, map_location="cpu", weights_only=False)
-    sd = extract_state_dict(raw)
-    num_classes = sd["decoder.enc_score_head.weight"].shape[0]
 
-    cfg = DFINEConfig.preset(size, num_classes=num_classes, backbone_pretrained=False)
-    model = DFINE.from_config(cfg).eval()  # imgsz defaults to 640, matching releases
-    missing, unexpected = load_checkpoint(model, path, strict=True)
-    assert missing == [] and unexpected == []
+@pytest.mark.skipif(
+    not os.environ.get("DFINE_WEIGHTS_DIR"),
+    reason="set DFINE_WEIGHTS_DIR to a dir of released .pth for per-size parity",
+)
+@pytest.mark.parametrize("size", ["n", "s", "m", "l", "x"])
+def test_per_size_coco_parity(size):
+    from dfine.registry import resolve_weights
 
-    with torch.no_grad():
-        out = model(torch.randn(1, 3, cfg.imgsz, cfg.imgsz))
-    assert out["pred_logits"].shape[-1] == num_classes
-    assert torch.isfinite(out["pred_boxes"]).all()
+    spec = resolve_weights(size, "coco")
+    path = os.path.join(os.environ["DFINE_WEIGHTS_DIR"], spec.filename)
+    if not os.path.exists(path):
+        pytest.skip(f"{spec.filename} not in DFINE_WEIGHTS_DIR")
+    _strict_parity(path, size, expect_num_classes=80)

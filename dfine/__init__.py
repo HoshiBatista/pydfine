@@ -24,23 +24,23 @@ __all__ = [
     "__version__",
 ]
 
-# Names that will resolve once their modules exist. Kept here so `from dfine import
-# DFINE` fails with a clear "not implemented yet" instead of a cryptic ImportError.
-_PENDING = {
-    "DFINE": ("model", "Phase 2 (backend + inference)"),
-    "Results": ("results", "Phase 2 (backend + inference)"),
-    "Boxes": ("results", "Phase 2 (backend + inference)"),
+# Inference symbols live in modules that import torch; expose them lazily so a bare
+# `import dfine` (config/CLI only) never requires the torch extra.
+_LAZY = {
+    "DFINE": "model",
+    "Results": "results",
+    "Boxes": "results",
 }
 
 
 def __getattr__(name: str) -> Any:
-    if name in _PENDING:
-        module, phase = _PENDING[name]
+    if name in _LAZY:
         try:
-            mod = __import__(f"dfine.{module}", fromlist=[name])
-        except ImportError as exc:  # module not written yet
+            mod = __import__(f"dfine.{_LAZY[name]}", fromlist=[name])
+        except ImportError as exc:  # torch/torchvision/pillow not installed
             raise AttributeError(
-                f"dfine.{name} is not implemented yet — arriving in {phase}."
+                f"dfine.{name} needs the inference deps — install with "
+                f"`pip install dfine[torch]` (missing: {exc.name})."
             ) from exc
         return getattr(mod, name)
     raise AttributeError(f"module 'dfine' has no attribute {name!r}")

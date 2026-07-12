@@ -31,8 +31,8 @@ def _cmd_models(_: argparse.Namespace) -> int:
         )
     print("\nCheckpoints:")
     for name in list_checkpoints():
-        url, size = CHECKPOINTS[name]
-        print(f"  {name:<18} (size={size})  {url}")
+        spec = CHECKPOINTS[name]
+        print(f"  {name:<18} (size={spec.size} {spec.num_classes}cls)  {spec.url}")
     return 0
 
 

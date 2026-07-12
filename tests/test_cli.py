@@ -13,9 +13,16 @@ def test_package_imports_without_torch():
     assert "l" in dfine.list_presets()
 
 
-def test_pending_symbol_raises_clear_error():
-    with pytest.raises(AttributeError, match="not implemented yet"):
-        _ = dfine.DFINE
+def test_unknown_symbol_raises():
+    with pytest.raises(AttributeError, match="no attribute"):
+        _ = dfine.NoSuchThing
+
+
+def test_public_symbols_lazy_resolve():
+    pytest.importorskip("torch")
+    from dfine.model import DFINE as _ModelDFINE
+
+    assert dfine.DFINE is _ModelDFINE
 
 
 def test_cli_models_runs(capsys):

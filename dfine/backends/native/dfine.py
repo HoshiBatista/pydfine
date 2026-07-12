@@ -49,6 +49,29 @@ class DFINE(nn.Module):
             decoder=DFINETransformer.from_config(cfg),
         )
 
+    @classmethod
+    def from_pretrained(cls, name: str, cache_dir=None, use_ema: bool = True, **overrides) -> DFINE:
+        """Build a model for a released checkpoint and load its weights.
+
+        ``name`` is a catalogue entry (``"dfine-s"``, ``"dfine-l-obj365"`` ...);
+        see :func:`dfine.registry.list_checkpoints`. The architecture (size +
+        ``num_classes``) is derived from the checkpoint so obj365's 366-class head
+        is wired automatically; the weights are downloaded/cached and strict-loaded.
+        Extra ``overrides`` pass through to the config (avoid changing ``imgsz`` —
+        it's baked into the checkpoint's anchor buffer).
+        """
+        from ...downloads import download_weights
+        from ...registry import config_for, resolve
+
+        spec = resolve(name)
+        # The checkpoint already carries backbone weights, so skip the ImageNet
+        # backbone download (it would be overwritten anyway). Caller can override.
+        cfg = config_for(spec, **{"backbone_pretrained": False, **overrides})
+        model = cls.from_config(cfg).eval()
+        path = download_weights(spec, cache_dir_override=cache_dir)
+        model.load(path, use_ema=use_ema, strict=True)
+        return model
+
     def forward(self, x, targets=None):
         x = self.backbone(x)
         x = self.encoder(x)
