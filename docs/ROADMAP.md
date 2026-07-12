@@ -31,11 +31,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done.
 ## Phase 2 — Assembled model + working inference (native, Path A)
 Note: much of the native port is done under Phase 5 already. This phase wires the
 ported modules into one model behind the public API.
-- [ ] `native/postprocessor.py`: port `DFINEPostProcessor` (top-k decode to xyxy in
-      original scale). See Phase 5.
-- [ ] `native/dfine.py`: assemble backbone+encoder+decoder+postproc into one
-      `nn.Module` with the deploy-forward contract from `docs/ARCHITECTURE.md` §3.
-- [ ] Weight-remap loader: load upstream `.pth` into the assembled model.
+- [x] `native/postprocessor.py`: port `DFINEPostProcessor` (top-k decode to xyxy in
+      original scale). Done under Phase 5.
+- [x] `native/dfine.py`: assemble backbone+encoder+decoder into one `nn.Module`
+      (`from_config`, `forward = decoder(encoder(backbone(x)))`, `.deploy()`,
+      `.load()`). Postproc stays separate (matches upstream). 674 params for N.
+- [x] Weight-remap loader (`native/loader.py`): `load_checkpoint` /
+      `extract_state_dict` unwrap upstream `.pth` (EMA-preferred, `module.`-strip)
+      and `strict=True` load — no key remap needed (names preserved).
 - [ ] `dfine/model.py` — the public `DFINE` class; `predict()/__call__` returns
       `Results`; batched; conf filter. Input loading + preprocessing.
 - [ ] `Results`/`Boxes` (`.boxes.xyxy/.conf/.cls`, `.plot()/.save()`) + weight download.
@@ -72,8 +75,14 @@ ported modules into one model behind the public API.
       deformable_attention_core_func_v2). Added `decoder_dim_feedforward` config field
       (512 for N, else 1024). Shape + full backbone→encoder→decoder pipeline tests green.
 - [ ] Port `HungarianMatcher` + `DFINECriterion` (VFL/L1/GIoU/FGL/DDF).
-- [ ] Port `DFINEPostProcessor`.
-- [ ] Weight-remap loader: upstream `.pth` → native modules; parity test per size.
+- [x] Port `DFINEPostProcessor` into `dfine/backends/native/postprocessor.py`
+      (registry/`src.core` stripped; `+ from_config`). Added `coco.py` with the
+      MS-COCO category maps for the `remap_mscoco_category` branch. Decode +
+      full pipeline + deploy-mode tests green.
+- [x] Weight-remap loader: upstream `.pth` → native modules (`native/loader.py` +
+      assembled `native/dfine.py`). Offline round-trip test + opt-in real-`.pth`
+      strict-parity test (`DFINE_TEST_CKPT`/`DFINE_TEST_SIZE`). Verified against a
+      real released-format N checkpoint: strict load, 0 missing/0 unexpected.
 - [ ] Make native the default backend once parity holds across n/s/m/l/x.
 
 ## Phase 6 — Polish
@@ -107,3 +116,18 @@ ported modules into one model behind the public API.
   - Docs were at repo root but every link points to `docs/*`; moved the three specs
     into `docs/`. README's "inference-core scaffold" claim was aspirational — no
     `dfine/` existed; scaffold is now real but Results/Boxes/downloads remain Phase 2.
+- **2026-07-12** — Ported `DFINEPostProcessor` (native). `use_focal_loss` isn't a
+  config field: D-FINE fixes it True globally, so `from_config` hard-codes True.
+  Added `backends/native/coco.py` (COCO id/name maps) for the `remap_mscoco_category`
+  branch; it's imported lazily so non-COCO models never touch it. The postprocessor
+  does **not** clamp boxes to the frame (upstream doesn't either) — xyxy corners can
+  fall outside `[0, size]`.
+- **2026-07-12** — Assembled model + weight loader. `native/dfine.py` mirrors upstream
+  (`backbone`/`encoder`/`decoder` attr names → checkpoints load with no remap);
+  postproc stays a separate module. `native/loader.py` unwraps upstream `.pth`
+  (prefers `ema.module`, strips `module.`) and does a `strict=True` load. **Gotcha:**
+  the decoder registers `anchors`/`valid_mask` as *persistent* buffers sized to
+  `eval_spatial_size`, so `imgsz` must match the checkpoint's train resolution (640,
+  the preset default = all official COCO releases) or strict load fails on those two
+  buffers. Parity proven offline against a real released-format N `.pth` (0 missing/0
+  unexpected). Next: per-size parity across s/m/l/x + make native the default backend.
