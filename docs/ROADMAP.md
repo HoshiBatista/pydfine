@@ -48,7 +48,10 @@ ported modules into one model behind the public API.
       torch-free).
 - [x] `Results`/`Boxes` (`.boxes.xyxy/.conf/.cls`, `.plot()/.save()`, `__len__`,
       iterate) in `dfine/results.py`. Weight download/cache = `dfine/downloads.py`.
-- [ ] `DFINE.predict_video()`.
+- [x] `DFINE.predict_video()` — frame-by-frame detect over a video (OpenCV);
+      writes an annotated mp4 (orig res/fps) or `stream=True` yields per-frame
+      `Results`. Lazy `cv2` import (`dfine[video]` extra); real round-trip + stream
+      + missing-cv2 + bad-source tests (headless opencv in dev deps so CI runs them).
 - [ ] Parity test: `DFINE(size="s").load("dfine-s")` on a sample image ≈ upstream boxes.
 
 ## Phase 3 — Export

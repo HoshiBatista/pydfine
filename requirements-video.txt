@@ -1,0 +1,5 @@
+# Video inference extras (on top of core) — DFINE.predict_video.
+# Install:  pip install -r requirements-video.txt
+-r requirements.txt
+
+opencv-python>=4.6   # frame decode + annotated-video writing

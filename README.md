@@ -61,7 +61,10 @@ Early construction, but the model core is in. Done so far:
   `.pth` loading (`registry`/`downloads`, `from_pretrained`), and the public
   `DFINE(...).predict(...) -> Results` API (`.boxes.xyxy/.conf/.cls`, `.plot()/.save()`).
 
-Next: `predict_video`, then `export` (Phase 3) and `train`/`val` (Phase 4). See
+- **Video** — `DFINE.predict_video(source, output=...)` writes an annotated mp4, or
+  `stream=True` yields per-frame `Results` (needs `pip install dfine[video]`).
+
+Next: `export` (Phase 3) and `train`/`val` (Phase 4). See
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
 
 ```python

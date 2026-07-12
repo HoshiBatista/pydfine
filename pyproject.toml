@@ -44,10 +44,16 @@ export = [
     "onnxruntime>=1.16",
     "onnxsim>=0.4",
 ]
+# Video I/O for DFINE.predict_video (decode frames + write annotated mp4).
+video = [
+    "dfine[torch]",
+    "opencv-python>=4.6",
+]
 dev = [
     "ruff>=0.7",
     "pytest>=7.0",
     "pre-commit>=3.5",
+    "opencv-python-headless>=4.6",  # so predict_video tests run in CI (headless)
 ]
 
 [project.urls]

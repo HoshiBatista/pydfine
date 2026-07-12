@@ -95,6 +95,6 @@ def test_load_rejects_unknown_source():
 
 def test_stub_methods_report_phase():
     m = _model()
-    for method in (m.train, m.val, m.export, m.predict_video):
+    for method in (m.train, m.val, m.export):
         with pytest.raises(NotImplementedError, match="not implemented yet"):
             method()

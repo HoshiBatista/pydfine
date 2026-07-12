@@ -73,6 +73,17 @@ def _load_images(source) -> list[Image.Image]:
     return [_to_pil(source)]
 
 
+def _require_cv2():
+    try:
+        import cv2
+
+        return cv2
+    except ImportError as exc:  # pragma: no cover - exercised via monkeypatch
+        raise ImportError(
+            "Video I/O needs OpenCV — install with `pip install dfine[video]`."
+        ) from exc
+
+
 class DFINE:
     """Config-first D-FINE detector with an ultralytics-style ``predict``."""
 
@@ -186,8 +197,60 @@ class DFINE:
     def export(self, *args, **kwargs):
         self._not_ready("export", "Phase 3 (export)")
 
-    def predict_video(self, *args, **kwargs):
-        self._not_ready("predict_video", "Phase 2 (video)")
+    def _iter_video(self, source, conf: float, imgsz: int | None):
+        """Yield one :class:`Results` per decoded frame (frames read as RGB)."""
+        cv2 = _require_cv2()
+        cap = cv2.VideoCapture(str(source))
+        if not cap.isOpened():
+            raise FileNotFoundError(f"Could not open video source: {source!r}")
+        try:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                yield self.predict(rgb, conf=conf, imgsz=imgsz)[0]
+        finally:
+            cap.release()
+
+    def predict_video(
+        self,
+        source,
+        output: str | os.PathLike = "output.mp4",
+        conf: float = 0.25,
+        imgsz: int | None = None,
+        stream: bool = False,
+    ):
+        """Detect objects frame-by-frame in a video.
+
+        With ``stream=True`` returns a generator of per-frame :class:`Results` and
+        writes nothing. Otherwise writes an annotated video to ``output`` (original
+        resolution/fps) and returns its :class:`~pathlib.Path`.
+        """
+        if stream:
+            return self._iter_video(source, conf, imgsz)
+
+        cv2 = _require_cv2()
+        cap = cv2.VideoCapture(str(source))
+        if not cap.isOpened():
+            raise FileNotFoundError(f"Could not open video source: {source!r}")
+
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        writer = cv2.VideoWriter(str(output), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+        try:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                result = self.predict(rgb, conf=conf, imgsz=imgsz)[0]
+                writer.write(cv2.cvtColor(result.plot(), cv2.COLOR_RGB2BGR))
+        finally:
+            cap.release()
+            writer.release()
+        return Path(output)
 
     def __repr__(self) -> str:
         size = self.config.size or "custom"
