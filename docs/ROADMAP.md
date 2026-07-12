@@ -83,7 +83,12 @@ ported modules into one model behind the public API.
       `denoising.py`, and extended `ops.py` (inverse_sigmoid, bias_init,
       deformable_attention_core_func_v2). Added `decoder_dim_feedforward` config field
       (512 for N, else 1024). Shape + full backbone→encoder→decoder pipeline tests green.
-- [ ] Port `HungarianMatcher` + `DFINECriterion` (VFL/L1/GIoU/FGL/DDF).
+- [x] Port `HungarianMatcher` + `DFINECriterion` (VFL/L1/GIoU/FGL/DDF) into
+      `native/matcher.py` + `native/criterion.py` (+ `native/dist.py` shim; registry/
+      `src.core` stripped; `from_config` added). scipy imported lazily (train-only).
+      Tested: matcher 1-to-1 + top-k; criterion end-to-end on the real train-mode
+      decoder output — finite loss dict (final+aux+enc+pre+dn terms) that backprops
+      to the decoder; also the `num_denoising=0` path.
 - [x] Port `DFINEPostProcessor` into `dfine/backends/native/postprocessor.py`
       (registry/`src.core` stripped; `+ from_config`). Added `coco.py` with the
       MS-COCO category maps for the `remap_mscoco_category` branch. Decode +
@@ -168,3 +173,16 @@ ported modules into one model behind the public API.
   and no `class_names`. Public symbols are lazy-loaded in `__init__.py` so a bare
   `import dfine` stays torch-free. Next open Phase-2 items: `predict_video` + the
   sample-image upstream-boxes parity test.
+- **2026-07-12** — `predict_video` done (OpenCV, lazy import, `dfine[video]` extra);
+  writes annotated mp4 or `stream=True` yields per-frame `Results`.
+- **2026-07-12** — Loss ported: `native/matcher.py` (`HungarianMatcher`) +
+  `native/criterion.py` (`DFINECriterion`) + `native/dist.py` (single-process
+  `get_world_size`/`is_dist_available_and_initialized` shim). `from_config` uses
+  upstream's fixed `losses=['vfl','boxes','local']`, `boxes_weight_format=None`
+  (VFL computes its own IoU), matcher costs 2/5/2 (α=0.25), criterion α=0.75.
+  The criterion consumes the decoder's **training-mode** dict as-is (needs
+  `.train()`: `pred_corners`/`ref_points`/`up`/`reg_scale` + `aux/enc/pre/dn`
+  outputs) — verified it backprops to the decoder. `scipy` is train-only, imported
+  lazily inside the matcher. Two unused upstream helpers (`feature_loss_function`,
+  `get_gradual_steps`) were not ported (not on the loss path). Next Phase-4: dataset/
+  dataloader → augment → trainer (`.train()`), then `.val()` (COCO eval).

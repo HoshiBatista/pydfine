@@ -6,3 +6,4 @@ ruff>=0.7
 pytest>=7.0
 pre-commit>=3.5
 opencv-python-headless>=4.6   # exercises DFINE.predict_video tests in CI
+scipy>=1.10                   # Hungarian matcher — exercises criterion tests in CI
