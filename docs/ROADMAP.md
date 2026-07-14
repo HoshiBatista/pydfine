@@ -52,7 +52,11 @@ ported modules into one model behind the public API.
       writes an annotated mp4 (orig res/fps) or `stream=True` yields per-frame
       `Results`. Lazy `cv2` import (`dfine[video]` extra); real round-trip + stream
       + missing-cv2 + bad-source tests (headless opencv in dev deps so CI runs them).
-- [ ] Parity test: `DFINE(size="s").load("dfine-s")` on a sample image ≈ upstream boxes.
+- [x] Parity test: native port reproduces genuine upstream output. `test_parity.py`
+      (gated on `DFINE_WEIGHTS_DIR`) compares our model+postprocessor against a
+      committed fixture generated from real upstream (`scripts/gen_parity_fixture.py`)
+      on a deterministic seeded input. **Bit-exact (max|Δ|=0.0)** across all 5 sizes
+      (n/s/m/l/x) for raw boxes, final boxes, scores, and labels.
 
 ## Phase 3 — Export
 - [ ] `dfine/export/onnx.py`: dynamic-batch ONNX with `(images, orig_target_sizes)`
@@ -199,3 +203,17 @@ ported modules into one model behind the public API.
   `cfg.decoder_hidden_dim`, the encoder keeps `cfg.hidden_dim`. n/s/m/l unaffected
   (encoder==decoder dim there). Parity tests are gated on `DFINE_WEIGHTS_DIR`, so CI
   without weights stays green.
+- **2026-07-14** — Numeric parity vs genuine upstream (Phase 2 tick). Ran the real
+  `D-FINE/src` model (via `YAMLConfig`) on a deterministic seeded input and saved a
+  compact fixture per size (`tests/data/parity_<size>.pt`, ~16 KB: raw pred_boxes +
+  final labels/boxes/scores; raw pred_logits dropped since final labels/scores are
+  argmax/sigmoid+topk over them). `tests/test_parity.py` builds our native port from
+  the same COCO `.pth` and asserts a match — **bit-exact, max|Δ|=0.0 for all of
+  n/s/m/l/x**. Two setup notes: (1) upstream's COCO YAML turns on
+  `remap_mscoco_category` (1..90 ids); our library standardizes on contiguous 0..79
+  labels + separate name mapping, so the generator forces upstream's remap off for an
+  apples-to-apples compare. (2) Upstream's full stack (tensorboard/transformers/
+  calflops via `profiler_utils`) is needed only to *generate* the fixture — the test
+  imports none of it; `transformers`/`calflops` were uninstalled from the dev venv
+  after (they are not deps; `tensorboard`/`faster-coco-eval` are legit train extras).
+  This closes both remaining parity items — the port is proven, not just asserted.
