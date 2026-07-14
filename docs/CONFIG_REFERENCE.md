@@ -44,7 +44,7 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 
 | Param | Type | Default | Description |
 |---|---|---|---|
-| `hidden_dim` | int | 256 | Encoder/decoder embedding dim (384 for X). |
+| `hidden_dim` | int | 256 | Encoder embedding dim (384 for X). |
 | `in_channels` | list[int] | `[512,1024,2048]` | From backbone; preset-set. |
 | `feat_strides` | list[int] | `[8,16,32]` | Strides of the pyramid levels. |
 | `use_encoder_idx` | list[int] | `[2]` | Which level runs AIFI self-attn. |
@@ -61,6 +61,7 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 
 | Param | Type | Default | Description |
 |---|---|---|---|
+| `decoder_hidden_dim` | int \| None | None | Decoder embedding dim; `None` resolves to `hidden_dim`. **256 for X**, where the encoder runs at 384 but the decoder stays 256. |
 | `num_queries` | int | 300 | Object queries. |
 | `decoder_dim_feedforward` | int | 1024 | Decoder FFN dim (512 for N; separate from `encoder_dim_feedforward`). |
 | `decoder_layers` | int | 6 | Decoder layers (`num_layers`; 4 for M, 3 for S/N). |
@@ -178,6 +179,7 @@ it is a 2-level pyramid at `hidden_dim=128`, not 3-level/256.**
 | `use_lab` | True | True | True | False | False |
 | `num_levels` | **2** | 3 | 3 | 3 | 3 |
 | `hidden_dim` | **128** | 256 | 256 | 256 | 384 |
+| `decoder_hidden_dim` | 128 | 256 | 256 | 256 | **256** |
 | `return_idx` | [2,3] | [1,2,3] | [1,2,3] | [1,2,3] | [1,2,3] |
 | `in_channels` | [512,1024] | [256,512,1024] | [384,768,1536] | [512,1024,2048] | [512,1024,2048] |
 | `feat_strides` | [16,32] | [8,16,32] | [8,16,32] | [8,16,32] | [8,16,32] |

@@ -615,7 +615,7 @@ class DFINETransformer(nn.Module):
         """
         return cls(
             num_classes=cfg.num_classes,
-            hidden_dim=cfg.hidden_dim,
+            hidden_dim=cfg.decoder_hidden_dim,
             num_queries=cfg.num_queries,
             feat_channels=cfg.feat_channels,
             feat_strides=cfg.feat_strides,

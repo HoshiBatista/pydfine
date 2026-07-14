@@ -60,6 +60,8 @@ class DFINEConfig:
     encoder_act: str = "silu"  # fusion/GELAN activation (upstream `act`)
 
     # --- 4. Decoder (DFINETransformer) --------------------------------------
+    decoder_hidden_dim: int | None = None  # decoder embed dim; defaults to hidden_dim
+    # (256 for X, where the encoder runs at 384 but the decoder stays 256)
     num_queries: int = 300  # object queries
     decoder_dim_feedforward: int = 1024  # decoder FFN dim (512 for N; separate from enc)
     decoder_layers: int = 6  # decoder layers (num_layers; 4 for M, 3 for S/N)
@@ -136,6 +138,8 @@ class DFINEConfig:
 
     # ------------------------------------------------------------------ API --
     def __post_init__(self) -> None:
+        if self.decoder_hidden_dim is None:
+            object.__setattr__(self, "decoder_hidden_dim", self.hidden_dim)
         self._validate()
 
     @classmethod
@@ -302,6 +306,7 @@ SIZE_PRESETS: dict[str, dict[str, Any]] = {
         "freeze_norm": True,
         "in_channels": [512, 1024, 2048],
         "hidden_dim": 384,
+        "decoder_hidden_dim": 256,  # decoder stays 256 while the encoder runs at 384
         "encoder_dim_feedforward": 2048,
         "feat_channels": [384, 384, 384],
         "reg_scale": 8.0,

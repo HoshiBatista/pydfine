@@ -49,6 +49,20 @@ def test_decoder_dim_feedforward_wiring():
     assert dec.decoder.layers[0].linear1.out_features == 512
 
 
+def test_x_decoder_hidden_dim_stays_256():
+    # X runs the *encoder* at 384 but upstream leaves the decoder at 256 (only
+    # feat_channels becomes 384, which input_proj maps 384->256). Regression guard
+    # for the strict-load parity bug where the decoder was built at 384.
+    cfg = DFINEConfig.preset("x")
+    assert cfg.hidden_dim == 384 and cfg.decoder_hidden_dim == 256
+    dec = DFINETransformer.from_config(_cfg("x"))
+    assert dec.hidden_dim == 256
+    # dec_bbox_head MLP operates at the decoder hidden dim, not the encoder's.
+    assert dec.dec_bbox_head[0].layers[0].in_features == 256
+    # input_proj takes the 384-ch encoder output down to 256.
+    assert dec.input_proj[0][0].in_channels == 384
+
+
 def test_custom_num_classes():
     cfg = DFINEConfig.preset("s", imgsz=IMGSZ, backbone_pretrained=False, num_classes=3)
     dec = DFINETransformer.from_config(cfg).eval()

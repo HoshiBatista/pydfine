@@ -97,12 +97,13 @@ ported modules into one model behind the public API.
       assembled `native/dfine.py`). Offline round-trip test + opt-in real-`.pth`
       strict-parity test (`DFINE_TEST_CKPT`/`DFINE_TEST_SIZE`). Verified against a
       real released-format N checkpoint: strict load, 0 missing/0 unexpected.
-- [~] Per-size parity across n/s/m/l/x. Catalogue (`registry.py`) now carries
+- [x] Per-size parity across n/s/m/l/x. Catalogue (`registry.py`) now carries
       `num_classes` per checkpoint + `resolve_weights(size, dataset)` /
       `config_for()` "which model to use" logic; `downloads.py` caches assets;
       `DFINE.from_pretrained(name)` ties it together. Parametrized parity test
-      (`test_per_size_coco_parity`, gated on `DFINE_WEIGHTS_DIR`) is wired but not
-      yet run against all 5 downloaded COCO `.pth` — that's the remaining tick.
+      (`test_per_size_coco_parity`, gated on `DFINE_WEIGHTS_DIR`) now runs green
+      against all 5 downloaded COCO `.pth` (n/s/m/l/x): 0 missing / 0 unexpected,
+      finite forward pass. Uncovered + fixed an X-only arch bug — see 2026-07-14 note.
 - [ ] Make native the default backend once parity holds across n/s/m/l/x.
 
 ## Phase 6 — Polish
@@ -186,3 +187,15 @@ ported modules into one model behind the public API.
   lazily inside the matcher. Two unused upstream helpers (`feature_loss_function`,
   `get_gradual_steps`) were not ported (not on the loss path). Next Phase-4: dataset/
   dataloader → augment → trainer (`.train()`), then `.val()` (COCO eval).
+- **2026-07-14** — Per-size parity tick closed. Downloaded the 5 COCO `.pth`
+  (n/s/m/l/x) and ran `test_per_size_coco_parity` — all strict-load with 0 missing /
+  0 unexpected. This surfaced an **X-only architecture bug**: X sets the *encoder*
+  `hidden_dim=384` but upstream leaves the *decoder* `DFINETransformer.hidden_dim` at
+  the base **256** (only `feat_channels` becomes `[384]*3`, which the decoder's
+  `input_proj` maps 384→256). Our config used one `hidden_dim` for both, so X built its
+  `dec_bbox_head`/heads at 384 and the strict load failed on shape mismatch. Fix: added
+  a `decoder_hidden_dim` config field (defaults to `hidden_dim` via `__post_init__`;
+  set to 256 in the X preset); the decoder `from_config` now reads
+  `cfg.decoder_hidden_dim`, the encoder keeps `cfg.hidden_dim`. n/s/m/l unaffected
+  (encoder==decoder dim there). Parity tests are gated on `DFINE_WEIGHTS_DIR`, so CI
+  without weights stays green.
