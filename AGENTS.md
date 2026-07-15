@@ -58,8 +58,12 @@ means `transformers` is **not** a dependency. Progress so far: the full inferenc
 stack is done — `HGNetv2`, `HybridEncoder`, `DFINETransformer` (FDR/LQE/denoising),
 `DFINEPostProcessor`, the assembled `DFINE` module, and the `.pth` loader — plus the
 public `DFINE.predict`/`predict_video` API, the checkpoint registry + download/cache,
-and the training loss (`HungarianMatcher` + `DFINECriterion`). Next is the Phase-4
-training loop (dataset → augment → trainer → `.val()`). See `docs/ROADMAP.md`.
+the training loss (`HungarianMatcher` + `DFINECriterion`), and now the single-process
+training loop (`dfine/train/`: param groups, EMA, AMP, warmup + flat-cosine LR, and
+upstream-style progress visualization — console `MetricLogger` + TensorBoard +
+`loss_curve.png`) behind `DFINE.train(train_loader, ...)`. Next is the COCO
+dataset/augmentation (so `train(data=...)` needs no hand-built loader) and `.val()`.
+See `docs/ROADMAP.md`.
 
 The `dfine/backends/` boundary is still kept so a `transformers` wrapper (Path B)
 could be added later without touching the public `DFINE` API. Whichever path: the
@@ -73,8 +77,8 @@ Legend: ✅ done · ⬜ planned (target path shown).
 dfine/
   __init__.py          # ✅ lazy exports DFINE/Results/Boxes (base import stays torch-free)
   config.py            # ✅ DFINEConfig dataclass + SIZE_PRESETS + validation
-  model.py             # ✅ DFINE: predict/predict_video + input loading/preprocess;
-                       #    load/from_pretrained; train/val/export are phase stubs
+  model.py             # ✅ DFINE: predict/predict_video/train + input loading/preprocess;
+                       #    load/from_pretrained; val/export are phase stubs
   results.py           # ✅ Results / Boxes (.boxes.xyxy/.conf/.cls, .plot()/.save())
   registry.py          # ✅ checkpoint catalogue: name -> CheckpointSpec(size,dataset,
                        #    num_classes,url); resolve_weights/config_for
@@ -98,10 +102,14 @@ dfine/
       matcher.py       #   HungarianMatcher (LSAP)
       criterion.py     #   DFINECriterion (VFL/L1/GIoU/FGL/DDF)
     # transformers.py  # Path B wrapper — optional, not planned yet
-  train/               # ⬜ Phase 4
-    dataset.py         #   COCO-format dataset + dataloader
-    augment.py         #   RandomPhotometricDistort, ZoomOut, IoUCrop, MultiScale...
-    trainer.py         #   training loop, EMA, AMP, param groups, schedulers
+  train/               # ◐ Phase 4 — loop done; dataset/augment/val planned
+    trainer.py         # ✅ train_one_epoch + Trainer, param groups, checkpointing
+    ema.py             # ✅ ModelEMA (weight EMA)
+    scheduler.py       # ✅ LinearWarmup + flat-cosine/multistep LR
+    logger.py          # ✅ MetricLogger/SmoothedValue — console progress readout
+    visualizer.py      # ✅ TrainingVisualizer — TensorBoard + loss_curve.png (+ W&B)
+    dataset.py         # ⬜ COCO-format dataset + dataloader
+    augment.py         # ⬜ RandomPhotometricDistort, ZoomOut, IoUCrop, MultiScale...
   export/              # ⬜ Phase 3
     onnx.py            #   ONNX export (+ optional onnxsim); TRT/OpenVINO helpers
   cli.py               # ✅ `dfine models`; predict/train/val/export are phase stubs

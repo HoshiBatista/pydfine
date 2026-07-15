@@ -65,15 +65,28 @@ ported modules into one model behind the public API.
 - [ ] Helpers/docs for TensorRT (`trtexec --fp16`) and OpenVINO downstream.
 
 ## Phase 4 — Training
-- [ ] `train/dataset.py`: COCO-format dataset + dataloader (`remap_mscoco_category`).
+- [x] `train/trainer.py`: the D-FINE loop ported single-process — `build_param_groups`
+      (backbone vs enc/dec-norm regex, verbatim from `optimizer.yml`), `train_one_epoch`
+      (AMP, `sum(loss_dict)` backward, grad clip, EMA, per-iter warmup), and a `Trainer`
+      that wires model+criterion+optimizer+scheduler+EMA and runs `.fit()` with
+      per-epoch `last.pth` checkpointing. `train/ema.py` (`ModelEMA`), `train/scheduler.py`
+      (`LinearWarmup` + flat-cosine/multistep).
+- [x] **Training-process visualization (like upstream D-FINE):** `train/logger.py`
+      (`MetricLogger`/`SmoothedValue` — the console `Epoch [i/N] eta … loss … lr … mem`
+      readout) + `train/visualizer.py` (`TrainingVisualizer`: TensorBoard scalars
+      `Loss/*`,`Lr/*`,`Test/*` + a matplotlib `loss_curve.png` + optional W&B, all
+      optional/graceful). Added `matplotlib` to the `[train]` extra.
+- [x] `DFINE.train(train_loader, epochs=…, output_dir=…, val_fn=…)` single-GPU path
+      (loader-based). Verified end-to-end: writes `last.pth` + `loss_curve.png` + TB events.
+- [x] Overfit-one-batch test (loss drops sharply) + param-group/EMA/warmup/scheduler/logger
+      units — `tests/test_trainer.py` (green).
+- [ ] `train/dataset.py`: COCO-format dataset + dataloader (`remap_mscoco_category`) so
+      `DFINE.train(data="path/to/coco", …)` works without a hand-built loader.
 - [ ] `train/augment.py`: PhotometricDistort, ZoomOut, IoUCrop, HFlip, MultiScale;
       two-phase schedule (advanced → `no_aug_epoch` tail).
-- [ ] `train/trainer.py`: AdamW param groups (backbone vs norm/bias), EMA, AMP,
-      grad clip, warmup + flat-cosine scheduler, checkpointing/resume.
-- [ ] `DFINE.train(data=..., epochs=..., imgsz=..., batch=...)` single-GPU path.
 - [ ] Multi-GPU launch (wrap `torchrun`) behind the same `.train()` call.
-- [ ] `DFINE.val()` via COCO evaluator → returns metrics dict.
-- [ ] Overfit-one-batch test (loss → ~0) as a training smoke test.
+- [ ] `DFINE.val()` via COCO evaluator → returns metrics dict (slots into the existing
+      `Trainer.fit(val_fn=…)` hook).
 
 ## Phase 5 — Native backend (Path A) — **primary path** (decision 2026-07-11)
 - [x] Port `HGNetv2` into `dfine/backends/native/hgnetv2.py` (strip registry; +
