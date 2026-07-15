@@ -219,3 +219,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# D-FINE training outputs (DFINE.train default output_dir)
+runs/
+*.pth

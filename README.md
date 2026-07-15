@@ -67,8 +67,15 @@ Early construction, but the model core is in. Done so far:
 - **Training loss** — `HungarianMatcher` + `DFINECriterion` (VFL + L1 + GIoU + FGL +
   DDF) ported and wired from the config; consumes the decoder's training-mode output.
 
-Next: the training loop — dataset → augment → trainer → `.train()`/`.val()` (Phase 4),
-and `export` (Phase 3). See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
+- **Training loop** — `DFINE.train(train_loader, epochs=...)` runs the ported D-FINE
+  loop (AdamW param groups, EMA, AMP, grad clip, warmup + flat-cosine LR) with the same
+  **progress visualization as upstream**: a live console readout (`MetricLogger`) plus
+  TensorBoard scalars and a `loss_curve.png` under `output_dir` (needs
+  `pip install dfine[train]`; W&B optional).
+
+Next: the COCO dataset/augmentation so `train(data="coco/", ...)` needs no hand-built
+loader, then `.val()` (Phase 4) and `export` (Phase 3). See
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
 
 ```python
 from dfine import DFINEConfig

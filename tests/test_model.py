@@ -95,6 +95,7 @@ def test_load_rejects_unknown_source():
 
 def test_stub_methods_report_phase():
     m = _model()
-    for method in (m.train, m.val, m.export):
+    # val + export are still phase stubs; train is implemented (Phase 4).
+    for method in (m.val, m.export):
         with pytest.raises(NotImplementedError, match="not implemented yet"):
             method()

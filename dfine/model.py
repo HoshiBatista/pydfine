@@ -188,8 +188,43 @@ class DFINE:
     def _not_ready(self, name: str, phase: str):
         raise NotImplementedError(f"DFINE.{name}() is not implemented yet — arriving in {phase}.")
 
-    def train(self, *args, **kwargs):
-        self._not_ready("train", "Phase 4 (training)")
+    def train(
+        self,
+        train_loader,
+        epochs: int | None = None,
+        val_loader=None,
+        val_fn=None,
+        output_dir: str = "runs/train",
+        use_wandb: bool = False,
+        visualize: bool = True,
+    ):
+        """Fine-tune the model on ``train_loader`` (Phase 4, single-process).
+
+        ``train_loader`` yields ``(samples, targets)`` batches: ``samples`` a float
+        ``BCHW`` image tensor, each ``target`` a dict with ``labels`` (``LongTensor``)
+        and ``boxes`` (``cxcywh``, normalized). Optimizer groups, LR schedule, EMA, AMP
+        and grad-clip all come from this model's :class:`~dfine.config.DFINEConfig`.
+
+        Progress is visualized like upstream D-FINE: a live console readout plus
+        TensorBoard scalars and a ``loss_curve.png`` under ``output_dir`` (and W&B if
+        ``use_wandb``). Returns ``self``; the trained (EMA) weights replace ``self.model``.
+
+        The COCO ``data=path`` dataset/augmentation builder is a follow-up Phase-4 task;
+        for now pass a ready dataloader (or use ``dfine.train.Trainer`` directly).
+        """
+        from .train import Trainer
+
+        trainer = Trainer(
+            self.model,
+            self.config,
+            device=self.device,
+            output_dir=output_dir,
+            visualize=visualize,
+            use_wandb=use_wandb,
+        )
+        best = trainer.fit(train_loader, epochs=epochs, val_loader=val_loader, val_fn=val_fn)
+        self.model = best.to(self.device)
+        return self
 
     def val(self, *args, **kwargs):
         self._not_ready("val", "Phase 4 (training)")
