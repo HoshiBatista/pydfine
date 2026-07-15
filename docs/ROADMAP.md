@@ -80,10 +80,20 @@ ported modules into one model behind the public API.
       (loader-based). Verified end-to-end: writes `last.pth` + `loss_curve.png` + TB events.
 - [x] Overfit-one-batch test (loss drops sharply) + param-group/EMA/warmup/scheduler/logger
       units — `tests/test_trainer.py` (green).
-- [ ] `train/dataset.py`: COCO-format dataset + dataloader (`remap_mscoco_category`) so
-      `DFINE.train(data="path/to/coco", …)` works without a hand-built loader.
+- [x] `train/dataset.py`: COCO-format dataset + dataloader ported from upstream
+      `src/data` (detection path). `CocoDetection` (on `faster_coco_eval`'s parser) +
+      `_PrepareCocoTarget` (xywh→xyxy clamp/keep, contiguous-label remap), a minimal
+      resize+tensor+`cxcywh`-normalize `default_transforms`, `BatchImageCollateFunction`
+      (multi-scale jitter, epoch-gated) + a `set_epoch`-forwarding dataloader, and the
+      config-first `build_coco_dataloader(img_folder, ann_file, cfg=…)`. Yields
+      `(images, targets)` consumable directly by `DFINE.train`. Tested against a
+      synthetic on-disk COCO set (output contract + remap + multiscale + one train step);
+      `faster-coco-eval` added to the `[dev]` extra so CI runs it.
+- [ ] `DFINE.train(data="path/to/coco", …)` sugar: build the loader from a path inside
+      `train()` so no hand-built loader is needed (loader itself is done above).
 - [ ] `train/augment.py`: PhotometricDistort, ZoomOut, IoUCrop, HFlip, MultiScale;
-      two-phase schedule (advanced → `no_aug_epoch` tail).
+      two-phase schedule (advanced → `no_aug_epoch` tail). Compose before
+      `default_transforms`' resize; `build_coco_dataloader(transforms=…)` accepts it.
 - [ ] Multi-GPU launch (wrap `torchrun`) behind the same `.train()` call.
 - [ ] `DFINE.val()` via COCO evaluator → returns metrics dict (slots into the existing
       `Trainer.fit(val_fn=…)` hook).
