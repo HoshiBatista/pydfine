@@ -230,3 +230,18 @@ ported modules into one model behind the public API.
   imports none of it; `transformers`/`calflops` were uninstalled from the dev venv
   after (they are not deps; `tensorboard`/`faster-coco-eval` are legit train extras).
   This closes both remaining parity items — the port is proven, not just asserted.
+- **2026-07-15** — Ported the Phase-4 training loop into `dfine/train/` and cross-checked
+  it against upstream `D-FINE/src`. Verified faithful: the AdamW param grouping is
+  bit-exact vs upstream `get_optim_params` (replayed its regex — 186 backbone / 98
+  zero-WD enc·dec-norm / 144 default, disjoint, all covered); `train_one_epoch`,
+  `ModelEMA` (decay ramp + update rule), and `LinearWarmup` (factor formula) match
+  `det_engine`/`optim` numerically. Single-process simplifications only: dropped
+  `dist_utils` all-reduce/`de_parallel`/`reduce_dict` (no-ops at world-size 1); AMP uses
+  `device_type=device.type` (more correct than upstream's `str(device)`).
+  **INTENTIONAL DEVIATION (kept, per repo owner):** the default `scheduler="flatcosine"`
+  adds a cosine decay over the trailing `no_aug_epoch` epochs. Upstream configures
+  `MultiStepLR(milestones=[500])`, which never fires (all recipes are 72–160 epochs) —
+  i.e. upstream's LR is effectively flat with no annealing. Our flat body matches; the
+  cosine no-aug tail is an added enhancement, not parity. For an exact upstream schedule
+  use `scheduler="multistep"` with a milestone beyond `epochs`. Documented in
+  `dfine/train/scheduler.py` + the `scheduler` field in `dfine/config.py`.

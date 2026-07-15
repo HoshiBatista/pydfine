@@ -4,10 +4,20 @@ D-FINE warms the LR up linearly over the first ``warmup_iters`` optimizer steps,
 then follows an epoch-stepped schedule. Two epoch schedules are supported (selected
 by ``DFINEConfig.scheduler``):
 
-* ``"flatcosine"`` — hold the base LR flat for the augmented epochs, then cosine-anneal
-  down to ``lr_min`` across the trailing ``no_aug_epoch`` epochs. This is D-FINE's
-  default and matches its "flat then cosine" tail.
+* ``"flatcosine"`` (default) — hold the base LR flat for the augmented epochs, then
+  cosine-anneal down to ``lr_min_ratio`` across the trailing ``no_aug_epoch`` epochs.
 * ``"multistep"`` — plain ``MultiStepLR`` (``milestones``/``gamma``).
+
+INTENTIONAL DEVIATION FROM UPSTREAM (kept on purpose): upstream D-FINE configures
+``MultiStepLR(milestones=[500], gamma=0.1)``. Because every released recipe trains for
+72–160 epochs — all well below 500 — that milestone never fires, so upstream's LR is
+effectively **flat/constant** after warmup, with no annealing even during the no-aug
+tail. Our ``"flatcosine"`` keeps that flat body but adds a cosine decay over the final
+``no_aug_epoch`` epochs, which usually helps the no-aug fine-tuning stage converge.
+It is therefore *not* byte-for-byte parity with upstream's schedule. For an exact
+upstream match, use ``scheduler="multistep"`` with a milestone beyond ``epochs`` (e.g.
+``lr_milestones=[500]``), which reproduces the flat/never-stepped behaviour. See the
+2026-07-15 note in ``docs/ROADMAP.md``.
 
 The warmup wraps the epoch scheduler: while warming up, the epoch scheduler is held
 back (``LinearWarmup.finished()`` gates ``lr_scheduler.step()`` in the trainer), exactly

@@ -118,7 +118,8 @@ class DFINEConfig:
     betas: tuple[float, float] = (0.9, 0.999)  # AdamW betas
     clip_max_norm: float = 0.1  # grad clip
     warmup_iters: int = 500  # LR warmup iterations
-    scheduler: str = "flatcosine"  # "flatcosine"|"multistep"
+    scheduler: str = "flatcosine"  # "flatcosine"(default; adds a cosine no-aug tail —
+    # intentional deviation from upstream's effectively-flat MultiStepLR)|"multistep"
     ema_decay: float = 0.9999  # weight-EMA decay
     ema_warmups: int = 1000  # EMA warmup steps
     use_amp: bool = True  # mixed precision
