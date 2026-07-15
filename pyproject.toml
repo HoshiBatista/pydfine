@@ -57,6 +57,7 @@ dev = [
     "pre-commit>=3.5",
     "opencv-python-headless>=4.6",  # so predict_video tests run in CI (headless)
     "scipy>=1.10",  # Hungarian matcher — so criterion/matcher tests run in CI
+    "faster-coco-eval>=1.6.6",  # COCO parser — so dataset tests run in CI
 ]
 
 [project.urls]

@@ -108,7 +108,7 @@ dfine/
     scheduler.py       # ✅ LinearWarmup + flat-cosine/multistep LR
     logger.py          # ✅ MetricLogger/SmoothedValue — console progress readout
     visualizer.py      # ✅ TrainingVisualizer — TensorBoard + loss_curve.png (+ W&B)
-    dataset.py         # ⬜ COCO-format dataset + dataloader
+    dataset.py         # ✅ CocoDetection + build_coco_dataloader (multi-scale collate)
     augment.py         # ⬜ RandomPhotometricDistort, ZoomOut, IoUCrop, MultiScale...
   export/              # ⬜ Phase 3
     onnx.py            #   ONNX export (+ optional onnxsim); TRT/OpenVINO helpers

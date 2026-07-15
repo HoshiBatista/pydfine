@@ -73,8 +73,12 @@ Early construction, but the model core is in. Done so far:
   TensorBoard scalars and a `loss_curve.png` under `output_dir` (needs
   `pip install dfine[train]`; W&B optional).
 
-Next: the COCO dataset/augmentation so `train(data="coco/", ...)` needs no hand-built
-loader, then `.val()` (Phase 4) and `export` (Phase 3). See
+- **COCO data** — `dfine.train.dataset.build_coco_dataloader(img_folder, ann_file,
+  cfg=...)` gives a ready `(images, targets)` loader (contiguous-label remap, multi-scale
+  collate) that feeds straight into `DFINE.train`.
+
+Next: training augmentations (`augment.py`), the `train(data="coco/", ...)` path sugar,
+then `.val()` (Phase 4) and `export` (Phase 3). See
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
 
 ```python

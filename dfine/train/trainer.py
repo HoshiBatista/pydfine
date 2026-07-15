@@ -226,6 +226,9 @@ class Trainer:
         )
 
         for epoch in range(epochs):
+            # Let multi-scale collate / samplers know the epoch (no-op for plain loaders).
+            if hasattr(train_loader, "set_epoch"):
+                train_loader.set_epoch(epoch)
             stats = train_one_epoch(
                 self.model,
                 self.criterion,
