@@ -91,9 +91,16 @@ ported modules into one model behind the public API.
       `faster-coco-eval` added to the `[dev]` extra so CI runs it.
 - [ ] `DFINE.train(data="path/to/coco", …)` sugar: build the loader from a path inside
       `train()` so no hand-built loader is needed (loader itself is done above).
-- [ ] `train/augment.py`: PhotometricDistort, ZoomOut, IoUCrop, HFlip, MultiScale;
-      two-phase schedule (advanced → `no_aug_epoch` tail). Compose before
-      `default_transforms`' resize; `build_coco_dataloader(transforms=…)` accepts it.
+- [x] `train/augment.py`: ported D-FINE's train pipeline — RandomPhotometricDistort,
+      RandomZoomOut, RandomIoUCrop (with a `p` wrapper), SanitizeBoundingBoxes,
+      RandomHorizontalFlip, Resize, then the shared tensor/`cxcywh`-normalize tail. The
+      two-phase schedule is `TrainCompose` + `stop_epoch`: the advanced ops
+      (photometric/zoomout/IoU-crop, `ADVANCED_OPS`) switch off once
+      `epoch >= stop_epoch` (pass `cfg.epochs - cfg.no_aug_epoch`). `set_epoch` is
+      forwarded loader→dataset→compose. Plug in via
+      `build_coco_dataloader(transforms=train_transforms(imgsz, stop_epoch=…))`.
+      Tested: output contract, stop-epoch skip logic, epoch forwarding, and an
+      augmented train step (multi-scale collate is Phase-4's `dataset.py`, done).
 - [ ] Multi-GPU launch (wrap `torchrun`) behind the same `.train()` call.
 - [ ] `DFINE.val()` via COCO evaluator → returns metrics dict (slots into the existing
       `Trainer.fit(val_fn=…)` hook).

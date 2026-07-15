@@ -73,13 +73,14 @@ Early construction, but the model core is in. Done so far:
   TensorBoard scalars and a `loss_curve.png` under `output_dir` (needs
   `pip install dfine[train]`; W&B optional).
 
-- **COCO data** — `dfine.train.dataset.build_coco_dataloader(img_folder, ann_file,
-  cfg=...)` gives a ready `(images, targets)` loader (contiguous-label remap, multi-scale
-  collate) that feeds straight into `DFINE.train`.
+- **COCO data + augmentation** — `dfine.train.dataset.build_coco_dataloader(img_folder,
+  ann_file, cfg=...)` gives a ready `(images, targets)` loader (contiguous-label remap,
+  multi-scale collate); pass `transforms=dfine.train.augment.train_transforms(imgsz,
+  stop_epoch=...)` for D-FINE's full augment pipeline (photometric distort, zoom-out,
+  IoU-crop, H-flip) with the two-phase no-aug tail. Feeds straight into `DFINE.train`.
 
-Next: training augmentations (`augment.py`), the `train(data="coco/", ...)` path sugar,
-then `.val()` (Phase 4) and `export` (Phase 3). See
-[`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
+Next: the `train(data="coco/", ...)` path sugar, then `.val()` (Phase 4) and `export`
+(Phase 3). See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
 
 ```python
 from dfine import DFINEConfig
