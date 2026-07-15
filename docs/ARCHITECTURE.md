@@ -72,8 +72,11 @@ labels, boxes, scores = postprocessor(model(images), orig_target_sizes)
 # boxes: xyxy in ORIGINAL image pixels (postproc rescales); scores: 0..1
 ```
 
-This is already reproduced in the scaffold's `predictor.py`; the native backend must
-preserve this exact contract so `Results` needs no rescaling.
+`DFINE.predict` (in `dfine/model.py`) implements exactly this contract — it
+preprocesses inputs, runs the assembled native model + `DFINEPostProcessor`, then
+wraps the output in `Results` with no rescaling needed. In non-deploy mode the
+postprocessor returns a list of `{labels, boxes, scores}` dicts instead of the tuple
+(same values); `predict` applies the `conf` filter on those.
 
 ## 4. From YAML+registry → typed Python
 

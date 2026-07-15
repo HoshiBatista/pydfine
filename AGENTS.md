@@ -54,9 +54,12 @@ model.predict(...); model.train(...); model.val(...); model.export(...)
 
 **Decision (2026-07-11): we are building Path A** — porting upstream `src/` directly
 into `dfine/backends/native/` for byte-exact parity with the released `.pth`. This
-means `transformers` is **not** a dependency. Progress so far: `HGNetv2`,
-`HybridEncoder`, `DFINETransformer` (FDR/LQE/denoising) are ported and shape-tested;
-next is the postprocessor + assembly. See `docs/ROADMAP.md` Phase 5.
+means `transformers` is **not** a dependency. Progress so far: the full inference
+stack is done — `HGNetv2`, `HybridEncoder`, `DFINETransformer` (FDR/LQE/denoising),
+`DFINEPostProcessor`, the assembled `DFINE` module, and the `.pth` loader — plus the
+public `DFINE.predict`/`predict_video` API, the checkpoint registry + download/cache,
+and the training loss (`HungarianMatcher` + `DFINECriterion`). Next is the Phase-4
+training loop (dataset → augment → trainer → `.val()`). See `docs/ROADMAP.md`.
 
 The `dfine/backends/` boundary is still kept so a `transformers` wrapper (Path B)
 could be added later without touching the public `DFINE` API. Whichever path: the
@@ -64,34 +67,44 @@ could be added later without touching the public `DFINE` API. Whichever path: th
 
 ## 4. Repository layout (target)
 
+Legend: ✅ done · ⬜ planned (target path shown).
+
 ```
 dfine/
-  __init__.py          # exports DFINE, DFINEConfig, Results, Boxes
-  config.py            # DFINEConfig dataclass + SIZE_PRESETS + validation
-  model.py             # DFINE: the one user-facing class (predict/train/val/export)
-  results.py           # Results / Boxes (exists in scaffold)
-  registry.py          # preset name -> checkpoint URL (exists in scaffold)
-  downloads.py         # weight cache/download (exists in scaffold)
-  data.py              # input loading + COCO names (exists in scaffold)
+  __init__.py          # ✅ lazy exports DFINE/Results/Boxes (base import stays torch-free)
+  config.py            # ✅ DFINEConfig dataclass + SIZE_PRESETS + validation
+  model.py             # ✅ DFINE: predict/predict_video + input loading/preprocess;
+                       #    load/from_pretrained; train/val/export are phase stubs
+  results.py           # ✅ Results / Boxes (.boxes.xyxy/.conf/.cls, .plot()/.save())
+  registry.py          # ✅ checkpoint catalogue: name -> CheckpointSpec(size,dataset,
+                       #    num_classes,url); resolve_weights/config_for
+  downloads.py         # ✅ weight cache/download (atomic, $DFINE_CACHE_DIR)
   backends/
-    __init__.py        # backend package docstring (get_backend(config) -> Backend, TBD)
-    native/            # Path A port — DONE so far: backbone, encoder, decoder
+    __init__.py        # backend package docstring
+    native/            # ✅ Path A port — full inference + loss
       common.py        #   FrozenBatchNorm2d
       ops.py           #   get_activation, inverse_sigmoid, deformable attn core, ...
       box_ops.py       #   box conversions, IoU/GIoU
-      dfine_utils.py   #   FDR weighting_function / distance2bbox
+      dfine_utils.py   #   FDR weighting_function / distance2bbox / bbox2distance
       denoising.py     #   contrastive denoising (training)
+      coco.py          #   MS-COCO id/name maps
+      dist.py          #   single-process world-size/rank shim (criterion)
       hgnetv2.py       #   HGNetv2 backbone (B0-B6)
       hybrid_encoder.py#   HybridEncoder (AIFI + CCFM/GELAN)
       dfine_decoder.py #   DFINETransformer (FDR head, LQE)
+      postprocessor.py #   DFINEPostProcessor (top-k decode to xyxy)
+      dfine.py         #   assembled DFINE (backbone+encoder+decoder) + .load()
+      loader.py        #   upstream .pth -> native modules (strict load)
+      matcher.py       #   HungarianMatcher (LSAP)
+      criterion.py     #   DFINECriterion (VFL/L1/GIoU/FGL/DDF)
     # transformers.py  # Path B wrapper — optional, not planned yet
-  train/
-    trainer.py         # training loop, EMA, AMP, param groups, schedulers
-    augment.py         # RandomPhotometricDistort, ZoomOut, IoUCrop, MultiScale...
-    dataset.py         # COCO-format dataset + dataloader
-  export/
-    onnx.py            # ONNX export (+ optional onnxsim); TRT/OpenVINO helpers
-  cli.py               # `dfine predict|train|val|export|models` (exists in scaffold)
+  train/               # ⬜ Phase 4
+    dataset.py         #   COCO-format dataset + dataloader
+    augment.py         #   RandomPhotometricDistort, ZoomOut, IoUCrop, MultiScale...
+    trainer.py         #   training loop, EMA, AMP, param groups, schedulers
+  export/              # ⬜ Phase 3
+    onnx.py            #   ONNX export (+ optional onnxsim); TRT/OpenVINO helpers
+  cli.py               # ✅ `dfine models`; predict/train/val/export are phase stubs
 docs/                  # ARCHITECTURE.md, CONFIG_REFERENCE.md, ROADMAP.md
 tests/                 # parity + unit tests
 ```
@@ -128,12 +141,17 @@ the full data flow and the module→param map.
 ## 8. Commands
 
 ```bash
-pip install -e ".[dev]"        # editable install with dev extras
+pip install -e ".[dev]"        # editable install with dev extras (incl. torch)
 ruff format . && ruff check .  # format + lint
 pytest -q                      # run tests
 pytest -q -k parity            # weight/output parity tests only
 dfine models                   # sanity: list presets
 ```
+
+Optional extras (on top of core): `dfine[torch]` (inference: torch/torchvision/
+pillow), `dfine[video]` (`predict_video`: OpenCV), `dfine[train]` (scipy matcher +
+COCO eval), `dfine[export]` (ONNX). `[dev]` pulls torch + headless OpenCV + scipy so
+the whole suite runs. Base `pip install dfine` (config/CLI only) needs no torch.
 
 ## 9. Definition of Done (per task)
 

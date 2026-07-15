@@ -64,8 +64,11 @@ Early construction, but the model core is in. Done so far:
 - **Video** — `DFINE.predict_video(source, output=...)` writes an annotated mp4, or
   `stream=True` yields per-frame `Results` (needs `pip install dfine[video]`).
 
-Next: `export` (Phase 3) and `train`/`val` (Phase 4). See
-[`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
+- **Training loss** — `HungarianMatcher` + `DFINECriterion` (VFL + L1 + GIoU + FGL +
+  DDF) ported and wired from the config; consumes the decoder's training-mode output.
+
+Next: the training loop — dataset → augment → trainer → `.train()`/`.val()` (Phase 4),
+and `export` (Phase 3). See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
 
 ```python
 from dfine import DFINEConfig
