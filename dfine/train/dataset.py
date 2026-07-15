@@ -146,6 +146,9 @@ class CocoDetection(FasterCocoDetection):
 
     def set_epoch(self, epoch: int) -> None:
         self._epoch = epoch
+        # Forward to epoch-aware transforms (e.g. augment.TrainCompose's no-aug policy).
+        if hasattr(self._transforms, "set_epoch"):
+            self._transforms.set_epoch(epoch)
 
     @property
     def epoch(self) -> int:
