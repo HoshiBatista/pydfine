@@ -102,14 +102,15 @@ dfine/
       matcher.py       #   HungarianMatcher (LSAP)
       criterion.py     #   DFINECriterion (VFL/L1/GIoU/FGL/DDF)
     # transformers.py  # Path B wrapper — optional, not planned yet
-  train/               # ◐ Phase 4 — loop done; dataset/augment/val planned
+  train/               # ◐ Phase 4 — loop/data/augment/val done; multi-GPU planned
     trainer.py         # ✅ train_one_epoch + Trainer, param groups, checkpointing
     ema.py             # ✅ ModelEMA (weight EMA)
     scheduler.py       # ✅ LinearWarmup + flat-cosine/multistep LR
     logger.py          # ✅ MetricLogger/SmoothedValue — console progress readout
     visualizer.py      # ✅ TrainingVisualizer — TensorBoard + loss_curve.png (+ W&B)
-    dataset.py         # ✅ CocoDetection + build_coco_dataloader (multi-scale collate)
+    dataset.py         # ✅ CocoDetection + build_coco_dataloader(s) (multi-scale collate)
     augment.py         # ✅ train_transforms + TrainCompose (two-phase no-aug policy)
+    evaluator.py       # ✅ COCO eval (faster-coco-eval) — evaluate/coco_val_fn
   export/              # ⬜ Phase 3
     onnx.py            #   ONNX export (+ optional onnxsim); TRT/OpenVINO helpers
   cli.py               # ✅ `dfine models`; predict/train/val/export are phase stubs

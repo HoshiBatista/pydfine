@@ -150,8 +150,12 @@ Lives in `dfine/train/` (single-process; import needs `pip install dfine[train]`
   switch off for the **no-aug** tail (`stop_epoch = epochs − no_aug_epoch`).
 
 `DFINE.train(data="coco/")` builds the train (+ optional val) loader for you from a
-standard COCO root via `dataset.build_coco_dataloaders`. Still open: `DFINE.val()`
-(COCO eval → the `Trainer.fit(val_fn=…)` hook) and multi-GPU.
+standard COCO root via `dataset.build_coco_dataloaders`. **Evaluation**
+(`evaluator.py`): `DFINE.val(data="coco/" | val_loader=…)` runs the model over a COCO
+val loader, decodes with the postprocessor, and scores against the loader's GT `.coco`
+with `faster-coco-eval`, returning the 12 named COCO metrics (`COCO_STAT_NAMES`, `AP` =
+mAP@[.50:.95]). `coco_val_fn` adapts it to the `Trainer.fit(val_fn=…)` hook and
+`train()` auto-wires it when a val loader is present. Still open: multi-GPU.
 
 ## 7. Export — planned (Phase 3, not yet implemented)
 

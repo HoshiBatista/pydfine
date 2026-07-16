@@ -224,6 +224,10 @@ class DFINE:
         D-FINE: a live console readout plus TensorBoard scalars and a ``loss_curve.png``
         under ``output_dir`` (and W&B if ``use_wandb``). Returns ``self``; the trained
         (EMA) weights replace ``self.model``.
+
+        When a ``val_loader`` is available (passed, or auto-built from ``data``) and no
+        ``val_fn`` is given, COCO metrics are computed each epoch via
+        :func:`~dfine.train.evaluator.coco_val_fn` and logged alongside the loss.
         """
         if data is not None:
             if train_loader is not None:
@@ -243,6 +247,12 @@ class DFINE:
         elif train_loader is None:
             raise ValueError("Provide training data via `data=` or `train_loader=`.")
 
+        # Default to COCO evaluation each epoch when we have a val loader but no hook.
+        if val_loader is not None and val_fn is None:
+            from .train.evaluator import coco_val_fn
+
+            val_fn = coco_val_fn(self.postprocessor, self.device)
+
         from .train import Trainer
 
         trainer = Trainer(
@@ -257,8 +267,47 @@ class DFINE:
         self.model = best.to(self.device)
         return self
 
-    def val(self, *args, **kwargs):
-        self._not_ready("val", "Phase 4 (training)")
+    def val(
+        self,
+        data: str | os.PathLike | None = None,
+        *,
+        val_loader=None,
+        batch_size: int = 4,
+        num_workers: int = 4,
+        remap_mscoco_category: bool = False,
+    ) -> dict[str, float]:
+        """Evaluate the model on a COCO val set and return the metrics dict.
+
+        Provide the data one of two ways (mutually exclusive):
+
+        * ``data="path/to/coco"`` — a COCO root; the val loader is built from
+          ``val2017/`` + ``annotations/instances_val2017.json`` for you.
+        * ``val_loader=...`` — a ready loader from ``build_coco_dataloader`` (its
+          dataset must carry the ground-truth ``.coco``).
+
+        Returns the 12 standard COCO metrics keyed by name (``AP`` is the primary
+        mAP@[.50:.95]); see :data:`~dfine.train.evaluator.COCO_STAT_NAMES`. For stock
+        MS-COCO ground truth (sparse category ids), build the model with
+        ``remap_mscoco_category=True`` so predicted labels match the annotations.
+        """
+        if data is None and val_loader is None:
+            raise ValueError("Provide validation data via `data=` or `val_loader=`.")
+        if data is not None and val_loader is not None:
+            raise ValueError("Pass either `data=` or `val_loader=`, not both.")
+        if data is not None:
+            from .train.dataset import build_coco_val_dataloader
+
+            val_loader = build_coco_val_dataloader(
+                data,
+                cfg=self.config,
+                batch_size=batch_size,
+                num_workers=num_workers,
+                remap_mscoco_category=remap_mscoco_category,
+            )
+
+        from .train.evaluator import evaluate
+
+        return evaluate(self.model, self.postprocessor, val_loader, self.device)
 
     def export(self, *args, **kwargs):
         self._not_ready("export", "Phase 3 (export)")

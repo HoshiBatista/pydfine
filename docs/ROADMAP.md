@@ -109,8 +109,18 @@ ported modules into one model behind the public API.
       Tested: output contract, stop-epoch skip logic, epoch forwarding, and an
       augmented train step (multi-scale collate is Phase-4's `dataset.py`, done).
 - [ ] Multi-GPU launch (wrap `torchrun`) behind the same `.train()` call.
-- [ ] `DFINE.val()` via COCO evaluator → returns metrics dict (slots into the existing
-      `Trainer.fit(val_fn=…)` hook).
+- [x] `DFINE.val()` via COCO evaluator → returns metrics dict (slots into the existing
+      `Trainer.fit(val_fn=…)` hook). `train/evaluator.py` ports upstream
+      `det_engine.evaluate` (single-process): runs the model over a COCO val loader,
+      decodes with the postprocessor, scores against the loader's ground-truth `.coco`
+      via `faster-coco-eval`, and returns the 12 named COCO stats (`COCO_STAT_NAMES`;
+      `AP` = primary mAP). `coco_val_fn(postprocessor, device)` wraps it as the
+      `Trainer.fit(val_fn=…)` closure; `DFINE.train` now auto-wires it whenever a val
+      loader is present and no `val_fn` was passed. `DFINE.val(data=… | val_loader=…)`
+      + `build_coco_val_dataloader` (val-only loader from a COCO root). Tested:
+      perfect-prediction replay → AP==1.0, train-mode restore, the closure, the
+      non-COCO-loader error (`test_evaluator.py`), and `DFINE.val(data=…)` + val-during-
+      train (`test_model.py`).
 
 ## Phase 5 — Native backend (Path A) — **primary path** (decision 2026-07-11)
 - [x] Port `HGNetv2` into `dfine/backends/native/hgnetv2.py` (strip registry; +
@@ -282,3 +292,18 @@ ported modules into one model behind the public API.
   not supplied. `build_coco_dataloaders` is imported lazily inside `train()` (keeps
   `faster-coco-eval` off the base train import). Remaining Phase-4: `.val()` (COCO eval)
   + multi-GPU.
+- **2026-07-16** — `DFINE.val()` landed (COCO eval). New `train/evaluator.py::evaluate`
+  ports upstream `det_engine.evaluate` down to the single-process detection path: eval
+  the model over a COCO val loader, decode with the postprocessor, score against the
+  loader's ground-truth `.coco` with `faster-coco-eval` (the same evaluator upstream
+  wraps), and return the classic 12-element COCO summary as a named `dict[str, float]`
+  (`COCO_STAT_NAMES`; `AP` = mAP@[.50:.95]). `coco_val_fn(postprocessor, device)` is the
+  `Trainer.fit(val_fn=…)` closure; `DFINE.train` auto-wires it when a val loader exists
+  and no `val_fn` is passed (so `train(data="coco/")` validates each epoch and logs
+  `Test/*` + the mAP curve). `DFINE.val(data=… | val_loader=…)` builds a val-only loader
+  via new `dataset.build_coco_val_dataloader`. **Label-space gotcha:** the
+  postprocessor's `remap_mscoco_category` (from `cfg`) decides whether predicted labels
+  are contiguous `0..N-1` or sparse MS-COCO ids, and they must match the GT JSON's
+  `category_id`s — stock MS-COCO GT is sparse, so build the model with
+  `remap_mscoco_category=True` to score it. Fixed the visualizer's AP key (`AP50:95`
+  placeholder → `AP`). Remaining Phase-4: multi-GPU only.

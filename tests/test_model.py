@@ -95,10 +95,37 @@ def test_load_rejects_unknown_source():
 
 def test_stub_methods_report_phase():
     m = _model()
-    # val + export are still phase stubs; train is implemented (Phase 4).
-    for method in (m.val, m.export):
-        with pytest.raises(NotImplementedError, match="not implemented yet"):
-            method()
+    # export is still a phase stub; predict/train/val are implemented.
+    with pytest.raises(NotImplementedError, match="not implemented yet"):
+        m.export()
+
+
+def test_val_requires_data_or_loader():
+    m = _model()
+    with pytest.raises(ValueError, match="data=|val_loader="):
+        m.val()
+
+
+def test_val_rejects_both_data_and_loader():
+    m = _model()
+    with pytest.raises(ValueError, match="not both"):
+        m.val(data="somewhere", val_loader=object())
+
+
+def test_val_from_data_path(tmp_path):
+    pytest.importorskip("faster_coco_eval")
+    from dfine.train.evaluator import COCO_STAT_NAMES
+    from tests.test_dataset import _write_split
+
+    _write_split(
+        tmp_path / "val2017",
+        tmp_path / "annotations" / "instances_val2017.json",
+        ((200, 150),),
+    )
+    m = DFINE(size="n", imgsz=IMGSZ, backbone_pretrained=False)
+    metrics = m.val(data=str(tmp_path), batch_size=1, num_workers=0)
+    assert set(metrics) == set(COCO_STAT_NAMES)
+    assert all(isinstance(v, float) for v in metrics.values())
 
 
 def test_train_requires_data_or_loader():
@@ -118,7 +145,8 @@ def test_train_from_data_path(tmp_path):
     pytest.importorskip("scipy")
     from tests.test_dataset import _make_coco_root
 
-    root = _make_coco_root(tmp_path, with_val=False)
+    # with_val=True exercises the auto COCO val_fn wired inside train().
+    root = _make_coco_root(tmp_path, with_val=True)
     m = DFINE(
         size="n",
         imgsz=IMGSZ,

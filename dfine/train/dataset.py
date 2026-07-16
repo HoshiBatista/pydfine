@@ -60,6 +60,7 @@ __all__ = [
     "default_transforms",
     "build_coco_dataloader",
     "build_coco_dataloaders",
+    "build_coco_val_dataloader",
 ]
 
 
@@ -392,22 +393,64 @@ def build_coco_dataloaders(
         transforms=transforms,
     )
 
-    val_img_dir = os.path.join(data_root, val_images)
-    val_ann_path = os.path.join(data_root, val_ann)
     val_loader = None
-    if os.path.isdir(val_img_dir) and os.path.isfile(val_ann_path):
-        val_loader = build_coco_dataloader(
-            val_img_dir,
-            val_ann_path,
+    if os.path.isdir(os.path.join(data_root, val_images)) and os.path.isfile(
+        os.path.join(data_root, val_ann)
+    ):
+        val_loader = build_coco_val_dataloader(
+            data_root,
             cfg=cfg,
             imgsz=imgsz,
             batch_size=batch_size,
             num_workers=num_workers,
-            train=False,
             remap_mscoco_category=remap_mscoco_category,
-            multiscale=False,
+            val_images=val_images,
+            val_ann=val_ann,
         )
     return train_loader, val_loader
+
+
+def build_coco_val_dataloader(
+    data_root: str,
+    *,
+    cfg=None,
+    imgsz: int = 640,
+    batch_size: int = 4,
+    num_workers: int = 4,
+    remap_mscoco_category: bool = False,
+    val_images: str = "val2017",
+    val_ann: str = "annotations/instances_val2017.json",
+) -> _CocoDataLoader:
+    """Build a single COCO **val** loader (plain resize, no multi-scale) from a root.
+
+    Resolves ``data_root/val2017`` + ``data_root/annotations/instances_val2017.json``
+    (split names overridable) and raises :class:`FileNotFoundError` if either is
+    missing. This is what powers ``DFINE.val(data=…)``; for eval only the ground-truth
+    ``.coco`` and the image tensors are used, so ``remap_mscoco_category`` (which only
+    affects target labels) does not change the reported metrics.
+    """
+    if cfg is not None:
+        imgsz = cfg.imgsz
+
+    data_root = os.fspath(data_root)
+    img_dir = os.path.join(data_root, val_images)
+    ann_path = os.path.join(data_root, val_ann)
+    if not os.path.isdir(img_dir):
+        raise FileNotFoundError(f"Val image folder not found: {img_dir!r}")
+    if not os.path.isfile(ann_path):
+        raise FileNotFoundError(f"Val annotations not found: {ann_path!r}")
+
+    return build_coco_dataloader(
+        img_dir,
+        ann_path,
+        cfg=cfg,
+        imgsz=imgsz,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        train=False,
+        remap_mscoco_category=remap_mscoco_category,
+        multiscale=False,
+    )
 
 
 # Re-exported for callers building custom label maps / class-name lists.

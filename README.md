@@ -48,7 +48,8 @@ model = DFINE(
 ## Status
 
 Inference is complete and bit-exact with upstream; the training stack (loop, data,
-augmentation, visualization) is in — only `val`/`export`/multi-GPU remain. Done so far:
+augmentation, COCO `val`, visualization) is in — only `export` and multi-GPU remain.
+Done so far:
 
 - **Config-first core** — `DFINEConfig` (every model/training param as a typed field),
   verified `n/s/m/l/x` presets, validation, checkpoint registry, `dfine models` CLI.
@@ -107,11 +108,12 @@ out = decoder(encoder(backbone(torch.randn(1, 3, cfg.imgsz, cfg.imgsz))))
 ```
 
 > The one-class `DFINE(...)` façade at the top of this README works today for
-> **inference** (`predict`/`load`/`from_pretrained`) and **training** — both
+> **inference** (`predict`/`load`/`from_pretrained`), **training** — both
 > `train(data="coco/", epochs=...)` (a standard COCO root; the loaders are built for
-> you) and `train(train_loader, epochs=...)` (a hand-built loader), with the
-> `dfine[train]` extra. `val`/`export` are phase-stubbed and raise a clear
-> "arriving in Phase N" until implemented.
+> you) and `train(train_loader, epochs=...)` (a hand-built loader) — and **COCO
+> evaluation** (`val(data="coco/")` → the 12 named COCO metrics, also run each epoch
+> during `train`), all with the `dfine[train]` extra. `export` is phase-stubbed and
+> raises a clear "arriving in Phase N" until implemented.
 
 ## Why this exists
 

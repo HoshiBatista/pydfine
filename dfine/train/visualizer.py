@@ -105,9 +105,10 @@ class TrainingVisualizer:
             payload.update({f"metrics/{k}": v for k, v in (metrics or {}).items()})
             payload["epoch"] = epoch
             self.wandb.log(payload)
-        if metrics and "AP50:95" in metrics:
+        # "AP" is the primary COCO mAP@[.50:.95] (see evaluator.COCO_STAT_NAMES).
+        if metrics and "AP" in metrics:
             self._epoch_x.append(epoch)
-            self._epoch_ap.append(metrics["AP50:95"])
+            self._epoch_ap.append(metrics["AP"])
         if self.plot:
             self._draw()
 
