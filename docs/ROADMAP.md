@@ -89,8 +89,15 @@ ported modules into one model behind the public API.
       `(images, targets)` consumable directly by `DFINE.train`. Tested against a
       synthetic on-disk COCO set (output contract + remap + multiscale + one train step);
       `faster-coco-eval` added to the `[dev]` extra so CI runs it.
-- [ ] `DFINE.train(data="path/to/coco", …)` sugar: build the loader from a path inside
-      `train()` so no hand-built loader is needed (loader itself is done above).
+- [x] `DFINE.train(data="path/to/coco", …)` sugar: `dataset.build_coco_dataloaders`
+      resolves the standard COCO root layout (`train2017/` + `annotations/
+      instances_train2017.json`, optional `val2017/`) into a train loader (two-phase
+      augmentation + multi-scale) and, when present, a val loader; `DFINE.train` calls
+      it when `data=` is given (mutually exclusive with `train_loader=`; `batch_size`/
+      `num_workers`/`augment`/`remap_mscoco_category` tune the build). Tested: split
+      resolution, val auto-discovery/absence, augmented + no-aug builds, missing-root/
+      -split errors (`test_dataset.py`), and a real 1-epoch `train(data=…)` writing
+      `last.pth` (`test_model.py`).
 - [x] `train/augment.py`: ported D-FINE's train pipeline — RandomPhotometricDistort,
       RandomZoomOut, RandomIoUCrop (with a `p` wrapper), SanitizeBoundingBoxes,
       RandomHorizontalFlip, Resize, then the shared tensor/`cxcywh`-normalize tail. The
@@ -262,3 +269,16 @@ ported modules into one model behind the public API.
   cosine no-aug tail is an added enhancement, not parity. For an exact upstream schedule
   use `scheduler="multistep"` with a milestone beyond `epochs`. Documented in
   `dfine/train/scheduler.py` + the `scheduler` field in `dfine/config.py`.
+- **2026-07-16** — `DFINE.train(data="coco/")` path sugar landed. New
+  `train/dataset.py::build_coco_dataloaders(data_root, …)` resolves the standard
+  MS-COCO layout (`train2017/`, `annotations/instances_train2017.json`, optional
+  `val2017/`+`instances_val2017.json`; split names overridable) into
+  `(train_loader, val_loader)`. The train loader gets the full two-phase augmentation
+  (`augment.train_transforms`, `stop_epoch = cfg.epochs − cfg.no_aug_epoch`) + the
+  existing multi-scale collate; the val loader is plain-resize and is `None` when no
+  val split is on disk. `DFINE.train` now takes `data=` (mutually exclusive with
+  `train_loader=`, raises if both/neither) plus `batch_size`/`num_workers`/`augment`/
+  `remap_mscoco_category` passthroughs; auto-built val loader fills `val_loader` when
+  not supplied. `build_coco_dataloaders` is imported lazily inside `train()` (keeps
+  `faster-coco-eval` off the base train import). Remaining Phase-4: `.val()` (COCO eval)
+  + multi-GPU.

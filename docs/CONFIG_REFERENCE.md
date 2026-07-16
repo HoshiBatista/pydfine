@@ -38,7 +38,8 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 | `backbone_local_dir` | str\|None | None | Local dir for cached backbone weights. |
 
 `in_channels` (encoder input) is backbone-dependent and set by the preset:
-`[256,512,1024]` for B0, `[512,1024,2048]` for B4/B5 (⚠verify B2).
+B0 `[256,512,1024]` (S) or `[512,1024]` (N, 2-level), B2 `[384,768,1536]` (M),
+B4/B5 `[512,1024,2048]` (L/X). See the §11 per-size table for the full mapping.
 
 ## 3. Encoder (HybridEncoder)
 

@@ -190,28 +190,59 @@ class DFINE:
 
     def train(
         self,
-        train_loader,
+        train_loader=None,
         epochs: int | None = None,
+        *,
+        data: str | os.PathLike | None = None,
+        batch_size: int = 4,
+        num_workers: int = 4,
+        augment: bool = True,
+        remap_mscoco_category: bool = False,
         val_loader=None,
         val_fn=None,
         output_dir: str = "runs/train",
         use_wandb: bool = False,
         visualize: bool = True,
     ):
-        """Fine-tune the model on ``train_loader`` (Phase 4, single-process).
+        """Fine-tune the model (Phase 4, single-process).
 
-        ``train_loader`` yields ``(samples, targets)`` batches: ``samples`` a float
-        ``BCHW`` image tensor, each ``target`` a dict with ``labels`` (``LongTensor``)
-        and ``boxes`` (``cxcywh``, normalized). Optimizer groups, LR schedule, EMA, AMP
-        and grad-clip all come from this model's :class:`~dfine.config.DFINEConfig`.
+        Provide the data one of two ways:
 
-        Progress is visualized like upstream D-FINE: a live console readout plus
-        TensorBoard scalars and a ``loss_curve.png`` under ``output_dir`` (and W&B if
-        ``use_wandb``). Returns ``self``; the trained (EMA) weights replace ``self.model``.
+        * ``data="path/to/coco"`` — a standard COCO dataset root (``train2017/`` +
+          ``annotations/instances_train2017.json``, optional ``val2017/``). The train
+          loader (full two-phase augmentation + multi-scale) and, if present, a val
+          loader are built for you via
+          :func:`~dfine.train.dataset.build_coco_dataloaders`. ``batch_size``,
+          ``num_workers``, ``augment`` and ``remap_mscoco_category`` tune that build
+          (set ``remap_mscoco_category=True`` for stock 80-class MS-COCO ids).
+        * ``train_loader=...`` — a ready dataloader yielding ``(samples, targets)``
+          batches: ``samples`` a float ``BCHW`` image tensor, each ``target`` a dict
+          with ``labels`` (``LongTensor``) and ``boxes`` (``cxcywh``, normalized).
 
-        The COCO ``data=path`` dataset/augmentation builder is a follow-up Phase-4 task;
-        for now pass a ready dataloader (or use ``dfine.train.Trainer`` directly).
+        Optimizer groups, LR schedule, EMA, AMP and grad-clip all come from this
+        model's :class:`~dfine.config.DFINEConfig`. Progress is visualized like upstream
+        D-FINE: a live console readout plus TensorBoard scalars and a ``loss_curve.png``
+        under ``output_dir`` (and W&B if ``use_wandb``). Returns ``self``; the trained
+        (EMA) weights replace ``self.model``.
         """
+        if data is not None:
+            if train_loader is not None:
+                raise ValueError("Pass either `data=` or `train_loader=`, not both.")
+            from .train.dataset import build_coco_dataloaders
+
+            train_loader, auto_val_loader = build_coco_dataloaders(
+                data,
+                cfg=self.config,
+                batch_size=batch_size,
+                num_workers=num_workers,
+                augment=augment,
+                remap_mscoco_category=remap_mscoco_category,
+            )
+            if val_loader is None:
+                val_loader = auto_val_loader
+        elif train_loader is None:
+            raise ValueError("Provide training data via `data=` or `train_loader=`.")
+
         from .train import Trainer
 
         trainer = Trainer(

@@ -19,6 +19,7 @@ from PIL import Image  # noqa: E402
 from dfine.train.dataset import (  # noqa: E402
     BatchImageCollateFunction,
     build_coco_dataloader,
+    build_coco_dataloaders,
     default_transforms,
     generate_scales,
 )
@@ -26,10 +27,9 @@ from dfine.train.dataset import (  # noqa: E402
 IMGSZ = 320
 
 
-def _make_coco(tmp_path, sizes=((200, 150), (120, 90))):
-    """Write N images + an instances JSON; return (img_dir, ann_file)."""
-    img_dir = tmp_path / "images"
-    img_dir.mkdir()
+def _write_split(img_dir, ann_file, sizes):
+    """Write N images into ``img_dir`` + a COCO instances JSON at ``ann_file``."""
+    img_dir.mkdir(parents=True, exist_ok=True)
     images, annotations = [], []
     ann_id = 1
     for i, (w, h) in enumerate(sizes, start=1):
@@ -51,11 +51,34 @@ def _make_coco(tmp_path, sizes=((200, 150), (120, 90))):
             )
             ann_id += 1
     categories = [{"id": 1, "name": "person"}, {"id": 3, "name": "car"}]
-    ann_file = tmp_path / "instances.json"
+    ann_file.parent.mkdir(parents=True, exist_ok=True)
     ann_file.write_text(
         json.dumps({"images": images, "annotations": annotations, "categories": categories})
     )
+
+
+def _make_coco(tmp_path, sizes=((200, 150), (120, 90))):
+    """Write N images + an instances JSON; return (img_dir, ann_file)."""
+    img_dir = tmp_path / "images"
+    ann_file = tmp_path / "instances.json"
+    _write_split(img_dir, ann_file, sizes)
     return str(img_dir), str(ann_file)
+
+
+def _make_coco_root(tmp_path, with_val=True):
+    """Write a standard COCO dataset root (train2017/ [+ val2017/] + annotations/)."""
+    _write_split(
+        tmp_path / "train2017",
+        tmp_path / "annotations" / "instances_train2017.json",
+        ((200, 150), (120, 90)),
+    )
+    if with_val:
+        _write_split(
+            tmp_path / "val2017",
+            tmp_path / "annotations" / "instances_val2017.json",
+            ((160, 120),),
+        )
+    return str(tmp_path)
 
 
 def test_loader_output_contract(tmp_path):
@@ -162,3 +185,63 @@ def test_feeds_trainer_one_step(tmp_path, _):
     opt = build_optimizer(model, cfg)
     stats = train_one_epoch(model, criterion, loader, opt, torch.device("cpu"), 0, print_freq=100)
     assert "loss" in stats and stats["loss"] == stats["loss"]  # finite
+
+
+def test_build_coco_dataloaders_from_root(tmp_path):
+    root = _make_coco_root(tmp_path, with_val=True)
+    train_loader, val_loader = build_coco_dataloaders(
+        root,
+        imgsz=IMGSZ,
+        batch_size=2,
+        num_workers=0,
+        augment=False,  # exercise the split-resolution + val discovery path
+        remap_mscoco_category=True,
+    )
+    images, targets = next(iter(train_loader))
+    # Train loader applies multi-scale collate, so the side may jitter off IMGSZ.
+    assert images.shape[:2] == (2, 3) and images.shape[2] == images.shape[3]
+    assert len(targets) == 2
+
+    # Val loader has no multi-scale -> fixed square IMGSZ.
+    assert val_loader is not None
+    v_images, v_targets = next(iter(val_loader))
+    assert v_images.shape == (1, 3, IMGSZ, IMGSZ)
+    assert len(v_targets) == 1
+
+
+def test_build_coco_dataloaders_no_val(tmp_path):
+    root = _make_coco_root(tmp_path, with_val=False)
+    train_loader, val_loader = build_coco_dataloaders(
+        root, imgsz=IMGSZ, batch_size=2, num_workers=0, augment=False
+    )
+    assert val_loader is None
+    images, _ = next(iter(train_loader))
+    assert images.shape[0] == 2
+
+
+def test_build_coco_dataloaders_augment_train_step(tmp_path):
+    # augment=True wires train_transforms; the batch must still feed the criterion.
+    root = _make_coco_root(tmp_path, with_val=False)
+    from dfine import DFINEConfig
+
+    cfg = DFINEConfig.preset("n", imgsz=IMGSZ)
+    train_loader, _ = build_coco_dataloaders(
+        root, cfg=cfg, batch_size=2, num_workers=0, remap_mscoco_category=True
+    )
+    images, targets = next(iter(train_loader))
+    assert images.shape[1] == 3 and images.shape[2] == images.shape[3]
+    assert 0.0 <= float(images.min()) and float(images.max()) <= 1.0
+    for t in targets:
+        assert t["boxes"].shape[1] == 4
+
+
+def test_build_coco_dataloaders_missing_root(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        build_coco_dataloaders(str(tmp_path / "does_not_exist"))
+
+
+def test_build_coco_dataloaders_missing_train_split(tmp_path):
+    # A root that exists but lacks the train images/annotations.
+    (tmp_path / "annotations").mkdir()
+    with pytest.raises(FileNotFoundError):
+        build_coco_dataloaders(str(tmp_path))

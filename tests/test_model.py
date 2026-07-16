@@ -99,3 +99,42 @@ def test_stub_methods_report_phase():
     for method in (m.val, m.export):
         with pytest.raises(NotImplementedError, match="not implemented yet"):
             method()
+
+
+def test_train_requires_data_or_loader():
+    m = _model()
+    with pytest.raises(ValueError, match="data=|train_loader="):
+        m.train()
+
+
+def test_train_rejects_both_data_and_loader():
+    m = _model()
+    with pytest.raises(ValueError, match="not both"):
+        m.train(train_loader=object(), data="somewhere")
+
+
+def test_train_from_data_path(tmp_path):
+    pytest.importorskip("faster_coco_eval")
+    pytest.importorskip("scipy")
+    from tests.test_dataset import _make_coco_root
+
+    root = _make_coco_root(tmp_path, with_val=False)
+    m = DFINE(
+        size="n",
+        imgsz=IMGSZ,
+        backbone_pretrained=False,
+        freeze_norm=False,
+        freeze_at=-1,
+        num_denoising=0,
+    )
+    out = m.train(
+        data=root,
+        epochs=1,
+        batch_size=2,
+        num_workers=0,
+        remap_mscoco_category=True,
+        output_dir=str(tmp_path / "runs"),
+        visualize=False,
+    )
+    assert out is m
+    assert (tmp_path / "runs" / "last.pth").exists()

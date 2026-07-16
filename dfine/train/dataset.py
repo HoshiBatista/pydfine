@@ -59,6 +59,7 @@ __all__ = [
     "batch_image_collate_fn",
     "default_transforms",
     "build_coco_dataloader",
+    "build_coco_dataloaders",
 ]
 
 
@@ -324,6 +325,89 @@ def build_coco_dataloader(
         collate_fn=collate,
         drop_last=drop_last,
     )
+
+
+def build_coco_dataloaders(
+    data_root: str,
+    *,
+    cfg=None,
+    imgsz: int = 640,
+    batch_size: int = 4,
+    num_workers: int = 4,
+    remap_mscoco_category: bool = False,
+    augment: bool = True,
+    train_images: str = "train2017",
+    train_ann: str = "annotations/instances_train2017.json",
+    val_images: str = "val2017",
+    val_ann: str = "annotations/instances_val2017.json",
+) -> tuple[_CocoDataLoader, _CocoDataLoader | None]:
+    """Build ``(train_loader, val_loader)`` from a standard COCO dataset root.
+
+    Expects the MS-COCO on-disk layout under ``data_root`` (override the split names
+    for custom datasets)::
+
+        data_root/
+          train2017/                                  # train images
+          val2017/                                    # val images (optional)
+          annotations/
+            instances_train2017.json
+            instances_val2017.json                    # optional
+
+    The train loader uses the full two-phase augmentation pipeline
+    (:func:`~dfine.train.augment.train_transforms`, ``stop_epoch`` derived from
+    ``cfg``) when ``augment`` is set, plus multi-scale collate. The val loader (built
+    only if its images/annotations exist) uses the plain resize preprocess and returns
+    ``None`` when absent. This is what powers ``DFINE.train(data=...)``.
+    """
+    if cfg is not None:
+        imgsz = cfg.imgsz
+
+    data_root = os.fspath(data_root)
+    if not os.path.isdir(data_root):
+        raise FileNotFoundError(f"Dataset root not found: {data_root!r}")
+
+    train_img_dir = os.path.join(data_root, train_images)
+    train_ann_path = os.path.join(data_root, train_ann)
+    if not os.path.isdir(train_img_dir):
+        raise FileNotFoundError(f"Train image folder not found: {train_img_dir!r}")
+    if not os.path.isfile(train_ann_path):
+        raise FileNotFoundError(f"Train annotations not found: {train_ann_path!r}")
+
+    transforms = None
+    if augment:
+        from .augment import train_transforms
+
+        stop_epoch = (cfg.epochs - cfg.no_aug_epoch) if cfg is not None else None
+        transforms = train_transforms(imgsz, stop_epoch=stop_epoch)
+
+    train_loader = build_coco_dataloader(
+        train_img_dir,
+        train_ann_path,
+        cfg=cfg,
+        imgsz=imgsz,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        train=True,
+        remap_mscoco_category=remap_mscoco_category,
+        transforms=transforms,
+    )
+
+    val_img_dir = os.path.join(data_root, val_images)
+    val_ann_path = os.path.join(data_root, val_ann)
+    val_loader = None
+    if os.path.isdir(val_img_dir) and os.path.isfile(val_ann_path):
+        val_loader = build_coco_dataloader(
+            val_img_dir,
+            val_ann_path,
+            cfg=cfg,
+            imgsz=imgsz,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            train=False,
+            remap_mscoco_category=remap_mscoco_category,
+            multiscale=False,
+        )
+    return train_loader, val_loader
 
 
 # Re-exported for callers building custom label maps / class-name lists.

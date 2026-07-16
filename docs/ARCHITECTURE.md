@@ -11,7 +11,7 @@ image ─► HGNetV2 backbone ─► multi-scale feats {S8, S16, S32}
                                │
                                ▼
                     HybridEncoder (AIFI + CCFM/GELAN)
-                               │  256-d (384-d for X) feature pyramid
+                               │  hidden-d pyramid: 128 (N) · 256 (S/M/L) · 384 (X)
                                ▼
                     DFINETransformer decoder  (N layers, 300 queries)
                                │
@@ -53,13 +53,19 @@ registry/YAML stripped and a `from_config(cfg)` constructor added. Status:
 | `HGNetv2` | `native/hgnetv2.py` | ✅ ported + shape tests |
 | `HybridEncoder` | `native/hybrid_encoder.py` | ✅ ported + shape tests |
 | `DFINETransformer` | `native/dfine_decoder.py` | ✅ ported + shape tests |
-| `HungarianMatcher` | `native/matcher.py` | ⬜ next (training) |
-| `DFINECriterion` | `native/criterion.py` | ⬜ next (training) |
-| `DFINEPostProcessor` | `native/postprocessor.py` | ⬜ next (inference) |
+| assembled `DFINE` | `native/dfine.py` | ✅ backbone+encoder+decoder + `.load()`/`.deploy()` |
+| `DFINEPostProcessor` | `native/postprocessor.py` | ✅ ported + decode tests |
+| `HungarianMatcher` | `native/matcher.py` | ✅ ported (LSAP) + tests |
+| `DFINECriterion` | `native/criterion.py` | ✅ ported (VFL/L1/GIoU/FGL/DDF) + tests |
+| upstream `.pth` loader | `native/loader.py` | ✅ EMA-preferred strict load |
+
+**Parity:** the port is bit-exact vs genuine upstream (`max|Δ|=0.0` across n/s/m/l/x)
+for raw boxes, final boxes, scores, and labels — see `tests/test_parity.py`.
 
 Shared helpers: `native/common.py` (FrozenBatchNorm2d), `native/ops.py`
 (activations, deformable-attn core, inverse_sigmoid…), `native/box_ops.py`,
-`native/dfine_utils.py` (FDR), `native/denoising.py`.
+`native/dfine_utils.py` (FDR), `native/denoising.py`, `native/coco.py` (category
+maps), `native/dist.py` (single-process world-size shim for the criterion).
 
 ## 3. Data flow contract (what the deploy model returns)
 
@@ -106,30 +112,49 @@ decoder  = DFINETransformer(num_queries=cfg.num_queries, num_layers=cfg.decoder_
 
 From the paper's hyperparameter table + configs (details in CONFIG_REFERENCE):
 
-| size | backbone | embed/hidden | ffn | decoder layers | notes |
+| size | backbone | hidden | encoder ffn | decoder layers | notes |
 |---|---|---|---|---|---|
-| N | HGNetV2-B0 (light) | 256 | 1024 | 3 | `use_lab=True`, smallest GELAN |
+| N | HGNetV2-B0 (light) | 128 | 512 | 3 | `use_lab=True`, **2-level** (`num_levels=2`), smallest GELAN |
 | S | HGNetV2-B0 | 256 | 1024 | 3 | `use_lab=True`, `depth_mult=0.34`, `expansion=0.5` |
-| M | HGNetV2-B2 | 256 | 1024 | 4 | |
+| M | HGNetV2-B2 | 256 | 1024 | 4 | `use_lab=True`, `depth_mult=0.67` |
 | L | HGNetV2-B4 | 256 | 1024 | 6 | |
 | X | HGNetV2-B5 | 384 | 2048 | 6 | `reg_scale=8`, `feat_channels=[384]*3` |
 
-`in_channels` differ by backbone: `[256,512,1024]` for B0, `[512,1024,2048]` for B4/B5.
+`decoder_dim_feedforward` is 512 for N, else 1024. `in_channels` differ by backbone
+and level count: N (B0, 2-level) `[512,1024]`; S (B0, 3-level) `[256,512,1024]`;
+M (B2) `[384,768,1536]`; L/X (B4/B5) `[512,1024,2048]`. `CONFIG_REFERENCE.md` has the
+full per-size table.
 
-## 6. Training recipe (for `DFINE.train`)
+## 6. Training recipe (`DFINE.train`) — implemented (Phase 4)
 
-- Optimizer AdamW with **param groups** (backbone vs norm/bias) — upstream expresses
-  these as regex; we express them as structured Python rules in `train/trainer.py`.
-- EMA of weights (decay ~0.9999, warmups), AMP, grad clip.
-- Scheduler: flat-cosine / multistep with warmup.
-- Two-phase augmentation: advanced augs (PhotometricDistort, ZoomOut, IoUCrop,
-  MultiScaleInput) for most epochs, then a short **no-aug** tail (`no_aug_epoch`/
-  `stop_epoch`) to stabilize. See `train/augment.py`.
-- Data is COCO-format (images/ + annotations/*.json). Custom datasets set
-  `remap_mscoco_category=False`.
+Lives in `dfine/train/` (single-process; import needs `pip install dfine[train]`):
 
-## 7. Export
+- **Optimizer** AdamW with **param groups** (`trainer.py::build_param_groups`): the
+  upstream regex is copied *verbatim* — backbone (non-norm) at `lr_backbone`, enc/dec
+  norm·BN at `weight_decay=0`, the rest at base `lr`/`weight_decay`. Grouping is
+  bit-exact vs upstream `get_optim_params`.
+- **EMA** of weights (`ema.py::ModelEMA`, decay ~0.9999 with warmup ramp), **AMP**
+  (CUDA), **grad clip** (`clip_max_norm`).
+- **Scheduler** (`scheduler.py`): `LinearWarmup` (per-iter) + flat-cosine (default) or
+  multistep (per-epoch). The flat-cosine no-aug tail is an *intentional deviation* from
+  upstream's effectively-flat `MultiStepLR` — see the 2026-07-15 ROADMAP note.
+- **Loop + progress visualization** (`trainer.py`, `logger.py`, `visualizer.py`):
+  `train_one_epoch` + a `Trainer` that runs `.fit()`; a `MetricLogger` console readout
+  plus TensorBoard scalars and a `loss_curve.png` (W&B optional) — the same signals
+  upstream surfaces.
+- **Data** is COCO-format (`dataset.py::build_coco_dataloader`): images/ +
+  annotations/*.json, contiguous-label remap (`remap_mscoco_category`; set `False` for
+  already-contiguous custom data), multi-scale collate.
+- **Two-phase augmentation** (`augment.py::train_transforms` + `TrainCompose`):
+  PhotometricDistort, ZoomOut, IoUCrop, HFlip for most epochs, then the advanced ops
+  switch off for the **no-aug** tail (`stop_epoch = epochs − no_aug_epoch`).
+
+`DFINE.train(data="coco/")` builds the train (+ optional val) loader for you from a
+standard COCO root via `dataset.build_coco_dataloaders`. Still open: `DFINE.val()`
+(COCO eval → the `Trainer.fit(val_fn=…)` hook) and multi-GPU.
+
+## 7. Export — planned (Phase 3, not yet implemented)
 
 Deploy graph → ONNX (dynamic batch), then TensorRT (`trtexec --fp16`) or OpenVINO
 downstream. Keep the two-input signature `(images, orig_target_sizes)` so exported
-graphs match the torch path.
+graphs match the torch path. `DFINE.export()` currently raises a clear phase stub.
