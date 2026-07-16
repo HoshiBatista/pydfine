@@ -81,8 +81,13 @@ Done so far:
   stop_epoch=...)` for D-FINE's full augment pipeline (photometric distort, zoom-out,
   IoU-crop, H-flip) with the two-phase no-aug tail. Feeds straight into `DFINE.train`.
 
-Next: the `train(data="coco/", ...)` path sugar, then `.val()` (Phase 4) and `export`
-(Phase 3). See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full status.
+- **Have a YOLO dataset?** Convert it once — `dfine convert path/to/yolo path/to/coco`
+  (or `dfine.yolo_to_coco(...)`) — then `DFINE.train(data="path/to/coco")`. It reads the
+  `images/<split>` + `labels/<split>` layout (and `data.yaml` names) and writes the COCO
+  layout with 0-indexed categories that line up with the model's labels.
+
+Only `export` (Phase 3) remains. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full
+status.
 
 ```python
 from dfine import DFINEConfig

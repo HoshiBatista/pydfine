@@ -112,9 +112,10 @@ dfine/
     augment.py         # ✅ train_transforms + TrainCompose (two-phase no-aug policy)
     evaluator.py       # ✅ COCO eval (faster-coco-eval) — evaluate/coco_val_fn
     distributed.py     # ✅ DDP/SyncBN + DistributedSampler wrap + spawn (multi-GPU launch)
+  convert.py           # ✅ yolo_to_coco — YOLO dataset -> COCO layout (torch-free)
   export/              # ⬜ Phase 3
     onnx.py            #   ONNX export (+ optional onnxsim); TRT/OpenVINO helpers
-  cli.py               # ✅ `dfine models`; predict/train/val/export are phase stubs
+  cli.py               # ✅ `dfine models`/`dfine convert`; predict/train/val/export stubs
 docs/                  # ARCHITECTURE.md, CONFIG_REFERENCE.md, ROADMAP.md
 tests/                 # parity + unit tests
 ```

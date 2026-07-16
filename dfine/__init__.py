@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from .config import SIZE_PRESETS, SIZES, DFINEConfig, list_presets
+from .convert import yolo_to_coco
 from .registry import list_checkpoints
 
 __version__ = "0.0.1"
@@ -21,6 +22,7 @@ __all__ = [
     "SIZES",
     "list_presets",
     "list_checkpoints",
+    "yolo_to_coco",
     "__version__",
 ]
 

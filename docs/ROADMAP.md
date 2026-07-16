@@ -132,6 +132,17 @@ ported modules into one model behind the public API.
       perfect-prediction replay → AP==1.0, train-mode restore, the closure, the
       non-COCO-loader error (`test_evaluator.py`), and `DFINE.val(data=…)` + val-during-
       train (`test_model.py`).
+- [x] YOLO→COCO dataset converter: `dfine/convert.py::yolo_to_coco` turns a YOLO
+      detection dataset (`images/<split>` + mirror `labels/<split>` txts + optional
+      `data.yaml`) into the COCO layout `DFINE.train(data=…)`/`val` consume
+      (`train2017/`…`annotations/instances_train2017.json`). Normalized `cxcywh`→absolute
+      `xywh`, **0-indexed `category_id` (= YOLO class id)** so ids match the model's
+      contiguous labels under `remap_mscoco_category=False`; handles seg-polygon rows
+      (→bbox), background images, dup basenames, copy|symlink. Torch-free (lazy
+      PIL/PyYAML); exposed as `dfine.yolo_to_coco` + `dfine convert <yolo> <out>` CLI.
+      Tested: box/category conversion, background, name resolution (explicit/yaml/
+      inferred), polygon, symlink, dataloader + eval round-trip (proves `category_id` 0
+      survives COCO eval, AP==1.0), CLI (`test_convert.py`).
 
 ## Phase 5 — Native backend (Path A) — **primary path** (decision 2026-07-11)
 - [x] Port `HGNetv2` into `dfine/backends/native/hgnetv2.py` (strip registry; +
@@ -337,3 +348,16 @@ ported modules into one model behind the public API.
   end-to-end (writes `last.pth`, parent reloads); a real bug — SyncBN needs GPU modules —
   was caught by running it and fixed (guard SyncBN to CUDA). Only multi-GPU launch is CI-
   gated (`DFINE_TEST_MULTIGPU=1`); the helper units run on CPU always.
+- **2026-07-16** — YOLO→COCO converter (`dfine/convert.py::yolo_to_coco`) so users can
+  bring an Ultralytics-style dataset straight into `DFINE.train(data=…)`. Reads
+  `images/<split>`+mirror `labels/<split>` (or explicit `splits=`), an optional
+  `data.yaml` for `names`, and writes the COCO layout with split→`{train,val,test}2017`
+  folders + `annotations/instances_*.json`. **Key decision: `category_id` is 0-indexed
+  (= the YOLO class id), not the usual 1-indexed COCO convention** — our loader
+  (`remap_mscoco_category=False`) feeds `category_id` straight through as the training
+  label and the postprocessor emits contiguous `0..N-1`, so GT ids must be 0-indexed to
+  line up for *both* train and COCO eval. Verified faster-coco-eval accepts
+  `category_id==0` via a perfect-prediction eval round-trip (AP==1.0). Kept torch-free
+  (lazy PIL/PyYAML) and top-level so it works in a base `pip install dfine` (+pillow);
+  added `dfine convert` CLI and `pyyaml` to the `[dev]` extra. Polygon/seg rows are
+  reduced to their bbox, so YOLO-seg datasets convert too (detection labels only).
