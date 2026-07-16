@@ -152,6 +152,8 @@ B4/B5 `[512,1024,2048]` (L/X). See the §11 per-size table for the full mapping.
 | `seed` | int | 0 | RNG seed. |
 | `workers` | int | 4 | Dataloader workers. |
 | `checkpoint_freq` | int | 1 | Save every N epochs. |
+| `sync_bn` | bool | True | Convert BN→SyncBN under multi-GPU DDP (GPU-only; no-op single-process/CPU). |
+| `find_unused_parameters` | bool | False | DDP: allow params that get no gradient (slower). |
 
 ## 10. Augmentation (`train/augment.py`)
 

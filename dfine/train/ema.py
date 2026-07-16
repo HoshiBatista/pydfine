@@ -3,8 +3,8 @@
 Keeps a shadow copy of every float parameter/buffer, updated after each optimizer
 step as ``ema = decay * ema + (1 - decay) * model``. The decay ramps up early
 (``decay * (1 - exp(-updates / warmups))``) so the average is not dominated by the
-noisy first steps. The single-process ``de_parallel`` unwrap is dropped (we never
-wrap in DDP here).
+noisy first steps. ``update`` unwraps a ``DDP``/``DataParallel`` model first so the
+shadow keys line up under multi-GPU training.
 """
 
 from __future__ import annotations
@@ -44,7 +44,9 @@ class ModelEMA:
             return
         self.updates += 1
         d = self.decay_fn(self.updates)
-        msd = model.state_dict()
+        from .distributed import de_parallel
+
+        msd = de_parallel(model).state_dict()
         for k, v in self.module.state_dict().items():
             if v.dtype.is_floating_point:
                 v *= d

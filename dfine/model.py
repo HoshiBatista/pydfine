@@ -84,6 +84,30 @@ def _require_cv2():
         ) from exc
 
 
+def _train_worker(rank: int, world_size: int, config, init_weights, kwargs) -> None:
+    """DDP worker entry point (module-level so ``mp.spawn`` can pickle it).
+
+    Rebuilds the model from ``config`` on this rank's device, loads the launcher's
+    snapshot, joins the process group, and runs the training loop; rank 0 writes the
+    checkpoints/logs the launcher later reloads.
+    """
+    from .train.distributed import cleanup_distributed, setup_distributed
+
+    os.environ["RANK"] = str(rank)
+    os.environ["LOCAL_RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(world_size)
+    setup_distributed()
+
+    device = torch.device(f"cuda:{rank}") if torch.cuda.is_available() else torch.device("cpu")
+    try:
+        model = DFINE(config=config, device=device)
+        if init_weights is not None:
+            model.load(init_weights)
+        model._fit(train_loader=None, val_loader=None, val_fn=None, **kwargs)
+    finally:
+        cleanup_distributed()
+
+
 class DFINE:
     """Config-first D-FINE detector with an ultralytics-style ``predict``."""
 
@@ -91,11 +115,17 @@ class DFINE:
         self,
         size: str | None = None,
         *,
+        config: DFINEConfig | None = None,
         weights: str | os.PathLike | None = None,
         device: str | torch.device | None = None,
         **params,
     ):
-        self.config = DFINEConfig.preset(size, **params) if size else DFINEConfig(**params)
+        if config is not None:
+            if size is not None or params:
+                raise ValueError("Pass either `config=` or `size=`/kwargs, not both.")
+            self.config = config
+        else:
+            self.config = DFINEConfig.preset(size, **params) if size else DFINEConfig(**params)
         self.device = _resolve_device(device)
         self.names = _build_names(self.config)
 
@@ -198,13 +228,14 @@ class DFINE:
         num_workers: int = 4,
         augment: bool = True,
         remap_mscoco_category: bool = False,
+        devices: int | None = None,
         val_loader=None,
         val_fn=None,
         output_dir: str = "runs/train",
         use_wandb: bool = False,
         visualize: bool = True,
     ):
-        """Fine-tune the model (Phase 4, single-process).
+        """Fine-tune the model (Phase 4).
 
         Provide the data one of two ways:
 
@@ -219,16 +250,77 @@ class DFINE:
           batches: ``samples`` a float ``BCHW`` image tensor, each ``target`` a dict
           with ``labels`` (``LongTensor``) and ``boxes`` (``cxcywh``, normalized).
 
+        **Multi-GPU:** pass ``devices=N`` to train on ``N`` GPUs — this call becomes the
+        launcher and spawns one DDP worker per GPU (no ``torchrun`` needed); it requires
+        ``data=`` (in-memory loaders can't be shipped to workers). Alternatively launch
+        the script yourself with ``torchrun --nproc_per_node=N`` and call ``train(...)``
+        without ``devices`` — each worker detects the distributed env and joins the group.
+
         Optimizer groups, LR schedule, EMA, AMP and grad-clip all come from this
         model's :class:`~dfine.config.DFINEConfig`. Progress is visualized like upstream
         D-FINE: a live console readout plus TensorBoard scalars and a ``loss_curve.png``
-        under ``output_dir`` (and W&B if ``use_wandb``). Returns ``self``; the trained
-        (EMA) weights replace ``self.model``.
+        under ``output_dir`` (and W&B if ``use_wandb``); only rank 0 writes them. Returns
+        ``self``; the trained (EMA) weights replace ``self.model``.
 
         When a ``val_loader`` is available (passed, or auto-built from ``data``) and no
         ``val_fn`` is given, COCO metrics are computed each epoch via
         :func:`~dfine.train.evaluator.coco_val_fn` and logged alongside the loss.
         """
+        from .train.distributed import launched_via_torchrun, setup_distributed
+
+        # This process is the launcher: spawn one worker per GPU and reload the result.
+        if devices is not None and int(devices) > 1 and not launched_via_torchrun():
+            return self._train_multigpu(
+                int(devices),
+                data=data,
+                epochs=epochs,
+                batch_size=batch_size,
+                num_workers=num_workers,
+                augment=augment,
+                remap_mscoco_category=remap_mscoco_category,
+                output_dir=output_dir,
+                use_wandb=use_wandb,
+                visualize=visualize,
+            )
+
+        # Launched under torchrun: join the group and bind this rank's GPU.
+        if launched_via_torchrun():
+            setup_distributed()
+            self._bind_local_rank_device()
+
+        self._fit(
+            train_loader=train_loader,
+            epochs=epochs,
+            data=data,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            augment=augment,
+            remap_mscoco_category=remap_mscoco_category,
+            val_loader=val_loader,
+            val_fn=val_fn,
+            output_dir=output_dir,
+            use_wandb=use_wandb,
+            visualize=visualize,
+        )
+        return self
+
+    def _fit(
+        self,
+        *,
+        train_loader,
+        epochs,
+        data,
+        batch_size,
+        num_workers,
+        augment,
+        remap_mscoco_category,
+        val_loader,
+        val_fn,
+        output_dir,
+        use_wandb,
+        visualize,
+    ):
+        """Build the loaders (if ``data=``) and run the training loop in this process."""
         if data is not None:
             if train_loader is not None:
                 raise ValueError("Pass either `data=` or `train_loader=`, not both.")
@@ -265,6 +357,60 @@ class DFINE:
         )
         best = trainer.fit(train_loader, epochs=epochs, val_loader=val_loader, val_fn=val_fn)
         self.model = best.to(self.device)
+
+    def _bind_local_rank_device(self) -> None:
+        """Pin this process to its ``LOCAL_RANK`` GPU (torchrun path; no-op on CPU)."""
+        if not torch.cuda.is_available():
+            return
+        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+        self.device = torch.device(f"cuda:{local_rank}")
+        self.model.to(self.device)
+        self.postprocessor.to(self.device)
+
+    def _train_multigpu(
+        self,
+        world_size: int,
+        *,
+        data,
+        epochs,
+        batch_size,
+        num_workers,
+        augment,
+        remap_mscoco_category,
+        output_dir,
+        use_wandb,
+        visualize,
+    ) -> DFINE:
+        """Spawn ``world_size`` DDP workers, then load rank 0's trained weights back."""
+        if data is None:
+            raise ValueError(
+                "Multi-GPU training (`devices>1`) needs `data=` (a COCO root); in-memory "
+                "loaders can't be shipped to worker processes."
+            )
+        from .train.distributed import spawn
+
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        init_ckpt = out / "_init_weights.pth"
+        torch.save(self.model.state_dict(), init_ckpt)
+
+        worker_kwargs = dict(
+            data=str(data),
+            epochs=epochs,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            augment=augment,
+            remap_mscoco_category=remap_mscoco_category,
+            output_dir=str(output_dir),
+            use_wandb=use_wandb,
+            visualize=visualize,
+        )
+        try:
+            spawn(_train_worker, world_size, args=(self.config, str(init_ckpt), worker_kwargs))
+        finally:
+            init_ckpt.unlink(missing_ok=True)
+
+        self.load(str(out / "last.pth"))
         return self
 
     def val(

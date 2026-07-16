@@ -127,6 +127,8 @@ class DFINEConfig:
     seed: int = 0  # RNG seed
     workers: int = 4  # dataloader workers
     checkpoint_freq: int = 1  # save every N epochs
+    sync_bn: bool = True  # convert BN -> SyncBN under multi-GPU DDP (no-op single-process)
+    find_unused_parameters: bool = False  # DDP: allow params with no grad (slower)
 
     # --- 10. Augmentation ----------------------------------------------------
     aug_photometric: bool = True  # RandomPhotometricDistort

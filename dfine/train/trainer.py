@@ -181,16 +181,28 @@ class Trainer:
         use_wandb: bool = False,
     ):
         from ..backends.native import DFINECriterion
+        from .distributed import is_main_process, wrap_model_ddp
 
         self.cfg = cfg
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = model.to(self.device)
+        self.is_main = is_main_process()
+
+        # ``module`` is the raw model (optimizer/EMA/checkpoints target it); ``model`` is
+        # the possibly-DDP-wrapped module used for the forward/backward.
+        self.module = model.to(self.device)
         self.criterion = DFINECriterion.from_config(cfg).to(self.device)
-        self.optimizer = build_optimizer(self.model, cfg)
+        self.optimizer = build_optimizer(self.module, cfg)
         self.lr_scheduler = build_lr_scheduler(self.optimizer, cfg)
+        self.model = wrap_model_ddp(
+            self.module,
+            device=self.device,
+            sync_bn=cfg.sync_bn,
+            find_unused_parameters=cfg.find_unused_parameters,
+        )
 
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        if self.is_main:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
 
         want_amp = cfg.use_amp if use_amp is None else use_amp
         self.scaler = (
@@ -198,15 +210,18 @@ class Trainer:
         )
         want_ema = cfg.ema_decay > 0 if use_ema is None else use_ema
         self.ema = (
-            ModelEMA(self.model, decay=cfg.ema_decay, warmups=cfg.ema_warmups) if want_ema else None
+            ModelEMA(self.module, decay=cfg.ema_decay, warmups=cfg.ema_warmups)
+            if want_ema
+            else None
         )
+        # Only rank 0 writes TensorBoard/loss-curve/W&B artifacts.
         self.visualizer = (
             TrainingVisualizer(
                 self.output_dir,
                 use_wandb=use_wandb,
                 wandb_name=getattr(cfg, "exp_name", None),
             )
-            if visualize
+            if (visualize and self.is_main)
             else None
         )
 
@@ -217,8 +232,18 @@ class Trainer:
         val_loader: Iterable | None = None,
         val_fn: Callable[[nn.Module, Iterable], dict[str, float]] | None = None,
     ) -> nn.Module:
-        """Train for ``epochs`` (default ``cfg.epochs``); return the eval module (EMA if on)."""
+        """Train for ``epochs`` (default ``cfg.epochs``); return the eval module (EMA if on).
+
+        Under an active process group (multi-GPU) the loaders are sharded with a
+        ``DistributedSampler``, only rank 0 saves/logs, and validation runs on all ranks
+        (``faster-coco-eval`` gathers the shards); the returned module is de-paralleled.
+        """
+        from .distributed import barrier, de_parallel, wrap_loader_distributed
+
         epochs = epochs or self.cfg.epochs
+        train_loader = wrap_loader_distributed(train_loader, shuffle=True)
+        if val_loader is not None:
+            val_loader = wrap_loader_distributed(val_loader, shuffle=False)
         warmup = (
             LinearWarmup(self.lr_scheduler, self.cfg.warmup_iters)
             if self.cfg.warmup_iters > 0
@@ -226,7 +251,7 @@ class Trainer:
         )
 
         for epoch in range(epochs):
-            # Let multi-scale collate / samplers know the epoch (no-op for plain loaders).
+            # Let the sampler / multi-scale collate know the epoch (no-op for plain loaders).
             if hasattr(train_loader, "set_epoch"):
                 train_loader.set_epoch(epoch)
             stats = train_one_epoch(
@@ -248,20 +273,24 @@ class Trainer:
 
             metrics = None
             if val_fn is not None and val_loader is not None:
-                module = self.ema.module if self.ema else self.model
+                module = self.ema.module if self.ema else de_parallel(self.model)
                 metrics = val_fn(module, val_loader)
             if self.visualizer is not None:
                 self.visualizer.log_epoch(epoch, stats, metrics)
-            self.save_checkpoint(self.output_dir / "last.pth", epoch)
+            if self.is_main:
+                self.save_checkpoint(self.output_dir / "last.pth", epoch)
+            barrier()
 
         if self.visualizer is not None:
             self.visualizer.close()
-        return self.ema.module if self.ema else self.model
+        return self.ema.module if self.ema else de_parallel(self.model)
 
     def save_checkpoint(self, path: str | Path, epoch: int) -> None:
+        from .distributed import de_parallel
+
         state = {
             "epoch": epoch,
-            "model": self.model.state_dict(),
+            "model": de_parallel(self.model).state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "lr_scheduler": self.lr_scheduler.state_dict(),
         }

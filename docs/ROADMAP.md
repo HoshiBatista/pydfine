@@ -108,7 +108,18 @@ ported modules into one model behind the public API.
       `build_coco_dataloader(transforms=train_transforms(imgsz, stop_epoch=…))`.
       Tested: output contract, stop-epoch skip logic, epoch forwarding, and an
       augmented train step (multi-scale collate is Phase-4's `dataset.py`, done).
-- [ ] Multi-GPU launch (wrap `torchrun`) behind the same `.train()` call.
+- [x] Multi-GPU launch (wrap `torchrun`) behind the same `.train()` call. New
+      `train/distributed.py` ports the single-node pieces of upstream `dist_utils`
+      (rank/world-size, group setup/teardown, DDP+SyncBN model wrap, `DistributedSampler`
+      loader wrap, and a `spawn` that launches one worker per GPU). The `Trainer` is now
+      DDP-aware (optimizer/EMA/checkpoints target the de-paralleled module; only rank 0
+      saves/logs; loaders sharded; val runs on all ranks). `DFINE.train(devices=N)` is
+      the launcher (spawns workers, each rebuilds from `config`+`data`, rank 0's weights
+      reloaded after); a `torchrun --nproc_per_node=N` script that calls `train(...)`
+      also works (each worker joins the existing group). Added `sync_bn`/
+      `find_unused_parameters` config fields (upstream defaults True/False). Tested:
+      no-group defaults + 1-process gloo group (DDP/sampler wrap) always-on, plus a
+      gated 2-process CPU/gloo spawn end-to-end (`DFINE_TEST_MULTIGPU=1`).
 - [x] `DFINE.val()` via COCO evaluator → returns metrics dict (slots into the existing
       `Trainer.fit(val_fn=…)` hook). `train/evaluator.py` ports upstream
       `det_engine.evaluate` (single-process): runs the model over a COCO val loader,
@@ -307,3 +318,22 @@ ported modules into one model behind the public API.
   `category_id`s — stock MS-COCO GT is sparse, so build the model with
   `remap_mscoco_category=True` to score it. Fixed the visualizer's AP key (`AP50:95`
   placeholder → `AP`). Remaining Phase-4: multi-GPU only.
+- **2026-07-16** — Multi-GPU training landed — **Phase 4 is complete.** New
+  `train/distributed.py` ports upstream `dist_utils` (single-node, torchrun-free):
+  `setup_distributed`/`cleanup_distributed` (env-driven, `nccl`|`gloo`), rank/world-size
+  queries, `wrap_model_ddp` (DDP + SyncBN, SyncBN GPU-only), `wrap_loader_distributed`
+  (`DistributedSampler`, forwards `set_epoch`), and `spawn` (mp.spawn, one proc/GPU, auto
+  MASTER_ADDR/PORT). `Trainer` is DDP-aware: it keeps `self.module` (raw) vs `self.model`
+  (DDP) — optimizer/EMA/checkpoints/param-groups use the de-paralleled module, EMA
+  unwraps DDP in `update`, loaders are sharded in `fit`, val runs on all ranks
+  (faster-coco-eval gathers shards), and only rank 0 writes checkpoints/visualizer.
+  `DFINE.train(devices=N)` is the launcher: snapshot weights → `spawn` N workers (each
+  rebuilds `DFINE(config=…)`, loads the snapshot, trains under DDP) → reload rank 0's
+  `last.pth`; requires `data=` (loaders can't cross `spawn`). A `torchrun
+  --nproc_per_node=N` script calling `train(...)` also works — `launched_via_torchrun()`
+  makes each worker join the existing group and bind its `LOCAL_RANK` GPU instead of
+  spawning. Added `DFINE(config=…)` ctor path + `sync_bn`/`find_unused_parameters` config
+  fields (upstream defaults True/False). **Verified** the 2-process CPU/gloo spawn
+  end-to-end (writes `last.pth`, parent reloads); a real bug — SyncBN needs GPU modules —
+  was caught by running it and fixed (guard SyncBN to CUDA). Only multi-GPU launch is CI-
+  gated (`DFINE_TEST_MULTIGPU=1`); the helper units run on CPU always.

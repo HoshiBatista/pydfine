@@ -155,7 +155,16 @@ standard COCO root via `dataset.build_coco_dataloaders`. **Evaluation**
 val loader, decodes with the postprocessor, and scores against the loader's GT `.coco`
 with `faster-coco-eval`, returning the 12 named COCO metrics (`COCO_STAT_NAMES`, `AP` =
 mAP@[.50:.95]). `coco_val_fn` adapts it to the `Trainer.fit(val_fn=…)` hook and
-`train()` auto-wires it when a val loader is present. Still open: multi-GPU.
+`train()` auto-wires it when a val loader is present.
+
+**Multi-GPU** (`distributed.py`): `DFINE.train(data="coco/", devices=N)` spawns one DDP
+worker per GPU (via `spawn`, no `torchrun` needed) — each rebuilds the model from the
+config, loads the launcher's weight snapshot, shards the loaders with a
+`DistributedSampler`, and trains under DDP; rank 0's `last.pth` is reloaded into the
+launcher. Or run `torchrun --nproc_per_node=N your_script.py` and call `train(...)`
+without `devices` — `launched_via_torchrun()` makes each worker join the existing group.
+The `Trainer` targets the de-paralleled module for the optimizer/EMA/checkpoints and
+lets only rank 0 write artifacts. Phase 4 is complete; next is Phase 3 (ONNX export).
 
 ## 7. Export — planned (Phase 3, not yet implemented)
 

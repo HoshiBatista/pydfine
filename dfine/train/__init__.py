@@ -8,6 +8,13 @@ importable directly for custom loops.
 
 from __future__ import annotations
 
+from .distributed import (
+    get_rank,
+    get_world_size,
+    is_main_process,
+    setup_distributed,
+    spawn,
+)
 from .ema import ModelEMA
 from .evaluator import COCO_STAT_NAMES, coco_val_fn, evaluate
 from .logger import MetricLogger, SmoothedValue
@@ -28,4 +35,9 @@ __all__ = [
     "evaluate",
     "coco_val_fn",
     "COCO_STAT_NAMES",
+    "setup_distributed",
+    "spawn",
+    "get_rank",
+    "get_world_size",
+    "is_main_process",
 ]

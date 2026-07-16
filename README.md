@@ -48,7 +48,7 @@ model = DFINE(
 ## Status
 
 Inference is complete and bit-exact with upstream; the training stack (loop, data,
-augmentation, COCO `val`, visualization) is in — only `export` and multi-GPU remain.
+augmentation, COCO `val`, multi-GPU DDP, visualization) is in — only `export` remains.
 Done so far:
 
 - **Config-first core** — `DFINEConfig` (every model/training param as a typed field),
@@ -112,8 +112,10 @@ out = decoder(encoder(backbone(torch.randn(1, 3, cfg.imgsz, cfg.imgsz))))
 > `train(data="coco/", epochs=...)` (a standard COCO root; the loaders are built for
 > you) and `train(train_loader, epochs=...)` (a hand-built loader) — and **COCO
 > evaluation** (`val(data="coco/")` → the 12 named COCO metrics, also run each epoch
-> during `train`), all with the `dfine[train]` extra. `export` is phase-stubbed and
-> raises a clear "arriving in Phase N" until implemented.
+> during `train`), all with the `dfine[train]` extra. **Multi-GPU** is a single kwarg:
+> `train(data="coco/", devices=N)` spawns one DDP worker per GPU (or launch with
+> `torchrun` and call `train(...)` as usual). `export` is phase-stubbed and raises a
+> clear "arriving in Phase N" until implemented.
 
 ## Why this exists
 
