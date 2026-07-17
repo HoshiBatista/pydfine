@@ -207,12 +207,36 @@ def batch_image_collate_fn(items):
     return torch.cat([x[0][None] for x in items], dim=0), [x[1] for x in items]
 
 
-def generate_scales(base_size: int, base_size_repeat: int) -> list[int]:
-    """Multi-scale set around ``base_size`` on a 32-px grid (port of upstream)."""
+def min_multiscale_size(feat_strides: list[int], num_queries: int) -> int:
+    """Smallest 32-px-grid input whose encoder produces ``>= num_queries`` tokens.
+
+    The decoder's ``_select_topk`` does ``topk(num_queries)`` over the encoder memory,
+    so a square input of size ``s`` must yield at least ``num_queries`` tokens —
+    ``sum_l (s // stride_l)**2`` across the feature levels — or top-k raises
+    "selected index k out of range". Multi-scale (:func:`generate_scales`) jitters the
+    input down to ``~0.75x``, which at small ``imgsz`` can undershoot; this gives the
+    floor to clamp to (upstream trains at 640 and never hits it).
+    """
+    s = 32
+    while sum((s // stride) ** 2 for stride in feat_strides) < num_queries:
+        s += 32
+    return s
+
+
+def generate_scales(
+    base_size: int, base_size_repeat: int, min_size: int | None = None
+) -> list[int]:
+    """Multi-scale set around ``base_size`` on a 32-px grid (port of upstream).
+
+    ``min_size`` (see :func:`min_multiscale_size`) drops any scale that would starve the
+    decoder's top-k; ``base_size`` is always kept as a fallback.
+    """
     scale_repeat = (base_size - int(base_size * 0.75 / 32) * 32) // 32
     scales = [int(base_size * 0.75 / 32) * 32 + i * 32 for i in range(scale_repeat)]
     scales += [base_size] * base_size_repeat
     scales += [int(base_size * 1.25 / 32) * 32 - i * 32 for i in range(scale_repeat)]
+    if min_size is not None:
+        scales = [s for s in scales if s >= min_size] or [base_size]
     return scales
 
 
@@ -225,10 +249,12 @@ class BatchImageCollateFunction:
     below forwards it) so the tail epochs run at the fixed ``base_size``.
     """
 
-    def __init__(self, base_size=640, base_size_repeat=None, stop_epoch=None):
+    def __init__(self, base_size=640, base_size_repeat=None, stop_epoch=None, min_size=None):
         self.base_size = base_size
         self.scales = (
-            generate_scales(base_size, base_size_repeat) if base_size_repeat is not None else None
+            generate_scales(base_size, base_size_repeat, min_size)
+            if base_size_repeat is not None
+            else None
         )
         self.stop_epoch = stop_epoch if stop_epoch is not None else 10**9
         self._epoch = -1
@@ -315,8 +341,10 @@ def build_coco_dataloader(
     # Multi-scale only for training, and only up to the no-aug tail (like upstream).
     repeat = 3 if (train and multiscale) else None
     stop_epoch = (cfg.epochs - cfg.no_aug_epoch) if cfg is not None else None
+    # Floor the jitter so a small scale never starves the decoder's top-k (num_queries).
+    min_size = min_multiscale_size(cfg.feat_strides, cfg.num_queries) if cfg is not None else None
     collate = BatchImageCollateFunction(
-        base_size=imgsz, base_size_repeat=repeat, stop_epoch=stop_epoch
+        base_size=imgsz, base_size_repeat=repeat, stop_epoch=stop_epoch, min_size=min_size
     )
     return _CocoDataLoader(
         dataset,

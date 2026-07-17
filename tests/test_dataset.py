@@ -22,6 +22,7 @@ from dfine.train.dataset import (  # noqa: E402
     build_coco_dataloaders,
     default_transforms,
     generate_scales,
+    min_multiscale_size,
 )
 
 IMGSZ = 320
@@ -143,6 +144,22 @@ def test_generate_scales_grid():
     assert 640 in scales
     assert all(s % 32 == 0 for s in scales)  # all on the 32-px grid
     assert min(scales) < 640 < max(scales)
+
+
+def test_min_multiscale_size_meets_num_queries():
+    # 2-level N model (strides 16/32), 300 queries: 224px -> 245 tokens (too few),
+    # 256px -> 320 tokens. The floor must land at 256.
+    assert min_multiscale_size([16, 32], num_queries=300) == 256
+    tokens = sum((256 // s) ** 2 for s in (16, 32))
+    assert tokens >= 300
+
+
+def test_generate_scales_floor_drops_starving_sizes():
+    # Without a floor, base 320 jitters down to 224 (starves a 300-query top-k).
+    assert 224 in generate_scales(base_size=320, base_size_repeat=3)
+    floored = generate_scales(base_size=320, base_size_repeat=3, min_size=256)
+    assert min(floored) >= 256
+    assert 224 not in floored and 320 in floored
 
 
 def test_multiscale_collate_changes_size(tmp_path):

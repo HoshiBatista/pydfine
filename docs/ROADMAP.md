@@ -206,19 +206,22 @@ ported modules into one model behind the public API.
   now-dead `DFINE._not_ready` stub (export was its last user). Tests: valid graph + named
   I/O, onnxruntime≈torch, dynamic + static batch, no-mutation of the live model, facade
   default filename, unknown-format reject, `trtexec` builder, CLI (`test_export.py`, green).
-- **2026-07-17 — DISCOVERED (pre-existing bug, unrelated to export): multi-scale training
-  can undershoot `num_queries` at small `imgsz`.** `dataset.generate_scales(base_size)`
-  jitters down to `≈0.75×base_size`; for `imgsz=320` the smallest scale is 224 px, which
-  gives the 2-level N model only `(224/16)²+(224/32)² = 245` encoder tokens — fewer than the
-  decoder's `num_queries=300` top-k, so `_select_topk` raises `selected index k out of
-  range`. Upstream trains at 640 (min scale 480 → 1125 tokens) so never hits it. Reproduced
-  15/15 on clean `main` via `pytest tests/test_model.py::test_train_from_data_path -p
-  randomly` (it's seed-dependent, hence "flaky" in the mixed suite). Multi-scale is always
-  on for training and **not** togglable through `build_coco_dataloaders`/`DFINE.train(data=)`.
-  Fix options for a follow-up iteration: (a) floor `generate_scales` so the min scale still
-  yields ≥ `num_queries` tokens for the model's strides, and/or (b) expose a `multiscale=`
-  toggle on `build_coco_dataloaders` + `DFINE.train`. Until then, small-`imgsz` training with
-  default multi-scale is unreliable.
+- **2026-07-17 — FIXED (pre-existing bug, surfaced while testing export): multi-scale
+  training could undershoot `num_queries` at small `imgsz`.** `dataset.generate_scales(
+  base_size)` jitters down to `≈0.75×base_size`; for `imgsz=320` the smallest scale is
+  224 px, which gives the 2-level N model only `(224/16)²+(224/32)² = 245` encoder tokens
+  — fewer than the decoder's `num_queries=300` top-k, so `_select_topk` raised `selected
+  index k out of range`. The collate picks the scale with `random.choice`, and Python
+  seeds `random` from OS entropy per process (no `pytest-randomly` here), so it hit 224 in
+  ~1 of every ~13 fresh `pytest` runs — an intermittent failure in
+  `test_train_from_data_path`, unrelated to the export change that happened to expose it.
+  Upstream trains at 640 (min scale 480 → 1125 tokens) so never hits it. **Fix:** new
+  `dataset.min_multiscale_size(feat_strides, num_queries)` computes the smallest 32-px-grid
+  size whose token count ≥ `num_queries`; `generate_scales(..., min_size=)` drops any scale
+  below it (keeps `base_size` as fallback), and `build_coco_dataloader` derives the floor
+  from `cfg` (so `DFINE.train(data=…)` inherits it). Verified: 0/18 fresh-process runs fail
+  (was ~1/18 on clean `main`). Tests: `test_min_multiscale_size_meets_num_queries` +
+  `test_generate_scales_floor_drops_starving_sizes` (`test_dataset.py`).
 - ~~Backend default is Path B (transformers) until Phase 5 parity lands.~~
 - **2026-07-11 — DECISION: go Path A (native port) directly**, per repo owner. We
   port the needed modules out of `D-FINE/src/` and rewrite them YAML/registry-free,
