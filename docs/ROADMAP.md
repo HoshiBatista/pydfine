@@ -59,10 +59,10 @@ ported modules into one model behind the public API.
       (n/s/m/l/x) for raw boxes, final boxes, scores, and labels.
 
 ## Phase 3 — Export
-- [ ] `dfine/export/onnx.py`: dynamic-batch ONNX with `(images, orig_target_sizes)`
+- [x] `dfine/export/onnx.py`: dynamic-batch ONNX with `(images, orig_target_sizes)`
       signature + optional `onnxsim`.
-- [ ] `DFINE.export(format="onnx")`; smoke test that onnxruntime runs the graph.
-- [ ] Helpers/docs for TensorRT (`trtexec --fp16`) and OpenVINO downstream.
+- [x] `DFINE.export(format="onnx")`; smoke test that onnxruntime runs the graph.
+- [x] Helpers/docs for TensorRT (`trtexec --fp16`) and OpenVINO downstream.
 
 ## Phase 4 — Training
 - [x] `train/trainer.py`: the D-FINE loop ported single-process — `build_param_groups`
@@ -189,6 +189,36 @@ ported modules into one model behind the public API.
 
 ## Notes / decisions log
 - (add dated notes here as you learn things that affect later phases)
+- **2026-07-17 — Phase 3 (export) complete.** `dfine/export/onnx.py` wraps the
+  deploy-mode model + postprocessor into one `DeployModel` and exports a single ONNX
+  graph with the upstream two-input signature `(images, orig_target_sizes)` → three
+  outputs `(labels, boxes, scores)` (xyxy in original scale), batch dim dynamic `N` by
+  default (traced with batch≥2 so the graph generalises). Forces the legacy TorchScript
+  exporter (`dynamo=False`) at opset 16 — no `onnxscript` dep. `onnx.checker` runs on the
+  result; optional `onnxsim`. `tensorrt_command()` emits the `trtexec --fp16` line with a
+  dynamic-batch optimisation profile; OpenVINO's `ovc` noted in the docstrings. Public
+  facade `DFINE.export(format="onnx", …)` + `dfine export <name|size>` CLI. The `[export]`
+  extra (`onnx`/`onnxruntime`/`onnxsim`) is lazily imported so building a model never
+  needs them. **Gotcha (now guarded):** the encoder precomputes positional embeddings
+  sized to `cfg.imgsz`, so the export resolution must equal the model's `imgsz` — mismatch
+  used to crash deep in the encoder with a cryptic shape error; `DFINE.export` now raises a
+  clear `ValueError`, and the CLI builds the bare-size model *at* `--imgsz`. Removed the
+  now-dead `DFINE._not_ready` stub (export was its last user). Tests: valid graph + named
+  I/O, onnxruntime≈torch, dynamic + static batch, no-mutation of the live model, facade
+  default filename, unknown-format reject, `trtexec` builder, CLI (`test_export.py`, green).
+- **2026-07-17 — DISCOVERED (pre-existing bug, unrelated to export): multi-scale training
+  can undershoot `num_queries` at small `imgsz`.** `dataset.generate_scales(base_size)`
+  jitters down to `≈0.75×base_size`; for `imgsz=320` the smallest scale is 224 px, which
+  gives the 2-level N model only `(224/16)²+(224/32)² = 245` encoder tokens — fewer than the
+  decoder's `num_queries=300` top-k, so `_select_topk` raises `selected index k out of
+  range`. Upstream trains at 640 (min scale 480 → 1125 tokens) so never hits it. Reproduced
+  15/15 on clean `main` via `pytest tests/test_model.py::test_train_from_data_path -p
+  randomly` (it's seed-dependent, hence "flaky" in the mixed suite). Multi-scale is always
+  on for training and **not** togglable through `build_coco_dataloaders`/`DFINE.train(data=)`.
+  Fix options for a follow-up iteration: (a) floor `generate_scales` so the min scale still
+  yields ≥ `num_queries` tokens for the model's strides, and/or (b) expose a `multiscale=`
+  toggle on `build_coco_dataloaders` + `DFINE.train`. Until then, small-`imgsz` training with
+  default multi-scale is unreliable.
 - ~~Backend default is Path B (transformers) until Phase 5 parity lands.~~
 - **2026-07-11 — DECISION: go Path A (native port) directly**, per repo owner. We
   port the needed modules out of `D-FINE/src/` and rewrite them YAML/registry-free,

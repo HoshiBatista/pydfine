@@ -93,11 +93,12 @@ def test_load_rejects_unknown_source():
         m.load("/no/such/file.pth")
 
 
-def test_stub_methods_report_phase():
+def test_export_imgsz_must_match_model():
     m = _model()
-    # export is still a phase stub; predict/train/val are implemented.
-    with pytest.raises(NotImplementedError, match="not implemented yet"):
-        m.export()
+    # predict/train/val/export are all implemented now; export guards a mismatched
+    # imgsz (the encoder's positional embeddings are sized to cfg.imgsz).
+    with pytest.raises(ValueError, match="must match"):
+        m.export(imgsz=m.config.imgsz + 32)
 
 
 def test_val_requires_data_or_loader():

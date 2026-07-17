@@ -215,9 +215,6 @@ class DFINE:
         )
         return Results(image, boxes, self.names)
 
-    def _not_ready(self, name: str, phase: str):
-        raise NotImplementedError(f"DFINE.{name}() is not implemented yet — arriving in {phase}.")
-
     def train(
         self,
         train_loader=None,
@@ -455,8 +452,54 @@ class DFINE:
 
         return evaluate(self.model, self.postprocessor, val_loader, self.device)
 
-    def export(self, *args, **kwargs):
-        self._not_ready("export", "Phase 3 (export)")
+    def export(
+        self,
+        format: str = "onnx",
+        file: str | os.PathLike | None = None,
+        *,
+        imgsz: int | None = None,
+        batch: int = 1,
+        dynamic: bool = True,
+        simplify: bool = False,
+        opset: int = 16,
+    ) -> Path:
+        """Export the model to a deployable graph (Phase 3).
+
+        Currently ``format="onnx"``: writes a single ONNX graph with the two-input
+        signature ``(images, orig_target_sizes)`` → ``(labels, boxes, scores)`` (boxes
+        ``xyxy`` in original scale), batch dim dynamic by default. Returns the output
+        :class:`~pathlib.Path`. Needs ``pip install dfine[export]``.
+
+        ``file`` defaults to ``dfine-<size>.onnx``. Use ``simplify=True`` for ``onnxsim``,
+        and :func:`dfine.export.tensorrt_command` for a downstream ``trtexec`` engine.
+        """
+        if format != "onnx":
+            raise ValueError(f"Unsupported export format {format!r}; only 'onnx' is available.")
+        from .export.onnx import export_onnx
+
+        # The encoder precomputes positional embeddings sized to cfg.imgsz, so the export
+        # resolution must match the model it was built with — otherwise the traced graph
+        # crashes deep in the encoder with a cryptic shape mismatch.
+        imgsz = imgsz or self.config.imgsz
+        if imgsz != self.config.imgsz:
+            raise ValueError(
+                f"export imgsz={imgsz} must match the model's imgsz={self.config.imgsz}; "
+                f"rebuild the model with DFINE(size=..., imgsz={imgsz}) to export at that size."
+            )
+        file = (
+            Path(file) if file is not None else Path(f"dfine-{self.config.size or 'custom'}.onnx")
+        )
+        return export_onnx(
+            self.model,
+            self.postprocessor,
+            file,
+            imgsz=imgsz,
+            batch=batch,
+            opset=opset,
+            dynamic=dynamic,
+            simplify=simplify,
+            device=self.device,
+        )
 
     def _iter_video(self, source, conf: float, imgsz: int | None):
         """Yield one :class:`Results` per decoded frame (frames read as RGB)."""

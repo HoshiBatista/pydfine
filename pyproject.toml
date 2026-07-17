@@ -59,6 +59,8 @@ dev = [
     "scipy>=1.10",  # Hungarian matcher — so criterion/matcher tests run in CI
     "faster-coco-eval>=1.6.6",  # COCO parser — so dataset tests run in CI
     "pyyaml>=6.0",  # data.yaml parsing — so yolo_to_coco tests run in CI
+    "onnx>=1.14",  # ONNX export smoke test
+    "onnxruntime>=1.16",  # run the exported graph in CI
 ]
 
 [project.urls]
