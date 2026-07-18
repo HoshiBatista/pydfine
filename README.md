@@ -4,6 +4,8 @@ A batteries-included Python library for the **D-FINE** real-time object detector
 ([Peterande/D-FINE](https://github.com/Peterande/D-FINE), ICLR 2025 Spotlight),
 with an `ultralytics`-style developer experience.
 
+📖 **Documentation:** <https://hoshibatista.github.io/pydfine/>
+
 **Design goal:** the entire model — backbone, encoder, decoder, losses, denoising,
 training, augmentation — is configured through **typed Python parameters on one
 class**. No YAML files, no config-registry indirection, no `torchrun` incantations.
@@ -142,6 +144,14 @@ agent that reads `AGENTS.md`). Start here:
 | [`docs/CONFIG_REFERENCE.md`](docs/CONFIG_REFERENCE.md) | Every model parameter, default, and per-size preset. The heart of the "one class, many params" design. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phased, checkbox task plan. |
 
-## License
+## License & attribution
 
-Apache-2.0. Ported/vendored upstream code retains D-FINE's Apache-2.0 license and attribution.
+pydfine is licensed under the [Apache License 2.0](LICENSE).
+
+It is a **derivative work of D-FINE**
+([Peterande/D-FINE](https://github.com/Peterande/D-FINE), Apache-2.0, © 2024 The
+D-FINE Authors): the model is a native port of upstream `src/`, with layer and
+parameter names preserved so released `.pth` checkpoints load unchanged. Every ported
+module under `dfine/backends/native/` carries a per-file header crediting its source
+and describing the changes. See [`NOTICE`](NOTICE) for the full attribution, including
+D-FINE's own lineage (RT-DETR, DETR, PaddleDetection).

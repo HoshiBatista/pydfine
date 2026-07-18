@@ -185,12 +185,24 @@ ported modules into one model behind the public API.
 ## Phase 6 — Polish
 - [x] `Results` interop: `to_supervision()`, `to_coco()`, `to_pandas()`.
 - [x] Optional ByteTrack tracker on `predict_video`.
-- [ ] Docs site / API reference generation.
+- [x] Docs site / API reference generation.
 - [ ] Publish to PyPI (choose final package name; update imports).
 
 ---
 
 ## Notes / decisions log
+- **2026-07-18 — Docs site (MkDocs Material + mkdocstrings).** `mkdocs.yml` + `docs/
+  index.md` (landing: install/quickstart/CLI) + `docs/api/*.md` (mkdocstrings
+  `:::`-autodoc for `DFINE`, `DFINEConfig`, `Results`/`Boxes`, `ByteTrack`/`BYTETracker`,
+  `yolo_to_coco`, ONNX export). The existing `ARCHITECTURE.md`/`CONFIG_REFERENCE.md` are
+  wired into the nav; `ROADMAP.md` is `exclude_docs`'d (agent-facing). mkdocstrings reads
+  the source **statically** (griffe) so the build needs no torch — new `[docs]` extra is
+  `mkdocs`/`mkdocs-material`/`mkdocstrings[python]` only. `mkdocs build --strict` is clean
+  (0 warnings) and renders real docstrings/signatures. CI: `.github/workflows/docs.yml`
+  builds and publishes to **GitHub Pages** on push to `main` (via `upload-pages-artifact`
+  + `deploy-pages`). **Repo owner action needed:** enable Pages with source = "GitHub
+  Actions" in repo Settings → Pages for the deploy to go live at
+  `https://hoshibatista.github.io/pydfine/`.
 - **2026-07-18 — Phase 1 closed: YAML interop.** `DFINEConfig.to_yaml(path=None)` (→ YAML
   string, or writes to `path`) + `from_yaml(source)` (a `Path`, a `.yaml`/`.yml` path
   string, or YAML text) — thin wrappers over the existing `to_dict`/`from_dict`; PyYAML is
