@@ -185,7 +185,7 @@ class DFINEConfig:
     # ------------------------------------------------------- YAML interop --
     # The primary config surface is typed Python params (no YAML). These are an
     # *optional* convenience for saving/sharing a config; they need PyYAML
-    # (``pip install dfine[train]``), imported lazily so the base install never does.
+    # (``pip install pydfine[train]``), imported lazily so the base install never does.
 
     @staticmethod
     def _require_yaml():
@@ -194,7 +194,7 @@ class DFINEConfig:
         except ImportError as exc:  # pragma: no cover - trivial guard
             raise ImportError(
                 "YAML interop needs PyYAML — install with `pip install pyyaml` or "
-                "`pip install dfine[train]`."
+                "`pip install pydfine[train]`."
             ) from exc
         return yaml
 

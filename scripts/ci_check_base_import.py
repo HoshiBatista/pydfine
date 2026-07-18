@@ -27,7 +27,7 @@ def main() -> int:
         try:
             getattr(dfine, "DFINE")  # triggers the lazy __getattr__ import  # noqa: B009
         except AttributeError as exc:
-            assert "dfine[torch]" in str(exc), exc
+            assert "pydfine[torch]" in str(exc), exc
             print("ok: building a model without torch raises a helpful error")
         else:
             raise SystemExit("expected a helpful error when building a model without torch")

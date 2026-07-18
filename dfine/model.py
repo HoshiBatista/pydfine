@@ -80,7 +80,7 @@ def _require_cv2():
         return cv2
     except ImportError as exc:  # pragma: no cover - exercised via monkeypatch
         raise ImportError(
-            "Video I/O needs OpenCV — install with `pip install dfine[video]`."
+            "Video I/O needs OpenCV — install with `pip install pydfine[video]`."
         ) from exc
 
 
@@ -474,7 +474,7 @@ class DFINE:
         Currently ``format="onnx"``: writes a single ONNX graph with the two-input
         signature ``(images, orig_target_sizes)`` → ``(labels, boxes, scores)`` (boxes
         ``xyxy`` in original scale), batch dim dynamic by default. Returns the output
-        :class:`~pathlib.Path`. Needs ``pip install dfine[export]``.
+        :class:`~pathlib.Path`. Needs ``pip install pydfine[export]``.
 
         ``file`` defaults to ``dfine-<size>.onnx``. Use ``simplify=True`` for ``onnxsim``,
         and :func:`dfine.export.tensorrt_command` for a downstream ``trtexec`` engine.
@@ -515,7 +515,7 @@ class DFINE:
         except ImportError as e:  # pragma: no cover - trivial guard
             raise ImportError(
                 "track=True needs scipy — install it with `pip install scipy` or "
-                "`pip install dfine[track]`."
+                "`pip install pydfine[track]`."
             ) from e
         return ByteTrack(frame_rate=frame_rate)
 

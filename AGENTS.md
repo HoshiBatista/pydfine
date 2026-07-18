@@ -159,11 +159,11 @@ pytest -q -k parity            # weight/output parity tests only
 dfine models                   # sanity: list presets
 ```
 
-Optional extras (on top of core): `dfine[torch]` (inference: torch/torchvision/
-pillow), `dfine[video]` (`predict_video`: OpenCV), `dfine[train]` (scipy matcher +
-faster-coco-eval + tensorboard + matplotlib for the loss curve), `dfine[export]` (ONNX).
+Optional extras (on top of core): `pydfine[torch]` (inference: torch/torchvision/
+pillow), `pydfine[video]` (`predict_video`: OpenCV), `pydfine[train]` (scipy matcher +
+faster-coco-eval + tensorboard + matplotlib for the loss curve), `pydfine[export]` (ONNX).
 `[dev]` pulls torch + headless OpenCV + scipy + faster-coco-eval so the whole suite runs
-(training/dataset tests included). Base `pip install dfine` (config/CLI only) needs no torch.
+(training/dataset tests included). Base `pip install pydfine` (config/CLI only) needs no torch.
 
 ## 9. Definition of Done (per task)
 

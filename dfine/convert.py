@@ -49,7 +49,7 @@ def _require_pil():
     except ImportError as exc:  # pragma: no cover - exercised only without pillow
         raise ImportError(
             "yolo_to_coco needs Pillow to read image sizes — install with "
-            "`pip install dfine[torch]`."
+            "`pip install pydfine[torch]`."
         ) from exc
 
 
@@ -99,7 +99,7 @@ def _resolve_class_names(yolo_root: Path, class_names) -> list[str] | None:
                 import yaml
             except ImportError as exc:  # pragma: no cover
                 raise ImportError(
-                    f"Reading {cand} needs PyYAML — install `pip install dfine[train]` "
+                    f"Reading {cand} needs PyYAML — install `pip install pydfine[train]` "
                     "or pass class_names=[...] explicitly."
                 ) from exc
             names = yaml.safe_load(yaml_path.read_text()).get("names")

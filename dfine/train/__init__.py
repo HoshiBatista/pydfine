@@ -1,7 +1,7 @@
 """Training (Phase 4): the D-FINE loop, EMA, LR schedules, and progress visualization.
 
 Everything here imports torch, so it is kept out of the base ``import dfine`` path
-(exposed lazily). Install with ``pip install dfine[train]`` (torch + scipy matcher +
+(exposed lazily). Install with ``pip install pydfine[train]`` (torch + scipy matcher +
 tensorboard). The public entry point is :meth:`dfine.DFINE.train`; the pieces are also
 importable directly for custom loops.
 """
