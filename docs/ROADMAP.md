@@ -25,7 +25,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done.
 - [x] `DFINEConfig.preset(size, **overrides)` + `SIZE_PRESETS` table (§11 of reference).
 - [x] Config validation (`__post_init__`): ranges, list lengths, cross-field checks
       (e.g. `len(in_channels)==len(feat_strides)==num_levels`).
-- [ ] `DFINEConfig.from_yaml()/.to_yaml()` interop (optional path only).
+- [x] `DFINEConfig.from_yaml()/.to_yaml()` interop (optional path only).
 - [x] Tests: preset field values match reference; validation rejects bad configs.
 
 ## Phase 2 — Assembled model + working inference (native, Path A)
@@ -191,6 +191,15 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-18 — Phase 1 closed: YAML interop.** `DFINEConfig.to_yaml(path=None)` (→ YAML
+  string, or writes to `path`) + `from_yaml(source)` (a `Path`, a `.yaml`/`.yml` path
+  string, or YAML text) — thin wrappers over the existing `to_dict`/`from_dict`; PyYAML is
+  imported lazily (in `[train]`/`[dev]`) so the base install stays torch-/yaml-free. This
+  is the *optional* path only — typed Python params remain the headline surface. `betas`
+  (a tuple field) is dumped as a plain list and coerced back to a tuple in `from_dict`, so
+  round-trips are exact for both the dict and YAML paths. Tests: string + file round-trips,
+  plain-list `betas`, missing-file + non-mapping errors (`test_config.py`). Full suite 205
+  passed / 12 skipped. **Phase 1 complete.**
 - **2026-07-18 — Expanded CI from 2 jobs to 5.** Added: **pre-commit** (all hooks —
   whitespace/EOF/yaml/toml/merge-conflict/debug-statement + ruff, via
   `pre-commit/action`); **base-import** (core-only `pip install .` → `pip check` +

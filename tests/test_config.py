@@ -61,6 +61,45 @@ def test_roundtrip_dict():
     assert DFINEConfig.from_dict({**cfg.to_dict(), "bogus": 1}) == cfg
 
 
+def test_roundtrip_yaml_string():
+    pytest.importorskip("yaml")
+    cfg = DFINEConfig.preset("m", num_classes=7, class_names=None)
+    text = cfg.to_yaml()
+    assert isinstance(text, str) and "backbone:" in text
+    assert DFINEConfig.from_yaml(text) == cfg
+
+
+def test_roundtrip_yaml_file(tmp_path):
+    pytest.importorskip("yaml")
+    cfg = DFINEConfig.preset("x")
+    path = cfg.to_yaml(tmp_path / "cfg.yaml")
+    assert path.exists()
+    # Load from a Path and from a path-string ending in .yaml.
+    assert DFINEConfig.from_yaml(path) == cfg
+    assert DFINEConfig.from_yaml(str(path)) == cfg
+
+
+def test_to_yaml_uses_plain_lists(tmp_path):
+    pytest.importorskip("yaml")
+    import yaml
+
+    text = DFINEConfig.preset("l").to_yaml()
+    data = yaml.safe_load(text)
+    assert data["betas"] == [0.9, 0.999] and isinstance(data["betas"], list)
+
+
+def test_from_yaml_missing_file_raises():
+    pytest.importorskip("yaml")
+    with pytest.raises(FileNotFoundError):
+        DFINEConfig.from_yaml("does_not_exist.yaml")
+
+
+def test_from_yaml_non_mapping_raises():
+    pytest.importorskip("yaml")
+    with pytest.raises(ValueError, match="expected a YAML mapping"):
+        DFINEConfig.from_yaml("just a scalar string")
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
