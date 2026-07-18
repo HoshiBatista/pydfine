@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import math
 import re
-import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Callable
@@ -64,6 +63,20 @@ def build_param_groups(model: nn.Module, cfg) -> list[dict]:
     out = [{k: v for k, v in g.items() if k != "pattern"} for g in groups]
     out.append(default)
     return [g for g in out if g["params"]]
+
+
+def _new_grad_scaler():
+    """A CUDA AMP ``GradScaler`` via the modern ``torch.amp`` API where available.
+
+    ``torch.cuda.amp.GradScaler`` is deprecated (torch >= 2.4); ``torch.amp.GradScaler``
+    is the replacement but only exists on newer torch, so fall back for older versions.
+    """
+    if hasattr(torch.amp, "GradScaler"):
+        try:
+            return torch.amp.GradScaler("cuda")
+        except TypeError:  # pragma: no cover - very old signature
+            pass
+    return torch.cuda.amp.GradScaler()
 
 
 def build_optimizer(model: nn.Module, cfg) -> torch.optim.Optimizer:
@@ -139,9 +152,8 @@ def train_one_epoch(
 
         loss_value = loss.item()
         if not math.isfinite(loss_value):
-            print(f"Loss is {loss_value}, stopping training")
-            print({k: v.item() for k, v in loss_dict.items()})
-            sys.exit(1)
+            terms = {k: v.item() for k, v in loss_dict.items()}
+            raise RuntimeError(f"Loss is {loss_value}, stopping training. Loss terms: {terms}")
 
         logger.update(loss=loss_value, **{k: v.item() for k, v in loss_dict.items()})
         logger.update(lr=optimizer.param_groups[0]["lr"])
@@ -205,9 +217,7 @@ class Trainer:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
         want_amp = cfg.use_amp if use_amp is None else use_amp
-        self.scaler = (
-            torch.cuda.amp.GradScaler() if (want_amp and self.device.type == "cuda") else None
-        )
+        self.scaler = _new_grad_scaler() if (want_amp and self.device.type == "cuda") else None
         want_ema = cfg.ema_decay > 0 if use_ema is None else use_ema
         self.ema = (
             ModelEMA(self.module, decay=cfg.ema_decay, warmups=cfg.ema_warmups)

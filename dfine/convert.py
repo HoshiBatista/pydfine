@@ -246,6 +246,14 @@ def yolo_to_coco(
     if names is None:
         n = (max(num_classes_seen) + 1) if num_classes_seen else 0
         names = [f"class_{i}" for i in range(n)]
+    elif num_classes_seen and max(num_classes_seen) >= len(names):
+        # Guard against a names list shorter than the labels: otherwise annotations would
+        # carry a category_id with no `categories` entry and COCO eval fails cryptically.
+        raise ValueError(
+            f"labels reference class id {max(num_classes_seen)} but only {len(names)} class "
+            f"name(s) were provided — pass class_names with at least "
+            f"{max(num_classes_seen) + 1} entries, or omit it to infer names from the labels."
+        )
     categories = [{"id": i, "name": name} for i, name in enumerate(names)]
 
     written: dict[str, str] = {}

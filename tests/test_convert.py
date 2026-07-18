@@ -104,6 +104,13 @@ def test_infer_names_without_yaml(tmp_path):
     assert [c["name"] for c in coco["categories"]] == ["class_0", "class_1"]
 
 
+def test_too_few_class_names_raises(tmp_path):
+    # Labels reference class id 1, but only one name is given -> guard fires.
+    _make_yolo(tmp_path / "yolo", with_yaml=False)
+    with pytest.raises(ValueError, match="class id 1 but only 1 class"):
+        yolo_to_coco(tmp_path / "yolo", tmp_path / "coco", class_names=["only_one"])
+
+
 def test_polygon_row_becomes_bbox(tmp_path):
     root = tmp_path / "yolo"
     (root / "images/train").mkdir(parents=True)
