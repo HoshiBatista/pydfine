@@ -62,8 +62,9 @@ track = [
 ]
 dev = [
     "dfine[torch]",  # torch/torchvision/pillow — so the full suite runs (not skips)
-    "ruff>=0.7",
+    "ruff==0.15.21",  # pinned to match .pre-commit-config + CI lint (format stability)
     "pytest>=7.0",
+    "pytest-cov>=4.0",  # coverage reporting in CI
     "pre-commit>=3.5",
     "opencv-python-headless>=4.6",  # so predict_video tests run in CI (headless)
     "scipy>=1.10",  # Hungarian matcher — so criterion/matcher tests run in CI

@@ -14,6 +14,10 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Pin ruff so the lint job, pre-commit, and the dev extra all format identically.
+  RUFF_VERSION: "0.15.21"
+
 jobs:
   lint:
     name: Lint (ruff)
@@ -24,11 +28,62 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install ruff
-        run: python -m pip install --upgrade pip ruff
+        run: python -m pip install --upgrade pip "ruff==${RUFF_VERSION}"
       - name: ruff format --check
         run: ruff format --check .
       - name: ruff check
         run: ruff check .
+
+  pre-commit:
+    name: Pre-commit hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: pre-commit/action@v3.0.1
+
+  base-import:
+    name: Torch-free base install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install core only (no extras)
+        run: python -m pip install --upgrade pip && python -m pip install .
+      - name: No dependency conflicts
+        run: python -m pip check
+      - name: Import + CLI stay torch-free
+        # A bare install must not require torch: importing the package and the config/
+        # convert CLI all work, and building a model errors with a clear install hint.
+        run: |
+          python scripts/ci_check_base_import.py
+          dfine models
+          dfine convert --help
+
+  build:
+    name: Build + package check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build sdist + wheel
+        run: python -m pip install --upgrade pip build twine && python -m build
+      - name: Twine metadata check
+        run: twine check dist/*
+      - name: Install the built wheel (core) and smoke-test
+        run: |
+          python -m pip install dist/*.whl
+          dfine models
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
 
   test:
     name: Test (py${{ matrix.python-version }})
@@ -52,5 +107,11 @@ jobs:
           python -m pip install --no-cache-dir torch torchvision \
             --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --no-cache-dir -e ".[dev]"
-      - name: Run tests
-        run: pytest -q
+      - name: Run tests with coverage
+        run: pytest -q --cov=dfine --cov-report=term-missing --cov-report=xml
+      - name: Upload coverage XML
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml

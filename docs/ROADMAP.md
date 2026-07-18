@@ -191,6 +191,17 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-18 — Expanded CI from 2 jobs to 5.** Added: **pre-commit** (all hooks —
+  whitespace/EOF/yaml/toml/merge-conflict/debug-statement + ruff, via
+  `pre-commit/action`); **base-import** (core-only `pip install .` → `pip check` +
+  `scripts/ci_check_base_import.py` proving `import dfine`/CLI stay torch-free and a
+  model build errors with a clear hint — guards the torch-free-base invariant);
+  **build** (`python -m build` + `twine check` + install the built wheel + `dfine models`
+  smoke — PyPI-readiness). Existing **lint** and **test** (py3.9–3.13, CPU torch) kept;
+  test now emits coverage (`--cov`, ~86%). **Also fixed a real drift:** pre-commit pinned
+  ruff v0.7.4 while the codebase is formatted by modern ruff — bumped the hook to v0.15.21
+  and pinned `ruff==0.15.21` in the `[dev]` extra + a CI `RUFF_VERSION` env so lint,
+  pre-commit, and local dev all format identically.
 - **2026-07-18 — Second review pass: CLI wiring, scheduler fields, predict imgsz guard.**
   (1) `predict`/`train`/`val` were stale CLI stubs printing "not implemented — arriving in
   Phase 2/4" although the `DFINE` API implements all three; wired them to the API
