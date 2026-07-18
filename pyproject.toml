@@ -50,6 +50,11 @@ video = [
     "dfine[torch]",
     "opencv-python>=4.6",
 ]
+# Results interop: DataFrame + supervision.Detections converters.
+interop = [
+    "pandas>=1.3",
+    "supervision>=0.18",
+]
 dev = [
     "dfine[torch]",  # torch/torchvision/pillow — so the full suite runs (not skips)
     "ruff>=0.7",
@@ -61,6 +66,8 @@ dev = [
     "pyyaml>=6.0",  # data.yaml parsing — so yolo_to_coco tests run in CI
     "onnx>=1.14",  # ONNX export smoke test
     "onnxruntime>=1.16",  # run the exported graph in CI
+    "pandas>=1.3",  # Results.to_pandas() interop test
+    "supervision>=0.18",  # Results.to_supervision() interop test
 ]
 
 [project.urls]

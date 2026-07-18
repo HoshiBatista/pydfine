@@ -95,3 +95,79 @@ class Results:
         path = Path(filename)
         Image.fromarray(self.plot()).save(path)
         return path
+
+    # -- interop ---------------------------------------------------------------
+
+    def to_pandas(self):
+        """Return detections as a ``pandas.DataFrame`` (one row per box).
+
+        Columns ``xmin, ymin, xmax, ymax, confidence, class, name`` — the
+        ultralytics ``.pandas().xyxy[0]`` layout. An empty ``Results`` yields an
+        empty frame that still carries those columns. Requires ``pandas``.
+        """
+        try:
+            import pandas as pd
+        except ImportError as e:  # pragma: no cover - trivial guard
+            raise ImportError(
+                "Results.to_pandas() needs pandas — install it with `pip install pandas` "
+                "or `pip install dfine[interop]`."
+            ) from e
+
+        columns = ["xmin", "ymin", "xmax", "ymax", "confidence", "class", "name"]
+        rows = []
+        for xyxy, conf, cls in self.boxes:
+            cls_id = int(cls)
+            x1, y1, x2, y2 = (float(v) for v in xyxy)
+            rows.append(
+                {
+                    "xmin": x1,
+                    "ymin": y1,
+                    "xmax": x2,
+                    "ymax": y2,
+                    "confidence": float(conf),
+                    "class": cls_id,
+                    "name": self.names.get(cls_id, str(cls_id)) if self.names else str(cls_id),
+                }
+            )
+        return pd.DataFrame(rows, columns=columns)
+
+    def to_coco(self, image_id: int = 0) -> list[dict]:
+        """Detections as COCO-format result dicts (the ``loadRes`` layout).
+
+        Each box becomes ``{"image_id", "category_id", "bbox": [x, y, w, h],
+        "score"}`` with the bbox in COCO ``xywh`` (top-left + size, original-image
+        pixels). ``category_id`` is the contiguous class id this library predicts;
+        pass ``image_id`` to tag the detections with a dataset image id. Pure
+        Python — no extra dependency.
+        """
+        out = []
+        for xyxy, conf, cls in self.boxes:
+            x1, y1, x2, y2 = (float(v) for v in xyxy)
+            out.append(
+                {
+                    "image_id": image_id,
+                    "category_id": int(cls),
+                    "bbox": [x1, y1, x2 - x1, y2 - y1],
+                    "score": float(conf),
+                }
+            )
+        return out
+
+    def to_supervision(self):
+        """Convert to a ``supervision.Detections`` (``xyxy``/``confidence``/``class_id``).
+
+        Boxes are the original-scale ``xyxy`` corners (float32); class ids are the
+        contiguous labels. Requires the ``supervision`` package.
+        """
+        try:
+            import supervision as sv
+        except ImportError as e:  # pragma: no cover - trivial guard
+            raise ImportError(
+                "Results.to_supervision() needs supervision — install it with "
+                "`pip install supervision` or `pip install dfine[interop]`."
+            ) from e
+
+        xyxy = self.boxes.xyxy.cpu().numpy().reshape(-1, 4).astype(np.float32)
+        conf = self.boxes.conf.cpu().numpy().reshape(-1).astype(np.float32)
+        cls = self.boxes.cls.cpu().numpy().reshape(-1).astype(int)
+        return sv.Detections(xyxy=xyxy, confidence=conf, class_id=cls)

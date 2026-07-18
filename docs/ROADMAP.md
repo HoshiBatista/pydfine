@@ -180,7 +180,7 @@ ported modules into one model behind the public API.
 - [ ] Make native the default backend once parity holds across n/s/m/l/x.
 
 ## Phase 6 — Polish
-- [ ] `Results` interop: `to_supervision()`, `to_coco()`, `to_pandas()`.
+- [x] `Results` interop: `to_supervision()`, `to_coco()`, `to_pandas()`.
 - [ ] Optional ByteTrack tracker on `predict_video`.
 - [ ] Docs site / API reference generation.
 - [ ] Publish to PyPI (choose final package name; update imports).
@@ -189,6 +189,17 @@ ported modules into one model behind the public API.
 
 ## Notes / decisions log
 - (add dated notes here as you learn things that affect later phases)
+- **2026-07-18 — Phase 6: `Results` interop landed.** Added three converters on
+  `dfine.results.Results`: `to_pandas()` (ultralytics `.pandas().xyxy[0]` column
+  layout — `xmin,ymin,xmax,ymax,confidence,class,name`; empty frame still carries the
+  columns), `to_coco(image_id=0)` (COCO `loadRes` result dicts — `xywh` bbox in
+  original-image pixels, contiguous `category_id`; pure-Python, no extra dep), and
+  `to_supervision()` (a `supervision.Detections` with float32 `xyxy`/`confidence` +
+  int `class_id`). pandas/supervision are lazily imported with a clear install hint and
+  gathered under a new `[interop]` extra (also added to `[dev]` so CI runs the tests, not
+  skips). Boxes are already original-scale from the postprocessor, so no rescale here.
+  Tests: `test_results.py` covers coco (+empty), pandas (+empty-columns), supervision
+  (+empty). Full suite 186 passed / 12 skipped (weight-gated).
 - **2026-07-17 — Phase 3 (export) complete.** `dfine/export/onnx.py` wraps the
   deploy-mode model + postprocessor into one `DeployModel` and exports a single ONNX
   graph with the upstream two-input signature `(images, orig_target_sizes)` → three

@@ -50,3 +50,50 @@ def test_empty_results_plot():
     r = _results(0)
     assert len(r) == 0
     assert r.plot().shape == (64, 96, 3)  # no boxes -> unchanged image
+
+
+def test_to_coco():
+    r = _results(2)
+    dets = r.to_coco(image_id=7)
+    assert [d["image_id"] for d in dets] == [7, 7]
+    assert [d["category_id"] for d in dets] == [0, 2]
+    # xyxy [1,1,20,20] -> xywh [1,1,19,19]
+    assert dets[0]["bbox"] == [1.0, 1.0, 19.0, 19.0]
+    assert dets[0]["score"] == pytest.approx(0.9)
+    assert dets[1]["bbox"] == [5.0, 5.0, 35.0, 25.0]
+
+
+def test_to_coco_empty():
+    assert _results(0).to_coco() == []
+
+
+def test_to_pandas():
+    pytest.importorskip("pandas")
+    df = _results(2).to_pandas()
+    assert list(df.columns) == ["xmin", "ymin", "xmax", "ymax", "confidence", "class", "name"]
+    assert len(df) == 2
+    assert df.iloc[0]["name"] == "person" and int(df.iloc[0]["class"]) == 0
+    assert df.iloc[1]["xmax"] == pytest.approx(40.0)
+
+
+def test_to_pandas_empty_keeps_columns():
+    pytest.importorskip("pandas")
+    df = _results(0).to_pandas()
+    assert len(df) == 0
+    assert list(df.columns) == ["xmin", "ymin", "xmax", "ymax", "confidence", "class", "name"]
+
+
+def test_to_supervision():
+    sv = pytest.importorskip("supervision")
+    det = _results(2).to_supervision()
+    assert isinstance(det, sv.Detections)
+    assert det.xyxy.shape == (2, 4)
+    assert list(det.class_id) == [0, 2]
+    assert det.confidence[0] == pytest.approx(0.9)
+
+
+def test_to_supervision_empty():
+    pytest.importorskip("supervision")
+    det = _results(0).to_supervision()
+    assert det.xyxy.shape == (0, 4)
+    assert len(det) == 0
