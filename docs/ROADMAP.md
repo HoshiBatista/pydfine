@@ -191,6 +191,19 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-18 — Second review pass: CLI wiring, scheduler fields, predict imgsz guard.**
+  (1) `predict`/`train`/`val` were stale CLI stubs printing "not implemented — arriving in
+  Phase 2/4" although the `DFINE` API implements all three; wired them to the API
+  (`dfine predict <model> <img…>`, `dfine val <model> --data`, `dfine train <model> --data
+  [--devices N]`) sharing a `_build_model` (checkpoint-name or bare-size+`--weights`).
+  (2) Added `DFINEConfig.lr_milestones`/`lr_gamma` so the documented exact-upstream
+  schedule (`scheduler="multistep", lr_milestones=[500]`) actually works — they were read
+  via `getattr` but weren't dataclass fields, so passing them used to raise `TypeError`.
+  (3) **Bug found + fixed:** `DFINE.predict(imgsz=X)` with `X != cfg.imgsz` crashed deep in
+  the encoder (positional embeddings are precomputed for `cfg.imgsz`) — the same footgun
+  `export` guards; `predict` now raises the same clear `ValueError`. Tests: CLI predict
+  run + required-arg parsing, multistep-milestone scheduler, predict-imgsz guard. Full
+  suite 200 passed / 12 skipped.
 - **2026-07-18 — Upstream config parity audit (all sizes).** Re-verified every preset
   against `D-FINE/configs/dfine/*` (5 size YAMLs + `include/{dfine_hgnetv2,optimizer,
   dataloader}.yml`, `runtime.yml`). **Model architecture matches upstream exactly for

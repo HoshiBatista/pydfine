@@ -1,23 +1,33 @@
 """``dfine`` command-line entrypoint.
 
 ``dfine models`` (inspect presets/checkpoints) and ``dfine convert`` (YAML-free, torch-
-free) run in a base install. ``dfine export`` needs the export extra. ``predict``/
-``train``/``val`` are declared so the surface is visible and report where they live.
+free) run in a base install. ``dfine predict``/``train``/``val``/``export`` build a model
+and need the inference deps (``dfine[torch]``; ``export`` also needs ``dfine[export]``).
+
+The ``model`` argument on the model commands is either a checkpoint name (``dfine-s``)
+— resolved + downloaded via :meth:`DFINE.from_pretrained` — or a bare size (``n``..``x``),
+optionally with local ``--weights``.
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
+from pathlib import Path
 
 from .config import DFINEConfig, list_presets
 from .registry import CHECKPOINTS, list_checkpoints
 
-_NOT_READY = {
-    "predict": "Phase 2 (backend + inference)",
-    "train": "Phase 4 (training)",
-    "val": "Phase 4 (validation)",
-}
+
+def _build_model(model_arg: str, weights: str | None = None, **overrides):
+    """Build a :class:`DFINE` from a checkpoint name or a bare size (+ optional weights)."""
+    from .model import DFINE
+
+    if model_arg.lower() in CHECKPOINTS:
+        return DFINE.from_pretrained(model_arg.lower(), **overrides)
+    model = DFINE(size=model_arg, **overrides)
+    if weights:
+        model.load(weights)
+    return model
 
 
 def _cmd_models(_: argparse.Namespace) -> int:
@@ -50,6 +60,39 @@ def _cmd_convert(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_predict(args: argparse.Namespace) -> int:
+    model = _build_model(args.model, args.weights)
+    results = model.predict(args.source, conf=args.conf, imgsz=args.imgsz)
+    out_dir = Path(args.output)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for src, res in zip(args.source, results):
+        dst = out_dir / f"{Path(src).stem}_pred.jpg"
+        res.save(dst)
+        print(f"  {Path(src).name}: {len(res)} detections -> {dst}")
+    return 0
+
+
+def _cmd_val(args: argparse.Namespace) -> int:
+    model = _build_model(args.model, args.weights, remap_mscoco_category=args.remap)
+    metrics = model.val(data=args.data)
+    for key, value in metrics.items():
+        print(f"  {key:<10} {value:.4f}")
+    return 0
+
+
+def _cmd_train(args: argparse.Namespace) -> int:
+    model = _build_model(args.model, args.weights)
+    model.train(
+        data=args.data,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        output_dir=args.output_dir,
+        devices=args.devices,
+    )
+    print(f"training done -> {args.output_dir}")
+    return 0
+
+
 def _cmd_export(args: argparse.Namespace) -> int:
     from .model import DFINE
 
@@ -75,10 +118,9 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_stub(args: argparse.Namespace) -> int:
-    where = _NOT_READY[args.command]
-    print(f"`dfine {args.command}` is not implemented yet — arriving in {where}.", file=sys.stderr)
-    return 2
+def _add_model_arg(p: argparse.ArgumentParser) -> None:
+    p.add_argument("model", help="a checkpoint name (e.g. dfine-s) or a size (n/s/m/l/x)")
+    p.add_argument("--weights", default=None, help="local .pth to load (for a bare size)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -97,30 +139,54 @@ def build_parser() -> argparse.ArgumentParser:
         "--symlink", action="store_true", help="symlink images instead of copying them"
     )
 
+    pred = sub.add_parser("predict", help="detect objects in image(s) and save annotated output")
+    _add_model_arg(pred)
+    pred.add_argument("source", nargs="+", help="image path(s) to run detection on")
+    pred.add_argument("--conf", type=float, default=0.25, help="score threshold")
+    pred.add_argument("--imgsz", type=int, default=None, help="inference resolution")
+    pred.add_argument("--output", default="runs/predict", help="output directory")
+
+    val = sub.add_parser("val", help="evaluate COCO metrics on a dataset")
+    _add_model_arg(val)
+    val.add_argument(
+        "--data", required=True, help="COCO dataset root (with val2017/ + annotations)"
+    )
+    val.add_argument(
+        "--remap", action="store_true", help="remap to MS-COCO ids (for stock 80-class COCO GT)"
+    )
+
+    tr = sub.add_parser("train", help="fine-tune on a COCO dataset")
+    _add_model_arg(tr)
+    tr.add_argument("--data", required=True, help="COCO dataset root")
+    tr.add_argument("--epochs", type=int, default=None, help="override the preset's epoch count")
+    tr.add_argument("--batch-size", type=int, default=4, help="per-step batch size")
+    tr.add_argument("--output-dir", default="runs/train", help="checkpoints/logs directory")
+    tr.add_argument("--devices", type=int, default=None, help="number of GPUs (multi-GPU DDP)")
+
     exp = sub.add_parser("export", help="export a model to ONNX")
-    exp.add_argument("model", help="a checkpoint name (e.g. dfine-s) or a size (n/s/m/l/x)")
-    exp.add_argument("--weights", default=None, help="local .pth to load (for a bare size)")
+    _add_model_arg(exp)
     exp.add_argument("--file", default=None, help="output .onnx path (default dfine-<size>.onnx)")
     exp.add_argument("--imgsz", type=int, default=None, help="input resolution (default cfg.imgsz)")
     exp.add_argument("--batch", type=int, default=1, help="dummy trace batch size")
     exp.add_argument("--no-dynamic", action="store_true", help="fix the batch dim (no dynamic N)")
     exp.add_argument("--simplify", action="store_true", help="run onnxsim on the graph")
     exp.add_argument("--opset", type=int, default=16, help="ONNX opset version")
-
-    for name in _NOT_READY:
-        sub.add_parser(name, help=f"(coming soon) {name}")
     return parser
+
+
+_COMMANDS = {
+    "models": _cmd_models,
+    "convert": _cmd_convert,
+    "predict": _cmd_predict,
+    "val": _cmd_val,
+    "train": _cmd_train,
+    "export": _cmd_export,
+}
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command == "models":
-        return _cmd_models(args)
-    if args.command == "export":
-        return _cmd_export(args)
-    if args.command == "convert":
-        return _cmd_convert(args)
-    return _cmd_stub(args)
+    return _COMMANDS[args.command](args)
 
 
 if __name__ == "__main__":

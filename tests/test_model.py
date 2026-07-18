@@ -52,6 +52,14 @@ def test_predict_single_returns_results():
     assert r.boxes.xyxy.shape == (m.config.num_top_queries, 4)
 
 
+def test_predict_imgsz_must_match_model():
+    # The encoder's positional embeddings are precomputed for cfg.imgsz, so predicting at
+    # a different resolution must raise clearly rather than crash deep in the encoder.
+    m = _model()
+    with pytest.raises(ValueError, match="must equal the model's imgsz"):
+        m.predict(_image(), imgsz=IMGSZ // 2)
+
+
 def test_predict_batch_and_call_alias():
     m = _model()
     imgs = [_image(640, 480), _image(320, 320)]

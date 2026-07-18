@@ -160,6 +160,21 @@ def test_flatcosine_scheduler_is_flat_then_decays():
     assert opt.param_groups[-1]["lr"] < base  # cosine tail decayed
 
 
+def test_multistep_scheduler_honors_config_milestones():
+    from torch.optim.lr_scheduler import MultiStepLR
+
+    model = NativeDFINE.from_config(_cfg())
+    cfg = _cfg(scheduler="multistep", lr_milestones=[2], lr_gamma=0.1, epochs=10)
+    opt = build_optimizer(model, cfg)
+    sched = build_lr_scheduler(opt, cfg)
+    assert isinstance(sched, MultiStepLR)
+    base = opt.param_groups[-1]["lr"]
+    opt.step()
+    for _ in range(2):  # step past the milestone at epoch 2
+        sched.step()
+    assert opt.param_groups[-1]["lr"] == pytest.approx(base * 0.1)
+
+
 # --- the loop actually optimizes ----------------------------------------------
 
 

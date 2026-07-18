@@ -194,6 +194,12 @@ class DFINE:
         """
         images = _load_images(source)
         size = imgsz or self.config.imgsz
+        if size != self.config.imgsz:
+            raise ValueError(
+                f"predict(imgsz={size}) must equal the model's imgsz ({self.config.imgsz}): the "
+                "encoder's positional embeddings are precomputed for that resolution. Build the "
+                f"model at this size instead — DFINE(size=..., imgsz={size})."
+            )
         transform = T.Compose([T.Resize((size, size)), T.ToTensor()])
 
         batch = torch.stack([transform(im) for im in images]).to(self.device)
