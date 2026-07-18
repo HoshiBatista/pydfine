@@ -34,12 +34,23 @@ _PALETTE = [
 
 
 class Boxes:
-    """Detected boxes for one image: ``xyxy`` (pixels), ``conf``, ``cls``."""
+    """Detected boxes for one image: ``xyxy`` (pixels), ``conf``, ``cls``.
 
-    def __init__(self, xyxy: torch.Tensor, conf: torch.Tensor, cls: torch.Tensor):
+    ``id`` holds per-box track ids when the boxes came from a tracker (e.g.
+    :meth:`DFINE.predict_video` with ``track=True``); it is ``None`` otherwise.
+    """
+
+    def __init__(
+        self,
+        xyxy: torch.Tensor,
+        conf: torch.Tensor,
+        cls: torch.Tensor,
+        id: torch.Tensor | None = None,
+    ):
         self.xyxy = xyxy
         self.conf = conf
         self.cls = cls
+        self.id = id
 
     def __len__(self) -> int:
         return int(self.xyxy.shape[0])
@@ -67,23 +78,31 @@ class Results:
     def __repr__(self) -> str:
         return f"Results(image={self.orig_shape[1]}x{self.orig_shape[0]}, boxes={len(self)})"
 
-    def _label(self, cls_id: int, conf: float) -> str:
+    def _label(self, cls_id: int, conf: float, track_id: int | None = None) -> str:
         name = self.names.get(cls_id, str(cls_id)) if self.names else str(cls_id)
-        return f"{name} {conf:.2f}"
+        prefix = f"#{track_id} " if track_id is not None else ""
+        return f"{prefix}{name} {conf:.2f}"
 
     def plot(self, line_width: int | None = None) -> np.ndarray:
-        """Draw boxes+labels on a copy of the image; return an RGB HWC uint8 array."""
+        """Draw boxes+labels on a copy of the image; return an RGB HWC uint8 array.
+
+        When the boxes carry track ids (``boxes.id``), each label is prefixed with
+        ``#<id>`` and boxes are colored by track id so an object keeps its color.
+        """
         img = self.orig_img.convert("RGB").copy()
         draw = ImageDraw.Draw(img)
         lw = line_width or max(2, round(sum(self.orig_shape) / 600))
+        ids = self.boxes.id
 
-        for xyxy, conf, cls in self.boxes:
+        for i, (xyxy, conf, cls) in enumerate(self.boxes):
             cls_id = int(cls)
-            color = _PALETTE[cls_id % len(_PALETTE)]
+            track_id = int(ids[i]) if ids is not None else None
+            # Color by track id when tracking (stable per object), else by class.
+            color = _PALETTE[(track_id if track_id is not None else cls_id) % len(_PALETTE)]
             box = [float(v) for v in xyxy]
             draw.rectangle(box, outline=color, width=lw)
 
-            text = self._label(cls_id, float(conf))
+            text = self._label(cls_id, float(conf), track_id)
             tl = draw.textbbox((box[0], box[1]), text)
             draw.rectangle([tl[0], tl[1], tl[2], tl[3]], fill=color)
             draw.text((box[0], box[1]), text, fill=(255, 255, 255))
