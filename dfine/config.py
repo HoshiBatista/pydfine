@@ -13,6 +13,7 @@ human-readable description of each field.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields, replace
+from pathlib import Path
 from typing import Any
 
 # Preset selector values accepted by ``size=`` / ``DFINEConfig.preset``.
@@ -174,7 +175,69 @@ class DFINEConfig:
     def from_dict(cls, data: dict[str, Any]) -> DFINEConfig:
         """Construct from a dict, ignoring unknown keys."""
         known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        kwargs = {k: v for k, v in data.items() if k in known}
+        # ``betas`` is a tuple field; YAML/JSON round-trips it as a list — coerce back so
+        # equality (and downstream tuple assumptions) hold exactly.
+        if isinstance(kwargs.get("betas"), list):
+            kwargs["betas"] = tuple(kwargs["betas"])
+        return cls(**kwargs)
+
+    # ------------------------------------------------------- YAML interop --
+    # The primary config surface is typed Python params (no YAML). These are an
+    # *optional* convenience for saving/sharing a config; they need PyYAML
+    # (``pip install dfine[train]``), imported lazily so the base install never does.
+
+    @staticmethod
+    def _require_yaml():
+        try:
+            import yaml
+        except ImportError as exc:  # pragma: no cover - trivial guard
+            raise ImportError(
+                "YAML interop needs PyYAML — install with `pip install pyyaml` or "
+                "`pip install dfine[train]`."
+            ) from exc
+        return yaml
+
+    def to_yaml(self, path: str | Path | None = None) -> str | Path:
+        """Serialize the config to YAML: return the string, or write it to ``path``.
+
+        Round-trips through :meth:`from_yaml`. Tuples (e.g. ``betas``) are written as
+        lists so the output is plain, safe YAML.
+        """
+        yaml = self._require_yaml()
+        data = {k: (list(v) if isinstance(v, tuple) else v) for k, v in self.to_dict().items()}
+        text = yaml.safe_dump(data, sort_keys=False)
+        if path is None:
+            return text
+        out = Path(path)
+        out.write_text(text)
+        return out
+
+    @classmethod
+    def from_yaml(cls, source: str | Path) -> DFINEConfig:
+        """Build a config from a YAML file path or a YAML string (unknown keys ignored).
+
+        ``source`` is a :class:`~pathlib.Path`, a path string ending in ``.yaml``/``.yml``,
+        or the YAML text itself. Validation runs on construction.
+        """
+        yaml = cls._require_yaml()
+        if isinstance(source, Path):
+            text = source.read_text()
+        elif (
+            isinstance(source, str)
+            and "\n" not in source
+            and source.rstrip().endswith((".yaml", ".yml"))
+        ):
+            p = Path(source)
+            if not p.exists():
+                raise FileNotFoundError(f"YAML config not found: {source!r}")
+            text = p.read_text()
+        else:
+            text = source
+        data = yaml.safe_load(text)
+        if not isinstance(data, dict):
+            raise ValueError("from_yaml expected a YAML mapping (file path or YAML string).")
+        return cls.from_dict(data)
 
     # ---------------------------------------------------------- validation --
     def _validate(self) -> None:
