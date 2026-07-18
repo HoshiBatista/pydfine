@@ -59,10 +59,10 @@ ported modules into one model behind the public API.
       (n/s/m/l/x) for raw boxes, final boxes, scores, and labels.
 
 ## Phase 3 — Export
-- [ ] `dfine/export/onnx.py`: dynamic-batch ONNX with `(images, orig_target_sizes)`
+- [x] `dfine/export/onnx.py`: dynamic-batch ONNX with `(images, orig_target_sizes)`
       signature + optional `onnxsim`.
-- [ ] `DFINE.export(format="onnx")`; smoke test that onnxruntime runs the graph.
-- [ ] Helpers/docs for TensorRT (`trtexec --fp16`) and OpenVINO downstream.
+- [x] `DFINE.export(format="onnx")`; smoke test that onnxruntime runs the graph.
+- [x] Helpers/docs for TensorRT (`trtexec --fp16`) and OpenVINO downstream.
 
 ## Phase 4 — Training
 - [x] `train/trainer.py`: the D-FINE loop ported single-process — `build_param_groups`
@@ -180,7 +180,7 @@ ported modules into one model behind the public API.
 - [ ] Make native the default backend once parity holds across n/s/m/l/x.
 
 ## Phase 6 — Polish
-- [ ] `Results` interop: `to_supervision()`, `to_coco()`, `to_pandas()`.
+- [x] `Results` interop: `to_supervision()`, `to_coco()`, `to_pandas()`.
 - [ ] Optional ByteTrack tracker on `predict_video`.
 - [ ] Docs site / API reference generation.
 - [ ] Publish to PyPI (choose final package name; update imports).
@@ -189,6 +189,50 @@ ported modules into one model behind the public API.
 
 ## Notes / decisions log
 - (add dated notes here as you learn things that affect later phases)
+- **2026-07-18 — Phase 6: `Results` interop landed.** Added three converters on
+  `dfine.results.Results`: `to_pandas()` (ultralytics `.pandas().xyxy[0]` column
+  layout — `xmin,ymin,xmax,ymax,confidence,class,name`; empty frame still carries the
+  columns), `to_coco(image_id=0)` (COCO `loadRes` result dicts — `xywh` bbox in
+  original-image pixels, contiguous `category_id`; pure-Python, no extra dep), and
+  `to_supervision()` (a `supervision.Detections` with float32 `xyxy`/`confidence` +
+  int `class_id`). pandas/supervision are lazily imported with a clear install hint and
+  gathered under a new `[interop]` extra (also added to `[dev]` so CI runs the tests, not
+  skips). Boxes are already original-scale from the postprocessor, so no rescale here.
+  Tests: `test_results.py` covers coco (+empty), pandas (+empty-columns), supervision
+  (+empty). Full suite 186 passed / 12 skipped (weight-gated).
+- **2026-07-17 — Phase 3 (export) complete.** `dfine/export/onnx.py` wraps the
+  deploy-mode model + postprocessor into one `DeployModel` and exports a single ONNX
+  graph with the upstream two-input signature `(images, orig_target_sizes)` → three
+  outputs `(labels, boxes, scores)` (xyxy in original scale), batch dim dynamic `N` by
+  default (traced with batch≥2 so the graph generalises). Forces the legacy TorchScript
+  exporter (`dynamo=False`) at opset 16 — no `onnxscript` dep. `onnx.checker` runs on the
+  result; optional `onnxsim`. `tensorrt_command()` emits the `trtexec --fp16` line with a
+  dynamic-batch optimisation profile; OpenVINO's `ovc` noted in the docstrings. Public
+  facade `DFINE.export(format="onnx", …)` + `dfine export <name|size>` CLI. The `[export]`
+  extra (`onnx`/`onnxruntime`/`onnxsim`) is lazily imported so building a model never
+  needs them. **Gotcha (now guarded):** the encoder precomputes positional embeddings
+  sized to `cfg.imgsz`, so the export resolution must equal the model's `imgsz` — mismatch
+  used to crash deep in the encoder with a cryptic shape error; `DFINE.export` now raises a
+  clear `ValueError`, and the CLI builds the bare-size model *at* `--imgsz`. Removed the
+  now-dead `DFINE._not_ready` stub (export was its last user). Tests: valid graph + named
+  I/O, onnxruntime≈torch, dynamic + static batch, no-mutation of the live model, facade
+  default filename, unknown-format reject, `trtexec` builder, CLI (`test_export.py`, green).
+- **2026-07-17 — FIXED (pre-existing bug, surfaced while testing export): multi-scale
+  training could undershoot `num_queries` at small `imgsz`.** `dataset.generate_scales(
+  base_size)` jitters down to `≈0.75×base_size`; for `imgsz=320` the smallest scale is
+  224 px, which gives the 2-level N model only `(224/16)²+(224/32)² = 245` encoder tokens
+  — fewer than the decoder's `num_queries=300` top-k, so `_select_topk` raised `selected
+  index k out of range`. The collate picks the scale with `random.choice`, and Python
+  seeds `random` from OS entropy per process (no `pytest-randomly` here), so it hit 224 in
+  ~1 of every ~13 fresh `pytest` runs — an intermittent failure in
+  `test_train_from_data_path`, unrelated to the export change that happened to expose it.
+  Upstream trains at 640 (min scale 480 → 1125 tokens) so never hits it. **Fix:** new
+  `dataset.min_multiscale_size(feat_strides, num_queries)` computes the smallest 32-px-grid
+  size whose token count ≥ `num_queries`; `generate_scales(..., min_size=)` drops any scale
+  below it (keeps `base_size` as fallback), and `build_coco_dataloader` derives the floor
+  from `cfg` (so `DFINE.train(data=…)` inherits it). Verified: 0/18 fresh-process runs fail
+  (was ~1/18 on clean `main`). Tests: `test_min_multiscale_size_meets_num_queries` +
+  `test_generate_scales_floor_drops_starving_sizes` (`test_dataset.py`).
 - ~~Backend default is Path B (transformers) until Phase 5 parity lands.~~
 - **2026-07-11 — DECISION: go Path A (native port) directly**, per repo owner. We
   port the needed modules out of `D-FINE/src/` and rewrite them YAML/registry-free,
