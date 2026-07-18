@@ -1,0 +1,21 @@
+pydfine
+Copyright 2026 pydfine contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It is a derivative work of D-FINE and includes source code ported from it:
+
+  D-FINE — https://github.com/Peterande/D-FINE
+  Copyright 2024 The D-FINE Authors
+  Licensed under the Apache License, Version 2.0.
+
+The ported modules under `dfine/backends/native/` preserve upstream layer and
+parameter names (so released D-FINE `.pth` checkpoints load unchanged) and each
+carries a per-file header naming its source file, license, and the changes made.
+
+D-FINE itself builds on earlier work; those attributions are retained in the
+relevant ported source files:
+
+  - RT-DETR — Copyright 2023 lyuwenyu — Apache-2.0
+  - DETR    — Copyright 2020 Facebook, Inc. — Apache-2.0
+  - PaddleDetection / PP-HGNetV2 — Apache-2.0

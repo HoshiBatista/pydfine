@@ -90,6 +90,9 @@ Paper = "https://arxiv.org/abs/2410.13842"
 [project.scripts]
 dfine = "dfine.cli:main"
 
+[tool.setuptools]
+license-files = ["LICENSE", "NOTICE"]
+
 [tool.setuptools.packages.find]
 include = ["dfine*"]
 
