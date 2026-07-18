@@ -4,6 +4,8 @@ A batteries-included Python library for the **D-FINE** real-time object detector
 ([Peterande/D-FINE](https://github.com/Peterande/D-FINE), ICLR 2025 Spotlight),
 with an `ultralytics`-style developer experience.
 
+📖 **Documentation:** <https://hoshibatista.github.io/pydfine/>
+
 **Design goal:** the entire model — backbone, encoder, decoder, losses, denoising,
 training, augmentation — is configured through **typed Python parameters on one
 class**. No YAML files, no config-registry indirection, no `torchrun` incantations.
