@@ -4,7 +4,7 @@ A batteries-included Python library for the **D-FINE** real-time object detector
 ([Peterande/D-FINE](https://github.com/Peterande/D-FINE), ICLR 2025 Spotlight),
 with an `ultralytics`-style developer experience.
 
-[![PyPI](https://img.shields.io/pypi/v/pydfine.svg)](https://pypi.org/project/pydfine/)
+[![PyPI](https://img.shields.io/pypi/v/pydfine)](https://pypi.org/project/pydfine/)
 [![Python](https://img.shields.io/pypi/pyversions/pydfine.svg)](https://pypi.org/project/pydfine/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
