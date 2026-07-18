@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import math
 import re
-import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Callable
@@ -35,10 +34,13 @@ from .visualizer import TrainingVisualizer
 
 __all__ = ["build_param_groups", "train_one_epoch", "Trainer"]
 
-# Copied verbatim from D-FINE configs/dfine/include/optimizer.yml so the AdamW
-# param grouping is identical to upstream.
+# Copied verbatim from D-FINE configs/dfine/include/optimizer.yml so the AdamW param
+# grouping is identical to upstream. Upstream ships two schemes: L/X (and the base) put
+# only `norm|bn` in the zero-weight-decay encoder/decoder group, while N/S/M also include
+# `bias` — selected per size by `cfg.zero_wd_encdec_bias`.
 _BACKBONE_NO_NORM = r"^(?=.*backbone)(?!.*norm).*$"
 _ENC_DEC_NORM = r"^(?=.*(?:encoder|decoder))(?=.*(?:norm|bn)).*$"
+_ENC_DEC_NORM_BIAS = r"^(?=.*(?:encoder|decoder))(?=.*(?:norm|bn|bias)).*$"
 
 
 def build_param_groups(model: nn.Module, cfg) -> list[dict]:
@@ -47,9 +49,12 @@ def build_param_groups(model: nn.Module, cfg) -> list[dict]:
     Each named parameter lands in exactly one group (first pattern wins), matching
     upstream ``get_optim_params``.
     """
+    enc_dec_pattern = (
+        _ENC_DEC_NORM_BIAS if getattr(cfg, "zero_wd_encdec_bias", False) else _ENC_DEC_NORM
+    )
     groups: list[dict] = [
         {"params": [], "lr": cfg.lr_backbone, "pattern": _BACKBONE_NO_NORM},
-        {"params": [], "weight_decay": 0.0, "pattern": _ENC_DEC_NORM},
+        {"params": [], "weight_decay": 0.0, "pattern": enc_dec_pattern},
     ]
     default = {"params": []}
     for name, p in model.named_parameters():
@@ -64,6 +69,20 @@ def build_param_groups(model: nn.Module, cfg) -> list[dict]:
     out = [{k: v for k, v in g.items() if k != "pattern"} for g in groups]
     out.append(default)
     return [g for g in out if g["params"]]
+
+
+def _new_grad_scaler():
+    """A CUDA AMP ``GradScaler`` via the modern ``torch.amp`` API where available.
+
+    ``torch.cuda.amp.GradScaler`` is deprecated (torch >= 2.4); ``torch.amp.GradScaler``
+    is the replacement but only exists on newer torch, so fall back for older versions.
+    """
+    if hasattr(torch.amp, "GradScaler"):
+        try:
+            return torch.amp.GradScaler("cuda")
+        except TypeError:  # pragma: no cover - very old signature
+            pass
+    return torch.cuda.amp.GradScaler()
 
 
 def build_optimizer(model: nn.Module, cfg) -> torch.optim.Optimizer:
@@ -139,9 +158,8 @@ def train_one_epoch(
 
         loss_value = loss.item()
         if not math.isfinite(loss_value):
-            print(f"Loss is {loss_value}, stopping training")
-            print({k: v.item() for k, v in loss_dict.items()})
-            sys.exit(1)
+            terms = {k: v.item() for k, v in loss_dict.items()}
+            raise RuntimeError(f"Loss is {loss_value}, stopping training. Loss terms: {terms}")
 
         logger.update(loss=loss_value, **{k: v.item() for k, v in loss_dict.items()})
         logger.update(lr=optimizer.param_groups[0]["lr"])
@@ -205,9 +223,7 @@ class Trainer:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
         want_amp = cfg.use_amp if use_amp is None else use_amp
-        self.scaler = (
-            torch.cuda.amp.GradScaler() if (want_amp and self.device.type == "cuda") else None
-        )
+        self.scaler = _new_grad_scaler() if (want_amp and self.device.type == "cuda") else None
         want_ema = cfg.ema_decay > 0 if use_ema is None else use_ema
         self.ema = (
             ModelEMA(self.module, decay=cfg.ema_decay, warmups=cfg.ema_warmups)

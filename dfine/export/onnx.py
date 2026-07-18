@@ -122,23 +122,32 @@ def export_onnx(
     return file
 
 
-def tensorrt_command(onnx_file: str | Path, *, fp16: bool = True, engine: str | None = None) -> str:
+def tensorrt_command(
+    onnx_file: str | Path,
+    *,
+    imgsz: int = 640,
+    fp16: bool = True,
+    engine: str | None = None,
+    max_batch: int = 32,
+) -> str:
     """Return the ``trtexec`` command to build a TensorRT engine from ``onnx_file``.
 
-    The graph's batch dim is dynamic, so TensorRT needs an optimization profile; this
-    provides sensible min/opt/max shapes. Run the returned command where ``trtexec`` (and
-    OpenVINO's ``ovc <onnx_file>`` for OpenVINO) is installed — those toolchains are not
-    Python deps here.
+    The graph's batch dim is dynamic (H/W are fixed to the export resolution), so
+    TensorRT needs an optimization profile; this provides min/opt/max shapes at
+    ``imgsz`` (pass the same value you exported with) with batch 1..``max_batch``. Run
+    the returned command where ``trtexec`` (and OpenVINO's ``ovc <onnx_file>`` for
+    OpenVINO) is installed — those toolchains are not Python deps here.
     """
     onnx_file = Path(onnx_file)
     engine = engine or str(onnx_file.with_suffix(".engine"))
+    hw = f"3x{imgsz}x{imgsz}"
     parts = [
         "trtexec",
         f"--onnx={onnx_file}",
         f"--saveEngine={engine}",
-        "--minShapes=images:1x3x640x640,orig_target_sizes:1x2",
-        "--optShapes=images:1x3x640x640,orig_target_sizes:1x2",
-        "--maxShapes=images:32x3x640x640,orig_target_sizes:32x2",
+        f"--minShapes=images:1x{hw},orig_target_sizes:1x2",
+        f"--optShapes=images:1x{hw},orig_target_sizes:1x2",
+        f"--maxShapes=images:{max_batch}x{hw},orig_target_sizes:{max_batch}x2",
     ]
     if fp16:
         parts.append("--fp16")

@@ -116,7 +116,16 @@ def test_tensorrt_command_builder():
     assert "--onnx=model.onnx" in cmd
     assert "--fp16" in cmd
     assert "--minShapes=images:" in cmd
+    assert "3x640x640" in cmd  # default imgsz
     assert "--fp16" not in tensorrt_command("m.onnx", fp16=False)
+
+
+def test_tensorrt_command_uses_imgsz_and_max_batch():
+    cmd = tensorrt_command("m.onnx", imgsz=320, max_batch=8)
+    assert "--minShapes=images:1x3x320x320" in cmd
+    assert "--optShapes=images:1x3x320x320" in cmd
+    assert "--maxShapes=images:8x3x320x320" in cmd
+    assert "640" not in cmd  # no hardcoded resolution leaking through
 
 
 def test_cli_export(tmp_path):

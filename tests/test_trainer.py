@@ -61,6 +61,38 @@ def test_build_param_groups_splits_backbone_and_norms():
     assert grouped == total
 
 
+def _encdec_bias_wd(size):
+    """Return the weight_decay applied to encoder/decoder bias params for a preset."""
+    cfg = DFINEConfig.preset(size, backbone_pretrained=False)
+    model = NativeDFINE.from_config(cfg)
+    groups = build_param_groups(model, cfg)
+    # Map each param id -> its group's weight_decay (None = inherits optimizer default).
+    wd_by_id = {id(p): g.get("weight_decay") for g in groups for p in g["params"]}
+    for name, p in model.named_parameters():
+        # A *non-norm* enc/dec bias is what distinguishes the two schemes (a norm/bn bias
+        # is zero-wd under both). e.g. self_attn.in_proj_bias, sampling_offsets.bias.
+        is_encdec = "encoder" in name or "decoder" in name
+        if (
+            p.requires_grad
+            and name.endswith("bias")
+            and is_encdec
+            and "norm" not in name
+            and "bn" not in name
+        ):
+            return wd_by_id[id(p)]
+    return None
+
+
+def test_encdec_bias_zero_wd_matches_upstream_per_size():
+    # Upstream N/S/M put encoder/decoder biases in the zero-weight-decay group; L/X don't.
+    assert _encdec_bias_wd("n") == 0.0
+    assert _encdec_bias_wd("s") == 0.0
+    assert _encdec_bias_wd("m") == 0.0
+    # L/X: biases inherit the optimizer default (not in the zero-wd group).
+    assert _encdec_bias_wd("l") is None
+    assert _encdec_bias_wd("x") is None
+
+
 def test_build_optimizer_returns_adamw():
     model = NativeDFINE.from_config(_cfg())
     opt = build_optimizer(model, _cfg())
