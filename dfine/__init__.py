@@ -42,7 +42,7 @@ def __getattr__(name: str) -> Any:
         except ImportError as exc:  # torch/torchvision/pillow not installed
             raise AttributeError(
                 f"dfine.{name} needs the inference deps — install with "
-                f"`pip install dfine[torch]` (missing: {exc.name})."
+                f"`pip install pydfine[torch]` (missing: {exc.name})."
             ) from exc
         return getattr(mod, name)
     raise AttributeError(f"module 'dfine' has no attribute {name!r}")

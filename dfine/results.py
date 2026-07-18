@@ -129,7 +129,7 @@ class Results:
         except ImportError as e:  # pragma: no cover - trivial guard
             raise ImportError(
                 "Results.to_pandas() needs pandas — install it with `pip install pandas` "
-                "or `pip install dfine[interop]`."
+                "or `pip install pydfine[interop]`."
             ) from e
 
         columns = ["xmin", "ymin", "xmax", "ymax", "confidence", "class", "name"]
@@ -183,7 +183,7 @@ class Results:
         except ImportError as e:  # pragma: no cover - trivial guard
             raise ImportError(
                 "Results.to_supervision() needs supervision — install it with "
-                "`pip install supervision` or `pip install dfine[interop]`."
+                "`pip install supervision` or `pip install pydfine[interop]`."
             ) from e
 
         xyxy = self.boxes.xyxy.cpu().numpy().reshape(-1, 4).astype(np.float32)

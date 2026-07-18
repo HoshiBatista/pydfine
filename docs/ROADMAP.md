@@ -186,11 +186,27 @@ ported modules into one model behind the public API.
 - [x] `Results` interop: `to_supervision()`, `to_coco()`, `to_pandas()`.
 - [x] Optional ByteTrack tracker on `predict_video`.
 - [x] Docs site / API reference generation.
-- [ ] Publish to PyPI (choose final package name; update imports).
+- [x] Publish to PyPI (choose final package name; update imports).
 
 ---
 
 ## Notes / decisions log
+- **2026-07-18 — PyPI packaging (Phase 6, final task).** Distribution name is **`pydfine`**
+  (free on PyPI); the **import package stays `dfine`** and the CLI command stays `dfine`
+  (dist≠import, like scikit-learn→sklearn). Renamed only the distribution: `pyproject
+  name = "pydfine"`, all self-referential extras (`dfine[torch]`→`pydfine[torch]`, etc.)
+  and every user-facing `pip install dfine[...]` hint across code + current docs updated
+  to `pydfine` (imports untouched; ROADMAP history left as-is). Polished metadata: full
+  trove classifiers (Beta, py3.9–3.13, typed, topics), URLs now point at our repo + docs
+  site (Homepage/Documentation/Repository/Issues) with Upstream/Paper kept. New
+  `.github/workflows/publish.yml` builds sdist+wheel and publishes on a GitHub Release via
+  **PyPI Trusted Publishing (OIDC — no stored token)**. README gets PyPI/py-versions/license
+  badges. Verified: builds as `pydfine-0.0.1` (wheel packages `dfine/` + `dfine` console
+  script + LICENSE/NOTICE), `twine check` PASSED, `mkdocs --strict` clean, full suite 205
+  passed. **Owner actions to go live:** (1) on PyPI add a Trusted Publisher for project
+  `pydfine` (owner `HoshiBatista`, repo `pydfine`, workflow `publish.yml`, environment
+  `pypi`); (2) create a GitHub environment `pypi`; (3) publish a `v0.0.1` Release to
+  trigger the upload. **Phase 6 complete — roadmap done.**
 - **2026-07-18 — Docs site (MkDocs Material + mkdocstrings).** `mkdocs.yml` + `docs/
   index.md` (landing: install/quickstart/CLI) + `docs/api/*.md` (mkdocstrings
   `:::`-autodoc for `DFINE`, `DFINEConfig`, `Results`/`Boxes`, `ByteTrack`/`BYTETracker`,

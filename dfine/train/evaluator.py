@@ -13,7 +13,7 @@ predicted labels are contiguous ``0..N-1`` or the sparse MS-COCO ids, and those 
 match the ``category_id`` values in the ground-truth annotations JSON (stock MS-COCO =
 sparse ids → build the model with ``remap_mscoco_category=True``).
 
-Needs ``pip install dfine[train]`` (``faster-coco-eval``).
+Needs ``pip install pydfine[train]`` (``faster-coco-eval``).
 """
 
 from __future__ import annotations

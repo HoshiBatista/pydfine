@@ -19,7 +19,7 @@ skipped while the deterministic resize/convert tail keeps running. The dataloade
 forwards ``set_epoch`` down to this compose, so it just works with ``DFINE.train``.
 
 Plug in via ``build_coco_dataloader(..., transforms=train_transforms(imgsz, stop_epoch=…))``.
-Needs ``pip install dfine[train]``.
+Needs ``pip install pydfine[train]``.
 """
 
 from __future__ import annotations

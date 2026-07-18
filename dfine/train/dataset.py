@@ -13,7 +13,7 @@ The advanced training augmentations (photometric distort, zoom-out, IoU-crop, H-
 multi-scale) are Phase-4's ``augment.py`` task; pass your own ``transforms=`` to plug
 them in. Multi-scale jitter is available now via the collate function.
 
-Needs ``pip install dfine[train]`` (``faster-coco-eval`` provides the COCO parser).
+Needs ``pip install pydfine[train]`` (``faster-coco-eval`` provides the COCO parser).
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ try:
     from faster_coco_eval.utils.pytorch import FasterCocoDetection
 except ImportError as exc:  # pragma: no cover - exercised only without the train extra
     raise ImportError(
-        "COCO training data needs faster-coco-eval — install with `pip install dfine[train]`."
+        "COCO training data needs faster-coco-eval — install with `pip install pydfine[train]`."
     ) from exc
 
 # torchvision >= 0.16 exposes tv_tensors; 0.15.x still calls them datapoints.

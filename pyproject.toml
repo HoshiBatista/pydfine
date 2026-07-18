@@ -3,23 +3,34 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dfine"
+name = "pydfine"
 version = "0.0.1"
 description = "Ultralytics-style, config-first Python library for the D-FINE real-time object detector."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
 authors = [{ name = "pydfine contributors" }]
-keywords = ["d-fine", "object-detection", "detr", "computer-vision", "pytorch"]
+keywords = ["d-fine", "object-detection", "detr", "computer-vision", "pytorch", "onnx"]
 classifiers = [
-    "Programming Language :: Python :: 3",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Typing :: Typed",
 ]
 
 # Core install stays light: the config-first surface (DFINEConfig, presets, CLI
 # `dfine models`) is pure-Python and needs no torch. Heavy deps live in extras so
-# `pip install dfine` doesn't force a torch build on users who only inspect configs.
+# `pip install pydfine` doesn't force a torch build on users who only inspect configs.
 dependencies = [
     "numpy>=1.21",
 ]
@@ -33,7 +44,7 @@ torch = [
 ]
 # Training + validation (Hungarian matcher, COCO eval, logging, yaml interop).
 train = [
-    "dfine[torch]",
+    "pydfine[torch]",
     "scipy>=1.10",
     "faster-coco-eval>=1.6.6",
     "tensorboard>=2.13",
@@ -47,7 +58,7 @@ export = [
 ]
 # Video I/O for DFINE.predict_video (decode frames + write annotated mp4).
 video = [
-    "dfine[torch]",
+    "pydfine[torch]",
     "opencv-python>=4.6",
 ]
 # Results interop: DataFrame + supervision.Detections converters.
@@ -57,7 +68,7 @@ interop = [
 ]
 # Multi-object tracking on predict_video(track=True) — vendored ByteTrack (scipy only).
 track = [
-    "dfine[video]",
+    "pydfine[video]",
     "scipy>=1.10",
 ]
 # Documentation site (MkDocs Material + mkdocstrings API reference from docstrings).
@@ -67,7 +78,7 @@ docs = [
     "mkdocstrings[python]>=0.26",
 ]
 dev = [
-    "dfine[torch]",  # torch/torchvision/pillow — so the full suite runs (not skips)
+    "pydfine[torch]",  # torch/torchvision/pillow — so the full suite runs (not skips)
     "ruff==0.15.21",  # pinned to match .pre-commit-config + CI lint (format stability)
     "pytest>=7.0",
     "pytest-cov>=4.0",  # coverage reporting in CI
@@ -83,7 +94,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Peterande/D-FINE"
+Homepage = "https://github.com/HoshiBatista/pydfine"
+Documentation = "https://hoshibatista.github.io/pydfine/"
+Repository = "https://github.com/HoshiBatista/pydfine"
+Issues = "https://github.com/HoshiBatista/pydfine/issues"
 Upstream = "https://github.com/Peterande/D-FINE"
 Paper = "https://arxiv.org/abs/2410.13842"
 

@@ -2,7 +2,7 @@
 
 ``dfine models`` (inspect presets/checkpoints) and ``dfine convert`` (YAML-free, torch-
 free) run in a base install. ``dfine predict``/``train``/``val``/``export`` build a model
-and need the inference deps (``dfine[torch]``; ``export`` also needs ``dfine[export]``).
+and need the inference deps (``pydfine[torch]``; ``export`` also needs ``pydfine[export]``).
 
 The ``model`` argument on the model commands is either a checkpoint name (``dfine-s``)
 — resolved + downloaded via :meth:`DFINE.from_pretrained` — or a bare size (``n``..``x``),

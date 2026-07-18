@@ -12,11 +12,11 @@ indirection, no `torchrun` incantations.
 ## Install
 
 ```bash
-pip install dfine              # core (config + CLI, torch-free)
-pip install dfine[torch]       # + inference (model build + predict)
-pip install dfine[train]       # + training / COCO val
-pip install dfine[export]      # + ONNX export
-pip install dfine[track]       # + ByteTrack on predict_video
+pip install pydfine              # core (config + CLI, torch-free)
+pip install pydfine[torch]       # + inference (model build + predict)
+pip install pydfine[train]       # + training / COCO val
+pip install pydfine[export]      # + ONNX export
+pip install pydfine[track]       # + ByteTrack on predict_video
 ```
 
 ## Quickstart

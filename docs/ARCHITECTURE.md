@@ -127,7 +127,7 @@ full per-size table.
 
 ## 6. Training recipe (`DFINE.train`) — implemented (Phase 4)
 
-Lives in `dfine/train/` (single-process; import needs `pip install dfine[train]`):
+Lives in `dfine/train/` (single-process; import needs `pip install pydfine[train]`):
 
 - **Optimizer** AdamW with **param groups** (`trainer.py::build_param_groups`): the
   upstream regex is copied *verbatim* — backbone (non-norm) at `lr_backbone`, enc/dec

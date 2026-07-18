@@ -4,7 +4,13 @@ A batteries-included Python library for the **D-FINE** real-time object detector
 ([Peterande/D-FINE](https://github.com/Peterande/D-FINE), ICLR 2025 Spotlight),
 with an `ultralytics`-style developer experience.
 
+[![PyPI](https://img.shields.io/pypi/v/pydfine.svg)](https://pypi.org/project/pydfine/)
+[![Python](https://img.shields.io/pypi/pyversions/pydfine.svg)](https://pypi.org/project/pydfine/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 📖 **Documentation:** <https://hoshibatista.github.io/pydfine/>
+
+Install: `pip install pydfine` (core, torch-free) — `import dfine` to use it.
 
 **Design goal:** the entire model — backbone, encoder, decoder, losses, denoising,
 training, augmentation — is configured through **typed Python parameters on one
@@ -66,7 +72,7 @@ Done so far:
   `DFINE(...).predict(...) -> Results` API (`.boxes.xyxy/.conf/.cls`, `.plot()/.save()`).
 
 - **Video** — `DFINE.predict_video(source, output=...)` writes an annotated mp4, or
-  `stream=True` yields per-frame `Results` (needs `pip install dfine[video]`).
+  `stream=True` yields per-frame `Results` (needs `pip install pydfine[video]`).
 
 - **Training loss** — `HungarianMatcher` + `DFINECriterion` (VFL + L1 + GIoU + FGL +
   DDF) ported and wired from the config; consumes the decoder's training-mode output.
@@ -75,7 +81,7 @@ Done so far:
   loop (AdamW param groups, EMA, AMP, grad clip, warmup + flat-cosine LR) with the same
   **progress visualization as upstream**: a live console readout (`MetricLogger`) plus
   TensorBoard scalars and a `loss_curve.png` under `output_dir` (needs
-  `pip install dfine[train]`; W&B optional).
+  `pip install pydfine[train]`; W&B optional).
 
 - **COCO data + augmentation** — `dfine.train.dataset.build_coco_dataloader(img_folder,
   ann_file, cfg=...)` gives a ready `(images, targets)` loader (contiguous-label remap,
@@ -119,7 +125,7 @@ out = decoder(encoder(backbone(torch.randn(1, 3, cfg.imgsz, cfg.imgsz))))
 > `train(data="coco/", epochs=...)` (a standard COCO root; the loaders are built for
 > you) and `train(train_loader, epochs=...)` (a hand-built loader) — and **COCO
 > evaluation** (`val(data="coco/")` → the 12 named COCO metrics, also run each epoch
-> during `train`), all with the `dfine[train]` extra. **Multi-GPU** is a single kwarg:
+> during `train`), all with the `pydfine[train]` extra. **Multi-GPU** is a single kwarg:
 > `train(data="coco/", devices=N)` spawns one DDP worker per GPU (or launch with
 > `torchrun` and call `train(...)` as usual). `export` is phase-stubbed and raises a
 > clear "arriving in Phase N" until implemented.

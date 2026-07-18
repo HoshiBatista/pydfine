@@ -3,7 +3,7 @@
 Upstream logs to a TensorBoard ``SummaryWriter`` (``Loss/total``, ``Loss/<term>``,
 ``Lr/pg_<i>``, ``Test/<metric>``) and optionally to Weights & Biases. This wraps both
 behind one object plus a self-contained matplotlib loss-curve PNG, so a bare
-``pip install dfine[train]`` already draws the training progress with no extra setup.
+``pip install pydfine[train]`` already draws the training progress with no extra setup.
 
 Every backend is optional and degrades gracefully: missing ``tensorboard`` / ``wandb`` /
 ``matplotlib`` just disables that output with a one-time note rather than failing the run.
@@ -56,7 +56,7 @@ class TrainingVisualizer:
             except ImportError:
                 print(
                     "[visualizer] tensorboard not installed — skipping TB logs "
-                    "(pip install dfine[train])."
+                    "(pip install pydfine[train])."
                 )
 
         self.wandb = None

@@ -7,7 +7,7 @@ ONNX runs on onnxruntime / TensorRT (`trtexec --fp16`) / OpenVINO downstream.
 
 The batch dimension is dynamic by default (``N``), so one export serves any batch size.
 ``onnx`` + ``onnxruntime`` (and optional ``onnxsim``) come from ``pip install
-dfine[export]`` and are imported lazily — building a model never requires them.
+pydfine[export]`` and are imported lazily — building a model never requires them.
 """
 
 from __future__ import annotations
