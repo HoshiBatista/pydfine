@@ -5,7 +5,7 @@ A batteries-included Python library for the **D-FINE** real-time object detector
 with an `ultralytics`-style developer experience.
 
 [![PyPI](https://img.shields.io/pypi/v/pydfine)](https://pypi.org/project/pydfine/)
-[![Python](https://shields.io)](https://pypi.org/project/pydfine/)
+[![Python](https://img.shields.io/pypi/pyversions/pydfine.svg)](https://pypi.org/project/pydfine/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 📖 **Documentation:** <https://hoshibatista.github.io/pydfine/>
