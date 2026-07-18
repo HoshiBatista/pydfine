@@ -34,10 +34,13 @@ from .visualizer import TrainingVisualizer
 
 __all__ = ["build_param_groups", "train_one_epoch", "Trainer"]
 
-# Copied verbatim from D-FINE configs/dfine/include/optimizer.yml so the AdamW
-# param grouping is identical to upstream.
+# Copied verbatim from D-FINE configs/dfine/include/optimizer.yml so the AdamW param
+# grouping is identical to upstream. Upstream ships two schemes: L/X (and the base) put
+# only `norm|bn` in the zero-weight-decay encoder/decoder group, while N/S/M also include
+# `bias` — selected per size by `cfg.zero_wd_encdec_bias`.
 _BACKBONE_NO_NORM = r"^(?=.*backbone)(?!.*norm).*$"
 _ENC_DEC_NORM = r"^(?=.*(?:encoder|decoder))(?=.*(?:norm|bn)).*$"
+_ENC_DEC_NORM_BIAS = r"^(?=.*(?:encoder|decoder))(?=.*(?:norm|bn|bias)).*$"
 
 
 def build_param_groups(model: nn.Module, cfg) -> list[dict]:
@@ -46,9 +49,12 @@ def build_param_groups(model: nn.Module, cfg) -> list[dict]:
     Each named parameter lands in exactly one group (first pattern wins), matching
     upstream ``get_optim_params``.
     """
+    enc_dec_pattern = (
+        _ENC_DEC_NORM_BIAS if getattr(cfg, "zero_wd_encdec_bias", False) else _ENC_DEC_NORM
+    )
     groups: list[dict] = [
         {"params": [], "lr": cfg.lr_backbone, "pattern": _BACKBONE_NO_NORM},
-        {"params": [], "weight_decay": 0.0, "pattern": _ENC_DEC_NORM},
+        {"params": [], "weight_decay": 0.0, "pattern": enc_dec_pattern},
     ]
     default = {"params": []}
     for name, p in model.named_parameters():

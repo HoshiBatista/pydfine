@@ -115,6 +115,7 @@ class DFINEConfig:
     lr: float = 2.5e-4  # base LR
     lr_backbone: float = 1.25e-5  # backbone LR
     weight_decay: float = 1.25e-4  # AdamW weight decay
+    zero_wd_encdec_bias: bool = False  # encoder/decoder biases get weight_decay=0 (N/S/M)
     betas: tuple[float, float] = (0.9, 0.999)  # AdamW betas
     clip_max_norm: float = 0.1  # grad clip
     warmup_iters: int = 500  # LR warmup iterations
@@ -241,6 +242,7 @@ SIZE_PRESETS: dict[str, dict[str, Any]] = {
         "lr": 8e-4,
         "lr_backbone": 4e-4,
         "weight_decay": 1e-4,
+        "zero_wd_encdec_bias": True,
         "epochs": 160,
         "no_aug_epoch": 12,
         "batch": 128,
@@ -260,6 +262,7 @@ SIZE_PRESETS: dict[str, dict[str, Any]] = {
         "lr": 2e-4,
         "lr_backbone": 1e-4,
         "weight_decay": 1e-4,
+        "zero_wd_encdec_bias": True,
         "epochs": 132,
         "no_aug_epoch": 12,
         "base_size_repeat": 20,
@@ -277,6 +280,7 @@ SIZE_PRESETS: dict[str, dict[str, Any]] = {
         "lr": 2e-4,
         "lr_backbone": 2e-5,
         "weight_decay": 1e-4,
+        "zero_wd_encdec_bias": True,
         "epochs": 132,
         "no_aug_epoch": 12,
         "base_size_repeat": 6,

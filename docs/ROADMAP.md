@@ -191,6 +191,22 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-18 — Upstream config parity audit (all sizes).** Re-verified every preset
+  against `D-FINE/configs/dfine/*` (5 size YAMLs + `include/{dfine_hgnetv2,optimizer,
+  dataloader}.yml`, `runtime.yml`). **Model architecture matches upstream exactly for
+  n/s/m/l/x** — no exceptions (backbone/return_idx/freeze/use_lab, encoder+decoder dims
+  incl. N's 512 FFN and X's 2048, feat_channels, num_levels, num_points, num_layers,
+  reg_scale=8 for X, X-decoder-stays-256, denoising/LQE/matcher/loss weights). Found +
+  fixed **one training discrepancy**: upstream ships two AdamW param-group schemes —
+  L/X(+base) zero-WD group is `(norm|bn)`, but **N/S/M also zero-WD the encoder/decoder
+  `bias`** (`norm|bn|bias`). The library hard-coded the L/X scheme for all sizes, so N/S/M
+  enc/dec biases (53/53/66 params) wrongly got `weight_decay=1e-4` instead of 0. Added
+  `DFINEConfig.zero_wd_encdec_bias` (True in n/s/m presets) + a size-faithful
+  `_ENC_DEC_NORM_BIAS` branch in `build_param_groups`; replay vs upstream regex now shows
+  0 zero-WD mismatches for n/s/m. Inference/`.pth` parity was never affected (grouping is
+  training-only). Remaining known deviations are deliberate: `scheduler="flatcosine"`
+  (added cosine no-aug tail; `"multistep"` = exact upstream) and upstream's
+  `ema_restart_decay` (X=0.9998) is not modeled.
 - (add dated notes here as you learn things that affect later phases)
 - **2026-07-18 — Phase 5 closed + Phase 6 ByteTrack tracker landed.** Ticked the
   "native default backend" box (formality — native is the only backend; Path B was
