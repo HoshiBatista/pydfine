@@ -501,19 +501,33 @@ class DFINE:
             device=self.device,
         )
 
-    def _iter_video(self, source, conf: float, imgsz: int | None):
+    @staticmethod
+    def _make_tracker(frame_rate: float):
+        """Build a fresh ByteTrack tracker (raises a clear error if scipy is missing)."""
+        try:
+            from .track import ByteTrack
+        except ImportError as e:  # pragma: no cover - trivial guard
+            raise ImportError(
+                "track=True needs scipy — install it with `pip install scipy` or "
+                "`pip install dfine[track]`."
+            ) from e
+        return ByteTrack(frame_rate=frame_rate)
+
+    def _iter_video(self, source, conf: float, imgsz: int | None, track: bool = False):
         """Yield one :class:`Results` per decoded frame (frames read as RGB)."""
         cv2 = _require_cv2()
         cap = cv2.VideoCapture(str(source))
         if not cap.isOpened():
             raise FileNotFoundError(f"Could not open video source: {source!r}")
+        tracker = self._make_tracker(cap.get(cv2.CAP_PROP_FPS) or 30.0) if track else None
         try:
             while True:
                 ok, frame = cap.read()
                 if not ok:
                     break
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                yield self.predict(rgb, conf=conf, imgsz=imgsz)[0]
+                result = self.predict(rgb, conf=conf, imgsz=imgsz)[0]
+                yield tracker.update(result) if tracker is not None else result
         finally:
             cap.release()
 
@@ -524,15 +538,20 @@ class DFINE:
         conf: float = 0.25,
         imgsz: int | None = None,
         stream: bool = False,
+        track: bool = False,
     ):
         """Detect objects frame-by-frame in a video.
 
         With ``stream=True`` returns a generator of per-frame :class:`Results` and
         writes nothing. Otherwise writes an annotated video to ``output`` (original
         resolution/fps) and returns its :class:`~pathlib.Path`.
+
+        With ``track=True`` each frame's detections are run through a ByteTrack tracker
+        so boxes carry a persistent ``boxes.id`` across frames (rendered as ``#id`` and
+        colored per track). Needs scipy (the ``[track]`` extra).
         """
         if stream:
-            return self._iter_video(source, conf, imgsz)
+            return self._iter_video(source, conf, imgsz, track)
 
         cv2 = _require_cv2()
         cap = cv2.VideoCapture(str(source))
@@ -543,6 +562,7 @@ class DFINE:
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         writer = cv2.VideoWriter(str(output), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+        tracker = self._make_tracker(fps) if track else None
         try:
             while True:
                 ok, frame = cap.read()
@@ -550,6 +570,8 @@ class DFINE:
                     break
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 result = self.predict(rgb, conf=conf, imgsz=imgsz)[0]
+                if tracker is not None:
+                    result = tracker.update(result)
                 writer.write(cv2.cvtColor(result.plot(), cv2.COLOR_RGB2BGR))
         finally:
             cap.release()

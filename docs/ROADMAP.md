@@ -177,11 +177,14 @@ ported modules into one model behind the public API.
       (`test_per_size_coco_parity`, gated on `DFINE_WEIGHTS_DIR`) now runs green
       against all 5 downloaded COCO `.pth` (n/s/m/l/x): 0 missing / 0 unexpected,
       finite forward pass. Uncovered + fixed an X-only arch bug — see 2026-07-14 note.
-- [ ] Make native the default backend once parity holds across n/s/m/l/x.
+- [x] Make native the default backend once parity holds across n/s/m/l/x. **Phase 5
+      complete** — native is the *only* backend (no `backend=` selector; Path B/
+      `transformers` was formally dropped 2026-07-11) and is wired directly in
+      `model.py`; per-size n/s/m/l/x parity holds (item above). Nothing to switch.
 
 ## Phase 6 — Polish
 - [x] `Results` interop: `to_supervision()`, `to_coco()`, `to_pandas()`.
-- [ ] Optional ByteTrack tracker on `predict_video`.
+- [x] Optional ByteTrack tracker on `predict_video`.
 - [ ] Docs site / API reference generation.
 - [ ] Publish to PyPI (choose final package name; update imports).
 
@@ -189,6 +192,25 @@ ported modules into one model behind the public API.
 
 ## Notes / decisions log
 - (add dated notes here as you learn things that affect later phases)
+- **2026-07-18 — Phase 5 closed + Phase 6 ByteTrack tracker landed.** Ticked the
+  "native default backend" box (formality — native is the only backend; Path B was
+  dropped 2026-07-11). Added an optional multi-object tracker on `predict_video`:
+  `DFINE.predict_video(..., track=True)` (both the mp4-writing and `stream=True` paths)
+  runs each frame's detections through a **vendored ByteTrack** so boxes gain a
+  persistent `boxes.id`. **Decision: vendor, don't depend on `supervision`** — its
+  `ByteTrack` is deprecated (removed in supervision v0.30), so building on it is tech
+  debt. New `dfine/track/`: `kalman_filter.py` (`KalmanFilterXYAH`, 8-state constant-
+  velocity), `byte_tracker.py` (`STrack` + `BYTETracker`, two-stage high/low-score IoU
+  association), `__init__.py` (`ByteTrack` adapter: `Results` → `Results` with ids).
+  numpy + scipy only (torch-free core; scipy's `linear_sum_assignment`/`cho_factor`
+  imported lazily) — a clean-room port of ByteTrack (Zhang et al., ECCV 2022; MIT), not
+  copied from GPL/AGPL sources. Added `Boxes.id` (None unless tracking) and made
+  `Results.plot()` prefix labels with `#id` and color by track id. New `[track]` extra
+  (`dfine[video]` + scipy); scipy already in `[dev]` so CI runs the tests. Tests
+  (`test_tracker.py`, 8): Kalman predict sanity, stable id for a moving box, distinct
+  ids for two objects, empty frame, per-instance id reset, `#id` label + plot, and a
+  real `predict_video(track=True, stream=True)` integration. Full suite 194 passed / 12
+  skipped.
 - **2026-07-18 — Phase 6: `Results` interop landed.** Added three converters on
   `dfine.results.Results`: `to_pandas()` (ultralytics `.pandas().xyxy[0]` column
   layout — `xmin,ymin,xmax,ymax,confidence,class,name`; empty frame still carries the

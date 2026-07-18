@@ -55,6 +55,11 @@ interop = [
     "pandas>=1.3",
     "supervision>=0.18",
 ]
+# Multi-object tracking on predict_video(track=True) — vendored ByteTrack (scipy only).
+track = [
+    "dfine[video]",
+    "scipy>=1.10",
+]
 dev = [
     "dfine[torch]",  # torch/torchvision/pillow — so the full suite runs (not skips)
     "ruff>=0.7",
