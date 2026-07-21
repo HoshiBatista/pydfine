@@ -186,8 +186,20 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       `from_config` dims, **+ the reused fuser strict-loads `dfine_seg_n_coco.pt`'s
       `decoder.mask_decoder.*` (0 missing/0 unexpected)**. Assembled model unchanged until SS2.
       Suite 241 passed / 16 skipped.
-- [ ] **SS2 Assemble sem_seg model** (decoder-slot swap when `task="sem_seg"`; argmax
-      postprocess → `[H,W]` uint8 label map at original res).
+- [x] **SS2 Assemble sem_seg model** *(2026-07-21)*. `DFINE.from_config` swaps the whole
+      decoder slot to `SemSegDecoder` when `task="sem_seg"` (detect/segment keep
+      `DFINETransformer`). Added a `DFINEConfig.uses_mask_fuser` property (segment **or**
+      sem_seg) and generalized `_seg_wiring` to it, so the nano low-level stride-8 plumbing
+      now fires for sem_seg too (`return_idx` prepend + `mask_low_level_ch`); `forward` peels
+      the extra feat unchanged. New `SemSegPostProcessor` (`native/sem_seg_postprocessor.py`,
+      exported): argmax over classes → per-image NEAREST resize to original `(W,H)` →
+      uint8 `[H,W]` label map (no letterbox, matching pydfine's resize path + upstream
+      `process_sem_seg`). **Detect/segment paths unchanged.** Tests (`test_sem_seg_model.py`,
+      7): wiring fires/no-ops per size, decoder swap + forward `[B,C,H,W]` at input res,
+      detect/segment still `DFINETransformer`, postproc argmax+resize to `(H0,W0)` uint8 +
+      identity-size argmax match, **+ (cache-gated) the assembled model's reused fuser
+      strict-loads `dfine_seg_n_coco.pt`'s `decoder.mask_decoder.*`**. Base import torch-free.
+      Suite 248 passed / 16 skipped.
 - [ ] **SS3 `Results` sem_seg surface** (`r.sem_seg` label map, palette overlay plot).
 - [ ] **SS4 sem_seg weights + parity** (HF `dfine_seg_*`; fixture vs D-FINE-seg).
 
