@@ -30,11 +30,13 @@ class DFINEConfig:
 
     # --- 1. Top-level / task -------------------------------------------------
     size: str | None = None  # "n"|"s"|"m"|"l"|"x" preset selector; None = manual
+    task: str = "detect"  # "detect" | "segment" (instance masks) | "sem_seg" (per-pixel)
     num_classes: int = 80  # number of object classes
     class_names: list[str] | None = None  # optional label names (len == num_classes)
     imgsz: int = 640  # square inference/training resolution (eval_spatial_size)
     device: str = "cpu"  # "cpu"|"cuda"|"cuda:0"|"mps"
     remap_mscoco_category: bool = False  # COCO-id remap; keep False for custom data
+    mask_dim: int = 256  # instance-mask embedding dim (128 for N); used when task="segment"
 
     # --- 2. Backbone (HGNetV2) ----------------------------------------------
     backbone: str = "hgnetv2_b4"  # variant hgnetv2_b0..b5
@@ -144,10 +146,17 @@ class DFINEConfig:
     base_size_repeat: int | None = 3  # multi-scale repeat factor
 
     # ------------------------------------------------------------------ API --
+    TASKS = ("detect", "segment", "sem_seg")
+
     def __post_init__(self) -> None:
         if self.decoder_hidden_dim is None:
             object.__setattr__(self, "decoder_hidden_dim", self.hidden_dim)
         self._validate()
+
+    @property
+    def enable_mask_head(self) -> bool:
+        """Whether the decoder runs the instance-mask branch (task="segment")."""
+        return self.task == "segment"
 
     @classmethod
     def preset(cls, size: str, **overrides: Any) -> DFINEConfig:
@@ -243,6 +252,8 @@ class DFINEConfig:
     def _validate(self) -> None:
         if self.size is not None and self.size not in SIZE_PRESETS:
             raise ValueError(f"size must be one of {SIZES} or None, got {self.size!r}.")
+        if self.task not in self.TASKS:
+            raise ValueError(f"task must be one of {self.TASKS}, got {self.task!r}.")
         if self.num_classes < 1:
             raise ValueError(f"num_classes must be >= 1, got {self.num_classes}.")
         if self.class_names is not None and len(self.class_names) != self.num_classes:
@@ -304,6 +315,7 @@ SIZE_PRESETS: dict[str, dict[str, Any]] = {
         "num_levels": 2,
         "num_points": [6, 6],
         "decoder_layers": 3,
+        "mask_dim": 128,  # nano instance-mask embedding dim (else 256)
         "lr": 8e-4,
         "lr_backbone": 4e-4,
         "weight_decay": 1e-4,

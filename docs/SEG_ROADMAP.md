@@ -124,10 +124,22 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       det-keys-unchanged-when-off, eval mask forward shape `[B,Q,H/4,W/4]` in [0,1], **+
       whole-decoder strict-load of `dfine_seg_n_coco.pt`'s `decoder.*` (0 missing/0
       unexpected)**. Assembled model still detection-only until S4. Suite 213 passed / 12 skipped.
-- [ ] **S4 Low-level-feat plumbing** in `native/dfine.py` (backbone extra stride-8 feature →
-      `low_level_feat`) + config derivation of `mask_low_level_ch`. Nano-path shape test.
-- [ ] **S5 Config + registry**: `task`/`mask_dim` fields, seg presets, `dfine_seg_<size>_coco`
-      catalogue + HF download source (`[hf]`/reuse `huggingface_hub`).
+- [x] **S4 Assembled seg model + config fields** *(2026-07-21)*. Added `DFINEConfig.task`
+      (`detect`/`segment`/`sem_seg`, validated) + `mask_dim` (128 for N, else 256) + derived
+      `enable_mask_head` property (**S5's config half, pulled forward**). `DFINE._seg_wiring(cfg)`
+      centralizes the segmentation wiring: when the mask head is on and the encoder has no
+      stride-8 level (nano), the backbone emits an extra stride-8 feature and `mask_low_level_ch`
+      = B0 stage2 channels; `from_config` passes them to backbone/decoder. `HGNetv2.from_config`
+      gained a `return_idx` override (no frozen-config mutation). `DFINE.forward` peels the extra
+      leading backbone feature into `low_level_feat`. **Detection path byte-identical** (wiring
+      no-ops for `task="detect"`). `docs/CONFIG_REFERENCE.md` updated. Verified: a `task="segment"`
+      nano model strict-loads the full `dfine_seg_n_coco.pt` (0 missing/0 unexpected) and its
+      forward yields `pred_masks [1,300,H/4,W/4]` in [0,1]. Tests `test_seg_model.py` (5).
+      Suite 218 passed / 12 skipped.
+- [ ] **S5 (remaining) Registry + HF weights**: `dfine_seg_<size>_coco` catalogue entries +
+      `huggingface_hub` download source (`[hf]` extra) so `DFINE.from_pretrained("dfine_seg_s")`
+      auto-fetches. (Config `task`/`mask_dim` fields already landed in S4.) The ArgoHA `.pt` is a
+      plain state_dict — check `native/loader.extract_state_dict` handles it (no `ema`/`model` wrap).
 - [ ] **S6 Mask postprocessing + `Results.masks`**: sigmoid → threshold → crop-to-box →
       resize to original scale; new `Masks` container; `plot()`/`save()` overlay; interop
       (`to_coco` RLE, `to_supervision` masks). `predict(task=segment)` end-to-end.

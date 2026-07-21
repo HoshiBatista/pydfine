@@ -18,11 +18,13 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 | Param | Type | Default | Description |
 |---|---|---|---|
 | `size` | str\|None | None | `"n"\|"s"\|"m"\|"l"\|"x"` preset selector. None = fully manual. |
+| `task` | str | `"detect"` | `"detect"\|"segment"` (instance masks)\|`"sem_seg"` (per-pixel). |
 | `num_classes` | int | 80 | Number of object classes. |
 | `class_names` | list[str]\|None | None | Optional names; defaults to COCO-80 when `num_classes==80`. |
 | `imgsz` | int | 640 | Square inference/training resolution (`eval_spatial_size`). |
 | `device` | str | "cpu" | `"cpu"\|"cuda"\|"cuda:0"\|"mps"`. |
 | `remap_mscoco_category` | bool | False | COCO-id remap; keep False for custom datasets. |
+| `mask_dim` | int | 256 | Instance-mask embedding dim (**128 for N**); used when `task="segment"`. |
 
 ## 2. Backbone (HGNetV2)
 
