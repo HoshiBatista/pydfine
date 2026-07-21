@@ -210,7 +210,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       (`test_sem_seg_predict.py`, 5): `SemSeg` shape/repr, palette plot tints classes & skips void,
       boxless result, `predict(task="sem_seg")` → uint8 label map at original `(H,W)` with valid
       ids, detect has no `sem_seg`. Base import torch-free. Suite 253 passed / 16 skipped.
-- [ ] **SS4 sem_seg weights + parity** (HF `dfine_seg_*`; fixture vs D-FINE-seg).
+- [x] **SS4 sem_seg parity** *(2026-07-21)*. `scripts/gen_semseg_parity_fixture.py` (dev-only)
+      runs genuine D-FINE-seg `SemSegDecoder` on small synthetic pyramids and stores — for a
+      nano low-level-feat case and a plain stride-8 case — the decoder weights + inputs +
+      output logits (`tests/data/semseg_parity.pt`, ~0.5 MB, self-contained). `test_semseg_parity.py`
+      builds our port, strict-loads the same weights, feeds the same inputs, and asserts
+      **bit-exact** logits — max-abs diff `0.0` for both cases — plus a postproc argmax match.
+      The sem_seg forward is dimension-independent, so tiny channels exercise every path; the
+      fixture needs no checkpoint and D-FINE-seg is not imported. **Note:** there are no released
+      *trained* sem_seg weights (HF `dfine_seg_*_coco.pt` is instance-seg), so parity is
+      "same weights → same output"; the trained-fuser transfer is pinned by the SS1/SS2
+      strict-load tests. **Phase SS (semantic segmentation, inference) complete.** Suite 256
+      passed / 16 skipped.
 
 ### Phase TS — Segmentation training (largest, optional / later)
 - [ ] **TS1 Mask losses** in native criterion (box-cropped BCE + Dice; DN mask supervision).
