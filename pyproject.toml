@@ -71,6 +71,10 @@ track = [
     "pydfine[video]",
     "scipy>=1.10",
 ]
+# Auto-download instance-segmentation weights (dfine-seg-*) from Hugging Face.
+hf = [
+    "huggingface_hub>=0.20",
+]
 # Documentation site (MkDocs Material + mkdocstrings API reference from docstrings).
 docs = [
     "mkdocs>=1.6",
@@ -91,6 +95,7 @@ dev = [
     "onnxruntime>=1.16",  # run the exported graph in CI
     "pandas>=1.3",  # Results.to_pandas() interop test
     "supervision>=0.18",  # Results.to_supervision() interop test
+    "huggingface_hub>=0.20",  # dfine-seg-* weight resolution/download tests
 ]
 
 [project.urls]

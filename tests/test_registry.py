@@ -59,9 +59,24 @@ def test_names_and_urls_well_formed():
     for name, spec in CHECKPOINTS.items():
         assert spec.name == name
         assert spec.size in SIZES
-        assert spec.url.endswith(".pth")
-        assert spec.url.endswith(spec.filename)
-        assert spec.filename.startswith(f"dfine_{spec.size}_")
+        if spec.source == "github":
+            assert spec.task == "detect"
+            assert spec.url.endswith(".pth")
+            assert spec.url.endswith(spec.filename)
+            assert spec.filename.startswith(f"dfine_{spec.size}_")
+        else:  # Hugging Face segmentation specs
+            assert spec.source == "hf" and spec.task == "segment"
+            assert spec.repo_id and spec.url == ""
+            assert spec.filename == f"dfine_seg_{spec.size}_coco.pt"
+
+
+@pytest.mark.parametrize("size", SIZES)
+def test_seg_specs_present_and_wired(size):
+    spec = resolve(f"dfine-seg-{size}")
+    assert spec.task == "segment" and spec.source == "hf" and spec.num_classes == 80
+    cfg = config_for(spec)
+    assert cfg.task == "segment" and cfg.enable_mask_head
+    assert cfg.mask_dim == (128 if size == "n" else 256)
 
 
 def test_l_obj2coco_uses_e25_asset():
