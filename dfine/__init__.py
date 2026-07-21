@@ -32,6 +32,7 @@ _LAZY = {
     "DFINE": "model",
     "Results": "results",
     "Boxes": "results",
+    "Masks": "results",
 }
 
 

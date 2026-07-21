@@ -148,9 +148,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       import check green). Tests: seg specs present/wired per size, source-aware URL check,
       from_pretrained e2e. Suite 224 passed / 12 skipped. **Phase S inference chain complete
       except S6 (Results.masks) + S7 (parity).**
-- [ ] **S6 Mask postprocessing + `Results.masks`**: sigmoid → threshold → crop-to-box →
-      resize to original scale; new `Masks` container; `plot()`/`save()` overlay; interop
-      (`to_coco` RLE, `to_supervision` masks). `predict(task=segment)` end-to-end.
+- [x] **S6 Mask postprocessing + `Results.masks`** *(2026-07-21)*. The postprocessor now
+      surfaces each detection's `query_index` (from its top-k `index // num_classes`), so
+      `predict` gathers the surviving queries' masks from `outputs["pred_masks"]`, resizes them
+      bilinearly to the original image size, thresholds (`mask_thresh=0.5`), and clips each to its
+      box (`_cleanup_masks`, matching D-FINE-seg's inference). New `Masks` container (`data`
+      `[N,H,W]` bool, original scale; aligned 1:1 with `Boxes`); `Results.masks`; `plot()` alpha-
+      overlays masks in each detection's color under the boxes; `to_supervision()` attaches a bool
+      `mask` array. `Masks` exported lazily from `dfine`. **Detection path unchanged** (no
+      `pred_masks` → `masks=None`). Tests: `Masks` container + masked `plot`/`to_supervision`
+      (`test_results.py`), and `predict(task="segment")` → N masks aligned with N boxes at
+      original scale + detection-has-no-masks (`test_seg_model.py`). Base import torch-free.
+      Suite 230 passed / 12 skipped. *(COCO-RLE `to_coco` deferred — needs an RLE encoder;
+      not on the critical path.)*
 - [ ] **S7 Instance-seg parity test** (gated on weights): fixture from `./D-FINE-seg` torch
       run vs our port on a seeded input — masks + boxes + scores. Target: bit-exact or
       documented tolerance.

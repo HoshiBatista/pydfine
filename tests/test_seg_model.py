@@ -48,6 +48,34 @@ def test_segment_model_forward_produces_masks():
     assert m.min() >= 0.0 and m.max() <= 1.0
 
 
+def test_predict_segment_returns_aligned_masks():
+    """DFINE(task="segment").predict returns per-instance masks aligned with boxes."""
+    import numpy as np
+    from PIL import Image
+
+    from dfine.model import DFINE as PublicDFINE
+
+    model = PublicDFINE(size="n", task="segment", backbone_pretrained=False, imgsz=320)
+    img = Image.fromarray((np.random.rand(240, 320, 3) * 255).astype("uint8"))
+    res = model.predict(img, conf=0.0)[0]  # conf=0 keeps all top-k so masks are exercised
+    assert res.masks is not None
+    assert len(res.masks) == len(res.boxes)  # one mask per detection
+    assert res.masks.data.shape == (len(res.boxes), 240, 320)  # original scale
+    assert res.masks.data.dtype == torch.bool
+
+
+def test_predict_detect_has_no_masks():
+    """A detection model's results carry no masks (byte-identical detect behavior)."""
+    import numpy as np
+    from PIL import Image
+
+    from dfine.model import DFINE as PublicDFINE
+
+    model = PublicDFINE(size="n", backbone_pretrained=False, imgsz=320)
+    img = Image.fromarray((np.random.rand(240, 320, 3) * 255).astype("uint8"))
+    assert model.predict(img, conf=0.0)[0].masks is None
+
+
 def _cached_seg_ckpt():
     hf = pytest.importorskip("huggingface_hub")
     try:

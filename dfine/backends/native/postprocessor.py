@@ -107,9 +107,15 @@ class DFINEPostProcessor(nn.Module):
                 .reshape(labels.shape)
             )
 
+        # ``index`` (focal path) is the per-detection query index — segmentation uses it
+        # to gather each kept detection's mask from the decoder's ``pred_masks``.
+        query_index = index if self.use_focal_loss else None
         results = []
-        for lab, box, sco in zip(labels, boxes, scores):
-            results.append(dict(labels=lab, boxes=box, scores=sco))
+        for i, (lab, box, sco) in enumerate(zip(labels, boxes, scores)):
+            r = dict(labels=lab, boxes=box, scores=sco)
+            if query_index is not None:
+                r["query_index"] = query_index[i]
+            results.append(r)
 
         return results
 
