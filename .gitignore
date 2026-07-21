@@ -1,5 +1,7 @@
 # Upstream D-FINE reference clone (read-only checkout, not part of this package)
 /D-FINE/
+# D-FINE-seg reference clone (ArgoHA; source for the segmentation port)
+/D-FINE-seg/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
