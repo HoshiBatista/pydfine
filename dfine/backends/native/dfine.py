@@ -40,13 +40,34 @@ class DFINE(nn.Module):
         self.decoder = decoder
         self.encoder = encoder
 
+    @staticmethod
+    def _seg_wiring(cfg: DFINEConfig) -> tuple[list[int] | None, int | None]:
+        """Segmentation wiring: (backbone return_idx override, mask_low_level_ch).
+
+        When the mask head is on and the encoder has no native stride-8 level (nano),
+        the backbone must emit an extra stride-8 feature (stage index 1) for the mask
+        decoder's low-level input. Returns ``(None, None)`` for the detection path.
+        """
+        if not cfg.enable_mask_head or 8 in cfg.feat_strides:
+            return None, None
+        return_idx = cfg.return_idx if 1 in cfg.return_idx else [1, *cfg.return_idx]
+        name = HGNetv2._normalize_name(cfg.backbone)
+        mask_low_level_ch = HGNetv2.arch_configs[name]["stage_config"]["stage2"][2]
+        return return_idx, mask_low_level_ch
+
     @classmethod
     def from_config(cls, cfg: DFINEConfig) -> DFINE:
         """Build the full model (backbone + encoder + decoder) from a config."""
+        backbone_return_idx, mask_low_level_ch = cls._seg_wiring(cfg)
         return cls(
-            backbone=HGNetv2.from_config(cfg),
+            backbone=HGNetv2.from_config(cfg, return_idx=backbone_return_idx),
             encoder=HybridEncoder.from_config(cfg),
-            decoder=DFINETransformer.from_config(cfg),
+            decoder=DFINETransformer.from_config(
+                cfg,
+                enable_mask_head=cfg.enable_mask_head,
+                mask_dim=cfg.mask_dim,
+                mask_low_level_ch=mask_low_level_ch,
+            ),
         )
 
     @classmethod
@@ -73,10 +94,14 @@ class DFINE(nn.Module):
         return model
 
     def forward(self, x, targets=None):
-        x = self.backbone(x)
-        x = self.encoder(x)
-        x = self.decoder(x, targets)
-        return x
+        feats = self.backbone(x)
+        # Segmentation: when the backbone emits more levels than the encoder consumes,
+        # the extra leading (stride-8) map is the mask decoder's low-level input.
+        low_level_feat = None
+        if len(feats) > len(self.encoder.in_channels):
+            low_level_feat, feats = feats[0], feats[1:]
+        feats = self.encoder(feats)
+        return self.decoder(feats, targets, low_level_feat=low_level_feat)
 
     def load(self, path, use_ema: bool = True, strict: bool = True):
         """Load an upstream ``.pth`` checkpoint into this model (in place).

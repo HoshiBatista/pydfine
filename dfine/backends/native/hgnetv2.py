@@ -433,12 +433,16 @@ class HGNetv2(nn.Module):
             self._load_pretrained(download_url, local_model_dir)
 
     @classmethod
-    def from_config(cls, cfg: DFINEConfig) -> HGNetv2:
-        """Build the backbone from a :class:`DFINEConfig`."""
+    def from_config(cls, cfg: DFINEConfig, *, return_idx: list[int] | None = None) -> HGNetv2:
+        """Build the backbone from a :class:`DFINEConfig`.
+
+        ``return_idx`` overrides ``cfg.return_idx`` (used by the segmentation path to
+        emit an extra stride-8 level for the mask decoder) without mutating the config.
+        """
         return cls(
             name=cfg.backbone,
             use_lab=cfg.use_lab,
-            return_idx=cfg.return_idx,
+            return_idx=cfg.return_idx if return_idx is None else return_idx,
             freeze_stem_only=cfg.freeze_stem_only,
             freeze_at=cfg.freeze_at,
             freeze_norm=cfg.freeze_norm,
