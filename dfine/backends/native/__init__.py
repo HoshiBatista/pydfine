@@ -13,6 +13,7 @@ from .dfine_decoder import DFINETransformer
 from .hgnetv2 import HGNetv2
 from .hybrid_encoder import HybridEncoder
 from .loader import extract_state_dict, load_checkpoint
+from .mask_decoder import MaskDecoder
 from .matcher import HungarianMatcher
 from .postprocessor import DFINEPostProcessor
 
@@ -24,6 +25,7 @@ __all__ = [
     "HGNetv2",
     "HungarianMatcher",
     "HybridEncoder",
+    "MaskDecoder",
     "extract_state_dict",
     "load_checkpoint",
 ]
