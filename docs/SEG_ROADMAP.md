@@ -174,7 +174,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       skipped.
 
 ### Phase SS — Semantic-seg inference
-- [ ] **SS1 Port `SemSegDecoder`** (`native/sem_seg_decoder.py`, reuses `MaskDecoder`).
+- [x] **SS1 Port `SemSegDecoder`** *(2026-07-21)* → `dfine/backends/native/sem_seg_decoder.py`
+      (reuses the native `MaskDecoder` fuser; `conv_gn_act` neck helper). Attr names verbatim
+      (`mask_decoder`/`neck`/`dropout`/`classifier`/`aux_head`) so the trained fuser transfers
+      from `dfine_seg_<size>_coco.pt` while neck/classifier/aux stay from-scratch. `forward`
+      returns `{"sem_seg_logits": [B,C,H,W]}` (1/4 logits bilinearly ×4 to input res), adding
+      `sem_seg_logits_aux` (deep supervision on the finest PAN feat) only in training. Added
+      `from_config(cfg, *, mask_low_level_ch=None)` (num_classes/feat_channels/mask_dim from cfg;
+      neck_dim/dropout/aux = upstream defaults). Exported from `native/__init__`. Tests
+      (`test_sem_seg_decoder.py`, 5): eval/train forward shapes + aux, nano low-level plumbing,
+      `from_config` dims, **+ the reused fuser strict-loads `dfine_seg_n_coco.pt`'s
+      `decoder.mask_decoder.*` (0 missing/0 unexpected)**. Assembled model unchanged until SS2.
+      Suite 241 passed / 16 skipped.
 - [ ] **SS2 Assemble sem_seg model** (decoder-slot swap when `task="sem_seg"`; argmax
       postprocess → `[H,W]` uint8 label map at original res).
 - [ ] **SS3 `Results` sem_seg surface** (`r.sem_seg` label map, palette overlay plot).
