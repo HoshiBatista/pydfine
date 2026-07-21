@@ -44,7 +44,6 @@ class STrack:
         self.frame_id = 0
         self.start_frame = 0
 
-    # -- id bookkeeping --------------------------------------------------------
     @staticmethod
     def next_id() -> int:
         STrack._count += 1
@@ -54,11 +53,10 @@ class STrack:
     def reset_id() -> None:
         STrack._count = 0
 
-    # -- Kalman lifecycle ------------------------------------------------------
     def predict(self) -> None:
         mean_state = self.mean.copy()
         if self.state != TrackState.Tracked:
-            mean_state[7] = 0  # zero the height-velocity for non-active tracks
+            mean_state[7] = 0
         self.mean, self.covariance = self.kalman_filter.predict(mean_state, self.covariance)
 
     def activate(self, kalman_filter: KalmanFilterXYAH, frame_id: int) -> None:
@@ -102,14 +100,13 @@ class STrack:
     def mark_removed(self) -> None:
         self.state = TrackState.Removed
 
-    # -- coordinate helpers ----------------------------------------------------
     @property
     def tlwh(self) -> np.ndarray:
         """Current box as ``(top-left-x, top-left-y, w, h)``."""
         if self.mean is None:
             return self._tlwh.copy()
         ret = self.mean[:4].copy()
-        ret[2] *= ret[3]  # a * h -> w
+        ret[2] *= ret[3]
         ret[:2] -= ret[2:] / 2
         return ret
 
@@ -122,8 +119,8 @@ class STrack:
     @staticmethod
     def _tlwh_to_xyah(tlwh) -> np.ndarray:
         ret = np.asarray(tlwh, dtype=np.float64).copy()
-        ret[:2] += ret[2:] / 2  # top-left -> center
-        ret[2] /= ret[3]  # w -> aspect ratio
+        ret[:2] += ret[2:] / 2
+        ret[2] /= ret[3]
         return ret
 
     @staticmethod
@@ -131,9 +128,6 @@ class STrack:
         ret = np.asarray(xyxy, dtype=np.float32).copy()
         ret[2:] -= ret[:2]
         return ret
-
-
-# -- association helpers (module-level, numpy only) ----------------------------
 
 
 def _bbox_ious(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -227,7 +221,7 @@ class BYTETracker:
         self.det_thresh = track_thresh + 0.1
         self.max_time_lost = int(frame_rate / 30.0 * track_buffer)
         self.kalman_filter = KalmanFilterXYAH()
-        STrack.reset_id()  # ids start at 1 for each new tracker (deterministic)
+        STrack.reset_id()
 
     def update(self, xyxy: np.ndarray, scores: np.ndarray, cls: np.ndarray) -> list[STrack]:
         """Advance one frame; return the currently active tracks."""
@@ -246,7 +240,6 @@ class BYTETracker:
         unconfirmed = [t for t in self.tracked_stracks if not t.is_activated]
         tracked = [t for t in self.tracked_stracks if t.is_activated]
 
-        # --- stage 1: high-score detections vs tracked + lost tracks ----------
         pool = _joint(tracked, self.lost_stracks)
         for t in pool:
             t.predict()
@@ -260,7 +253,6 @@ class BYTETracker:
                 track.re_activate(det, self.frame_id)
                 refind.append(track)
 
-        # --- stage 2: leftover tracked tracks vs low-score detections ---------
         r_tracked = [pool[i] for i in u_track if pool[i].state == TrackState.Tracked]
         matches, u_track2, _ = _linear_assignment(_iou_distance(r_tracked, dets_second), 0.5)
         for it, idet in matches:
@@ -277,7 +269,6 @@ class BYTETracker:
                 track.mark_lost()
                 lost.append(track)
 
-        # --- unconfirmed tracks (single-detection new tracks) -----------------
         dets = [dets[i] for i in u_det]
         matches, u_unconfirmed, u_det = _linear_assignment(_iou_distance(unconfirmed, dets), 0.7)
         for it, idet in matches:
@@ -288,7 +279,6 @@ class BYTETracker:
             track.mark_removed()
             removed.append(track)
 
-        # --- start new tracks from strong leftover detections -----------------
         for idet in u_det:
             track = dets[idet]
             if track.score < self.det_thresh:
@@ -296,13 +286,11 @@ class BYTETracker:
             track.activate(self.kalman_filter, self.frame_id)
             activated.append(track)
 
-        # --- expire long-lost tracks -----------------------------------------
         for track in self.lost_stracks:
             if self.frame_id - track.frame_id > self.max_time_lost:
                 track.mark_removed()
                 removed.append(track)
 
-        # --- bookkeeping ------------------------------------------------------
         self.tracked_stracks = [t for t in self.tracked_stracks if t.state == TrackState.Tracked]
         self.tracked_stracks = _joint(self.tracked_stracks, activated)
         self.tracked_stracks = _joint(self.tracked_stracks, refind)

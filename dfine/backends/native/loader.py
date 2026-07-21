@@ -48,7 +48,7 @@ def extract_state_dict(checkpoint: dict, use_ema: bool = True) -> dict:
     elif "model" in checkpoint:
         state_dict = checkpoint["model"]
     elif all(torch.is_tensor(v) for v in checkpoint.values()):
-        state_dict = checkpoint  # already an unwrapped state_dict
+        state_dict = checkpoint
     else:
         raise KeyError(
             "Checkpoint has no 'model'/'ema' weights and is not a bare state_dict; "

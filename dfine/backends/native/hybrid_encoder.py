@@ -164,7 +164,6 @@ class VGGBlock(nn.Module):
 
 
 class ELAN(nn.Module):
-    # csp-elan
     def __init__(self, c1, c2, c3, c4, n=2, bias=False, act="silu", bottletype=VGGBlock):
         super().__init__()
         self.c = c3
@@ -186,7 +185,6 @@ class ELAN(nn.Module):
 
 
 class RepNCSPELAN4(nn.Module):
-    # csp-elan
     def __init__(self, c1, c2, c3, c4, n=3, bias=False, act="silu"):
         super().__init__()
         self.c = c3 // 2
@@ -347,7 +345,6 @@ class HybridEncoder(nn.Module):
         self.out_channels = [hidden_dim for _ in range(len(in_channels))]
         self.out_strides = feat_strides
 
-        # channel projection
         self.input_proj = nn.ModuleList()
         for in_channel in in_channels:
             proj = nn.Sequential(
@@ -360,7 +357,6 @@ class HybridEncoder(nn.Module):
             )
             self.input_proj.append(proj)
 
-        # encoder transformer
         encoder_layer = TransformerEncoderLayer(
             hidden_dim,
             nhead=nhead,
@@ -375,7 +371,6 @@ class HybridEncoder(nn.Module):
             ]
         )
 
-        # top-down fpn
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(in_channels) - 1, 0, -1):
@@ -390,7 +385,6 @@ class HybridEncoder(nn.Module):
                 )
             )
 
-        # bottom-up pan
         self.downsample_convs = nn.ModuleList()
         self.pan_blocks = nn.ModuleList()
         for _ in range(len(in_channels) - 1):
@@ -463,11 +457,9 @@ class HybridEncoder(nn.Module):
         assert len(feats) == len(self.in_channels)
         proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
 
-        # encoder
         if self.num_encoder_layers > 0:
             for i, enc_ind in enumerate(self.use_encoder_idx):
                 h, w = proj_feats[enc_ind].shape[2:]
-                # flatten [B, C, H, W] to [B, HxW, C]
                 src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
                 if self.training or self.eval_spatial_size is None:
                     pos_embed = self.build_2d_sincos_position_embedding(
@@ -481,7 +473,6 @@ class HybridEncoder(nn.Module):
                     memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, h, w).contiguous()
                 )
 
-        # broadcasting and fusion
         inner_outs = [proj_feats[-1]]
         for idx in range(len(self.in_channels) - 1, 0, -1):
             feat_heigh = inner_outs[0]

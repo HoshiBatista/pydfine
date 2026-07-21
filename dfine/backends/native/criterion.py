@@ -299,7 +299,6 @@ class DFINECriterion(nn.Module):
         indices = self.matcher(outputs_without_aux, targets)["indices"]
         self._clear_cache()
 
-        # Matching union set across all decoder layers (GO-LSD).
         if "aux_outputs" in outputs:
             indices_aux_list, cached_indices, cached_indices_enc = [], [], []
             for aux_outputs in outputs["aux_outputs"] + [outputs["pre_outputs"]]:
@@ -322,7 +321,6 @@ class DFINECriterion(nn.Module):
         else:
             assert "aux_outputs" in outputs, ""
 
-        # Average number of target boxes across nodes, for normalization.
         num_boxes = sum(len(t["labels"]) for t in targets)
         num_boxes = torch.as_tensor(
             [num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device
@@ -331,7 +329,6 @@ class DFINECriterion(nn.Module):
             torch.distributed.all_reduce(num_boxes)
         num_boxes = torch.clamp(num_boxes / get_world_size(), min=1).item()
 
-        # Final-layer losses.
         losses = {}
         for loss in self.losses:
             indices_in = indices_go if loss in ["boxes", "local"] else indices
@@ -341,7 +338,6 @@ class DFINECriterion(nn.Module):
             l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
             losses.update(l_dict)
 
-        # Auxiliary decoder-layer losses.
         if "aux_outputs" in outputs:
             for i, aux_outputs in enumerate(outputs["aux_outputs"]):
                 aux_outputs["up"], aux_outputs["reg_scale"] = outputs["up"], outputs["reg_scale"]
@@ -358,7 +354,6 @@ class DFINECriterion(nn.Module):
                     l_dict = {k + f"_aux_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
-        # Auxiliary "pre" head output at the first decoder layer.
         if "pre_outputs" in outputs:
             aux_outputs = outputs["pre_outputs"]
             for loss in self.losses:
@@ -372,7 +367,6 @@ class DFINECriterion(nn.Module):
                 l_dict = {k + "_pre": v for k, v in l_dict.items()}
                 losses.update(l_dict)
 
-        # Encoder auxiliary losses.
         if "enc_aux_outputs" in outputs:
             assert "enc_meta" in outputs, ""
             class_agnostic = outputs["enc_meta"]["class_agnostic"]
@@ -402,7 +396,6 @@ class DFINECriterion(nn.Module):
             if class_agnostic:
                 self.num_classes = orig_num_classes
 
-        # Contrastive-denoising auxiliary losses.
         if "dn_outputs" in outputs:
             assert "dn_meta" in outputs, ""
             indices_dn = self.get_cdn_matched_indices(outputs["dn_meta"], targets)

@@ -85,8 +85,6 @@ class DFINE(nn.Module):
         from ...registry import config_for, resolve
 
         spec = resolve(name)
-        # The checkpoint already carries backbone weights, so skip the ImageNet
-        # backbone download (it would be overwritten anyway). Caller can override.
         cfg = config_for(spec, **{"backbone_pretrained": False, **overrides})
         model = cls.from_config(cfg).eval()
         path = download_weights(spec, cache_dir_override=cache_dir)
@@ -95,8 +93,6 @@ class DFINE(nn.Module):
 
     def forward(self, x, targets=None):
         feats = self.backbone(x)
-        # Segmentation: when the backbone emits more levels than the encoder consumes,
-        # the extra leading (stride-8) map is the mask decoder's low-level input.
         low_level_feat = None
         if len(feats) > len(self.encoder.in_channels):
             low_level_feat, feats = feats[0], feats[1:]

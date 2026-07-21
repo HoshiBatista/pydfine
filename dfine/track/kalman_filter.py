@@ -18,12 +18,10 @@ class KalmanFilterXYAH:
 
     def __init__(self):
         ndim, dt = 4, 1.0
-        # Constant-velocity motion model: position += velocity each step.
         self._motion_mat = np.eye(2 * ndim, 2 * ndim)
         for i in range(ndim):
             self._motion_mat[i, ndim + i] = dt
         self._update_mat = np.eye(ndim, 2 * ndim)
-        # Uncertainty relative to box height (tuned defaults from the reference impl).
         self._std_weight_position = 1.0 / 20
         self._std_weight_velocity = 1.0 / 160
 

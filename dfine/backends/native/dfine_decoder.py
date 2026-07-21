@@ -115,7 +115,6 @@ class MSDeformableAttention(nn.Module):
                 p.requires_grad = False
 
     def _reset_parameters(self):
-        # sampling_offsets
         init.constant_(self.sampling_offsets.weight, 0)
         thetas = torch.arange(self.num_heads, dtype=torch.float32) * (
             2.0 * math.pi / self.num_heads
@@ -129,7 +128,6 @@ class MSDeformableAttention(nn.Module):
         grid_init *= scaling
         self.sampling_offsets.bias.data[...] = grid_init.flatten()
 
-        # attention_weights
         init.constant_(self.attention_weights.weight, 0)
         init.constant_(self.attention_weights.bias, 0)
 
@@ -206,21 +204,17 @@ class TransformerDecoderLayer(nn.Module):
             dim_feedforward = round(layer_scale * dim_feedforward)
             d_model = round(layer_scale * d_model)
 
-        # self attention
         self.self_attn = nn.MultiheadAttention(d_model, n_head, dropout=dropout, batch_first=True)
         self.dropout1 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(d_model)
 
-        # cross attention
         self.cross_attn = MSDeformableAttention(
             d_model, n_head, n_levels, n_points, method=cross_attn_method
         )
         self.dropout2 = nn.Dropout(dropout)
 
-        # gate
         self.gateway = Gate(d_model)
 
-        # ffn
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.activation = get_activation(activation)
         self.dropout3 = nn.Dropout(dropout)
@@ -243,21 +237,18 @@ class TransformerDecoderLayer(nn.Module):
     def forward(
         self, target, reference_points, value, spatial_shapes, attn_mask=None, query_pos_embed=None
     ):
-        # self attention
         q = k = self.with_pos_embed(target, query_pos_embed)
 
         target2, _ = self.self_attn(q, k, value=target, attn_mask=attn_mask)
         target = target + self.dropout1(target2)
         target = self.norm1(target)
 
-        # cross attention
         target2 = self.cross_attn(
             self.with_pos_embed(target, query_pos_embed), reference_points, value, spatial_shapes
         )
 
         target = self.gateway(target, self.dropout2(target2))
 
-        # ffn
         target2 = self.forward_ffn(target)
         target = target + self.dropout4(target2)
         target = self.norm3(target.clamp(min=-65504, max=65504))
@@ -397,14 +388,12 @@ class TransformerDecoder(nn.Module):
             project = self.project
 
         ref_points_detach = F.sigmoid(ref_points_unact)
-        # Per-layer query features, collected only for the segmentation mask head.
         dec_out_queries = [] if return_queries else None
 
         for i, layer in enumerate(self.layers):
             ref_points_input = ref_points_detach.unsqueeze(2)
             query_pos_embed = query_pos_head(ref_points_detach).clamp(min=-10, max=10)
 
-            # Adjust scale for the detachable wider layers
             if i >= self.eval_idx + 1 and self.layer_scale > 1:
                 query_pos_embed = F.interpolate(query_pos_embed, scale_factor=self.layer_scale)
                 value = self.value_op(
@@ -420,12 +409,10 @@ class TransformerDecoder(nn.Module):
                 dec_out_queries.append(output)
 
             if i == 0:
-                # Initial bbox predictions with inverse-sigmoid refinement
                 pre_bboxes = F.sigmoid(pre_bbox_head(output) + inverse_sigmoid(ref_points_detach))
                 pre_scores = score_head[0](output)
                 ref_points_initial = pre_bboxes.detach()
 
-            # Refine box corners using FDR, integrating the previous layer's correction
             pred_corners = bbox_head[i](output + output_detach) + pred_corners_undetach
             inter_ref_bbox = distance2bbox(
                 ref_points_initial, integral(pred_corners, project), reg_scale
@@ -433,7 +420,6 @@ class TransformerDecoder(nn.Module):
 
             if self.training or i == self.eval_idx:
                 scores = score_head[i](output)
-                # LQE
                 scores = self.lqe_layers[i](scores, pred_corners)
                 dec_out_logits.append(scores)
                 dec_out_bboxes.append(inter_ref_bbox)
@@ -520,10 +506,8 @@ class DFINETransformer(nn.Module):
         self.cross_attn_method = cross_attn_method
         self.query_select_method = query_select_method
 
-        # backbone feature projection
         self._build_input_proj_layer(feat_channels)
 
-        # Transformer module
         self.up = nn.Parameter(torch.tensor([0.5]), requires_grad=False)
         self.reg_scale = nn.Parameter(torch.tensor([reg_scale]), requires_grad=False)
         decoder_layer = TransformerDecoderLayer(
@@ -559,7 +543,6 @@ class DFINETransformer(nn.Module):
             eval_idx,
             layer_scale,
         )
-        # denoising
         self.num_denoising = num_denoising
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
@@ -569,21 +552,15 @@ class DFINETransformer(nn.Module):
             )
             init.normal_(self.denoising_class_embed.weight[:-1])
 
-        # segmentation head (D-FINE-seg). Off by default; when on, a MaskDecoder fuses
-        # encoder features to 1/4-res mask features and a per-query MLP produces mask
-        # embeddings whose dot-product with those features yields per-instance masks.
         self.mask_dim = mask_dim
         self.enable_mask_head = enable_mask_head
         if enable_mask_head:
-            # For models without a native 1/8 level (nano), the assembled model passes a
-            # backbone stride-8 feature; prepend its channels so MaskDecoder adds a lateral.
             mask_in_chs = list(feat_channels)
             if mask_low_level_ch is not None:
                 mask_in_chs = [mask_low_level_ch] + mask_in_chs
             self.mask_decoder = MaskDecoder(in_chs=mask_in_chs, out_ch=self.mask_dim)
             self.mask_head = MLP(hidden_dim, hidden_dim, self.mask_dim, num_layers=3)
 
-        # decoder embedding
         self.learn_query_content = learn_query_content
         if learn_query_content:
             self.tgt_embed = nn.Embedding(num_queries, hidden_dim)
@@ -605,7 +582,6 @@ class DFINETransformer(nn.Module):
 
         self.enc_bbox_head = MLP(hidden_dim, hidden_dim, 4, 3)
 
-        # decoder head
         self.eval_idx = eval_idx if eval_idx >= 0 else num_layers + eval_idx
         self.dec_score_head = nn.ModuleList(
             [nn.Linear(hidden_dim, num_classes) for _ in range(self.eval_idx + 1)]
@@ -624,7 +600,6 @@ class DFINETransformer(nn.Module):
         )
         self.integral = Integral(self.reg_max)
 
-        # init encoder output anchors and valid_mask
         if self.eval_spatial_size:
             anchors, valid_mask = self._generate_anchors()
             self.register_buffer("anchors", anchors)
@@ -755,7 +730,6 @@ class DFINETransformer(nn.Module):
                 in_channels = self.hidden_dim
 
     def _get_encoder_input(self, feats: list[torch.Tensor]):
-        # get projection features
         proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
         if self.num_levels > len(proj_feats):
             len_srcs = len(proj_feats)
@@ -765,16 +739,13 @@ class DFINETransformer(nn.Module):
                 else:
                     proj_feats.append(self.input_proj[i](proj_feats[-1]))
 
-        # get encoder inputs
         feat_flatten = []
         spatial_shapes = []
         for feat in proj_feats:
             _, _, h, w = feat.shape
-            # [b, c, h, w] -> [b, h*w, c]
             feat_flatten.append(feat.flatten(2).permute(0, 2, 1))
             spatial_shapes.append([h, w])
 
-        # [b, l, c]
         feat_flatten = torch.concat(feat_flatten, 1)
         return feat_flatten, spatial_shapes
 
@@ -806,7 +777,6 @@ class DFINETransformer(nn.Module):
     def _get_decoder_input(
         self, memory: torch.Tensor, spatial_shapes, denoising_logits=None, denoising_bbox_unact=None
     ):
-        # prepare input for decoder
         if self.training or self.eval_spatial_size is None:
             anchors, valid_mask = self._generate_anchors(spatial_shapes, device=memory.device)
         else:
@@ -884,7 +854,7 @@ class DFINETransformer(nn.Module):
         """Whether to run the mask branch: on at inference; on in train iff any GT masks."""
         if not self.enable_mask_head:
             return False
-        if targets is None:  # inference
+        if targets is None:
             return True
         return any(
             (m := t.get("masks")) is not None and hasattr(m, "numel") and m.numel() > 0
@@ -892,16 +862,13 @@ class DFINETransformer(nn.Module):
         )
 
     def _mask_logits_from_h(self, h, mask_feat):
-        # h: [B,Q,C] query features; mask_feat: [B,Cmask,Hm,Wm] -> [B,Q,Hm,Wm] logits.
-        mask_embed = self.mask_head(h) * (self.mask_dim**-0.5)  # scale like attention
+        mask_embed = self.mask_head(h) * (self.mask_dim**-0.5)
         return torch.einsum("bqc,bchw->bqhw", mask_embed, mask_feat)
 
     def forward(self, feats, targets=None, low_level_feat=None):
         enable_mask_head = self._should_do_masks(targets)
-        # input projection and embedding
         memory, spatial_shapes = self._get_encoder_input(feats)
 
-        # prepare denoising training
         if self.training and self.num_denoising > 0:
             denoising_logits, denoising_bbox_unact, attn_mask, dn_meta = (
                 get_contrastive_denoising_training_group(
@@ -921,7 +888,6 @@ class DFINETransformer(nn.Module):
             self._get_decoder_input(memory, spatial_shapes, denoising_logits, denoising_bbox_unact)
         )
 
-        # decoder
         out_bboxes, out_logits, out_corners, out_refs, pre_bboxes, pre_logits, hs = self.decoder(
             init_ref_contents,
             init_ref_points_unact,
@@ -951,12 +917,11 @@ class DFINETransformer(nn.Module):
             if enable_mask_head and hs is not None:
                 dn_hs, hs = torch.split(hs, dn_meta["dn_num_split"], dim=2)
 
-        # Instance masks (segmentation head): per-query embedding dot mask features.
         pred_masks = aux_masks = dn_pred_masks = dn_aux_masks = None
         if enable_mask_head:
             mask_feats = list(feats) if low_level_feat is None else [low_level_feat] + list(feats)
             mask_feat = self.mask_decoder(mask_feats)
-            pred_masks = self._mask_logits_from_h(hs[-1], mask_feat)  # [B,Q,Hm,Wm] logits
+            pred_masks = self._mask_logits_from_h(hs[-1], mask_feat)
             if self.training:
                 aux_masks = [self._mask_logits_from_h(h, mask_feat) for h in hs[:-1]]
                 if dn_meta is not None and dn_hs is not None:
@@ -973,7 +938,7 @@ class DFINETransformer(nn.Module):
                 "reg_scale": self.reg_scale,
             }
             if enable_mask_head:
-                out["pred_masks"] = pred_masks  # logits (loss applies its own activation)
+                out["pred_masks"] = pred_masks
         else:
             out = {"pred_logits": out_logits[-1], "pred_boxes": out_bboxes[-1]}
             if enable_mask_head:
@@ -1012,7 +977,6 @@ class DFINETransformer(nn.Module):
 
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        # workaround for torchscript: dicts can't mix Tensor and list values
         return [{"pred_logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
     @torch.jit.unused
@@ -1026,7 +990,6 @@ class DFINETransformer(nn.Module):
         teacher_logits=None,
         aux_masks=None,
     ):
-        # workaround for torchscript: dicts can't mix Tensor and list values
         out = [
             {
                 "pred_logits": a,

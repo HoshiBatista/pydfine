@@ -94,7 +94,6 @@ class DFINEPostProcessor(nn.Module):
                     boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1])
                 )
 
-        # onnx export path: return raw tensors, no python-side postproc
         if self.deploy_mode:
             return labels, boxes, scores
 
@@ -107,8 +106,6 @@ class DFINEPostProcessor(nn.Module):
                 .reshape(labels.shape)
             )
 
-        # ``index`` (focal path) is the per-detection query index — segmentation uses it
-        # to gather each kept detection's mask from the decoder's ``pred_masks``.
         query_index = index if self.use_focal_loss else None
         results = []
         for i, (lab, box, sco) in enumerate(zip(labels, boxes, scores)):

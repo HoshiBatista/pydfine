@@ -64,7 +64,6 @@ def deformable_attention_core_func_v2(
                 value_l, sampling_grid_l, mode="bilinear", padding_mode="zeros", align_corners=False
             )
         elif method == "discrete":
-            # n * m, seq, n, 2
             sampling_coord = (
                 sampling_grid_l * torch.tensor([[w, h]], device=value_l.device) + 0.5
             ).to(torch.int64)
@@ -78,7 +77,7 @@ def deformable_attention_core_func_v2(
             )
             sampling_value_l: torch.Tensor = value_l[
                 s_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]
-            ]  # n l c
+            ]
             sampling_value_l = sampling_value_l.permute(0, 2, 1).reshape(
                 bs * n_head, c, Len_q, num_points_list[level]
             )
