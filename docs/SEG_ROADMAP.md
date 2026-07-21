@@ -113,9 +113,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       (output = 2× finest input res, `out_ch` channels) **+ a strict-load parity test** — the
       module `load_state_dict(strict=True)`s the real `decoder.mask_decoder.*` sub-dict from
       `dfine_seg_n_coco.pt` with 0 missing/0 unexpected. Full suite 210 passed / 12 skipped.
-- [ ] **S3 Add the mask branch to the native `DFINETransformer`** (`enable_mask_head`,
-      `mask_head` MLP, `mask_decoder`, `_mask_logits_from_h`, `return_queries` path). Keep
-      `enable_mask_head=False` a no-op so detect output is byte-identical to today.
+- [x] **S3 Mask branch in native `DFINETransformer`** *(2026-07-21)*. Added `enable_mask_head`/
+      `mask_dim`/`mask_low_level_ch` ctor args (+ keyword-only `from_config` kwargs, default
+      off); `mask_decoder` (`MaskDecoder`) + `mask_head` (3-layer MLP) modules;
+      `_should_do_masks` + `_mask_logits_from_h` (`einsum` per-query masks, `mask_dim^-0.5`
+      scale); `TransformerDecoder.forward` gained `return_queries` → returns per-layer `hs`
+      (now a 7-tuple); `forward(low_level_feat=...)` computes `pred_masks` (sigmoid at eval,
+      logits at train) and threads aux/dn masks via an extended `_set_aux_loss2`. **Detection
+      path byte-identical when off** (guarded everywhere). Tests (`test_seg_decoder.py`):
+      det-keys-unchanged-when-off, eval mask forward shape `[B,Q,H/4,W/4]` in [0,1], **+
+      whole-decoder strict-load of `dfine_seg_n_coco.pt`'s `decoder.*` (0 missing/0
+      unexpected)**. Assembled model still detection-only until S4. Suite 213 passed / 12 skipped.
 - [ ] **S4 Low-level-feat plumbing** in `native/dfine.py` (backbone extra stride-8 feature →
       `low_level_feat`) + config derivation of `mask_low_level_ch`. Nano-path shape test.
 - [ ] **S5 Config + registry**: `task`/`mask_dim` fields, seg presets, `dfine_seg_<size>_coco`
