@@ -9,6 +9,10 @@ Estimator (LQE), and contrastive denoising. Changes from upstream:
   come from ``.ops``/``.box_ops``/``.dfine_utils``/``.denoising``.
 - Mutable default args copied before mutation; ``super()`` / typing modernised.
 - Added :meth:`DFINETransformer.from_config`.
+- Optional instance-mask branch (``enable_mask_head``) ported from D-FINE-seg
+  (Apache-2.0, © ArgoHA): a :class:`MaskDecoder` + per-query mask-embedding MLP whose
+  dot-product yields per-instance masks. Off by default — detection output is
+  byte-identical when disabled.
 
 Layer/parameter names match upstream so released checkpoints load unchanged. The
 per-``ConvNormLayer``/head ``convert_to_deploy`` paths are preserved for export.
@@ -29,6 +33,7 @@ from torch.nn import init
 
 from .denoising import get_contrastive_denoising_training_group
 from .dfine_utils import distance2bbox, weighting_function
+from .mask_decoder import MaskDecoder
 from .ops import (
     bias_init_with_prob,
     deformable_attention_core_func_v2,
@@ -376,6 +381,7 @@ class TransformerDecoder(nn.Module):
         attn_mask=None,
         memory_mask=None,
         dn_meta=None,
+        return_queries=False,
     ):
         output = target
         output_detach = pred_corners_undetach = 0
@@ -391,6 +397,8 @@ class TransformerDecoder(nn.Module):
             project = self.project
 
         ref_points_detach = F.sigmoid(ref_points_unact)
+        # Per-layer query features, collected only for the segmentation mask head.
+        dec_out_queries = [] if return_queries else None
 
         for i, layer in enumerate(self.layers):
             ref_points_input = ref_points_detach.unsqueeze(2)
@@ -408,6 +416,8 @@ class TransformerDecoder(nn.Module):
             output = layer(
                 output, ref_points_input, value, spatial_shapes, attn_mask, query_pos_embed
             )
+            if return_queries:
+                dec_out_queries.append(output)
 
             if i == 0:
                 # Initial bbox predictions with inverse-sigmoid refinement
@@ -437,6 +447,7 @@ class TransformerDecoder(nn.Module):
             ref_points_detach = inter_ref_bbox.detach()
             output_detach = output.detach()
 
+        hs = torch.stack(dec_out_queries) if return_queries else None
         return (
             torch.stack(dec_out_bboxes),
             torch.stack(dec_out_logits),
@@ -444,6 +455,7 @@ class TransformerDecoder(nn.Module):
             torch.stack(dec_out_refs),
             pre_bboxes,
             pre_scores,
+            hs,
         )
 
 
@@ -477,6 +489,9 @@ class DFINETransformer(nn.Module):
         reg_max=32,
         reg_scale=4.0,
         layer_scale=1,
+        enable_mask_head=False,
+        mask_dim=256,
+        mask_low_level_ch=None,
     ):
         super().__init__()
         feat_channels = [512, 1024, 2048] if feat_channels is None else list(feat_channels)
@@ -554,6 +569,20 @@ class DFINETransformer(nn.Module):
             )
             init.normal_(self.denoising_class_embed.weight[:-1])
 
+        # segmentation head (D-FINE-seg). Off by default; when on, a MaskDecoder fuses
+        # encoder features to 1/4-res mask features and a per-query MLP produces mask
+        # embeddings whose dot-product with those features yields per-instance masks.
+        self.mask_dim = mask_dim
+        self.enable_mask_head = enable_mask_head
+        if enable_mask_head:
+            # For models without a native 1/8 level (nano), the assembled model passes a
+            # backbone stride-8 feature; prepend its channels so MaskDecoder adds a lateral.
+            mask_in_chs = list(feat_channels)
+            if mask_low_level_ch is not None:
+                mask_in_chs = [mask_low_level_ch] + mask_in_chs
+            self.mask_decoder = MaskDecoder(in_chs=mask_in_chs, out_ch=self.mask_dim)
+            self.mask_head = MLP(hidden_dim, hidden_dim, self.mask_dim, num_layers=3)
+
         # decoder embedding
         self.learn_query_content = learn_query_content
         if learn_query_content:
@@ -606,14 +635,27 @@ class DFINETransformer(nn.Module):
         self._reset_parameters(feat_channels)
 
     @classmethod
-    def from_config(cls, cfg: DFINEConfig) -> DFINETransformer:
+    def from_config(
+        cls,
+        cfg: DFINEConfig,
+        *,
+        enable_mask_head: bool = False,
+        mask_dim: int = 256,
+        mask_low_level_ch: int | None = None,
+    ) -> DFINETransformer:
         """Build the decoder from a :class:`DFINEConfig`.
 
         Decoder ``dim_feedforward``/``activation``/``dropout`` are separate from the
         encoder's — upstream fixes activation="relu", dropout=0.0 and only varies
         ``decoder_dim_feedforward`` (512 for N, else 1024).
+
+        The mask kwargs (off by default) enable D-FINE-seg's instance-mask branch; the
+        assembled model wires them from ``cfg.task``/``cfg.mask_dim`` (S4/S5).
         """
         return cls(
+            enable_mask_head=enable_mask_head,
+            mask_dim=mask_dim,
+            mask_low_level_ch=mask_low_level_ch,
             num_classes=cfg.num_classes,
             hidden_dim=cfg.decoder_hidden_dim,
             num_queries=cfg.num_queries,
@@ -838,7 +880,24 @@ class DFINETransformer(nn.Module):
 
         return topk_memory, topk_logits, topk_anchors
 
-    def forward(self, feats, targets=None):
+    def _should_do_masks(self, targets):
+        """Whether to run the mask branch: on at inference; on in train iff any GT masks."""
+        if not self.enable_mask_head:
+            return False
+        if targets is None:  # inference
+            return True
+        return any(
+            (m := t.get("masks")) is not None and hasattr(m, "numel") and m.numel() > 0
+            for t in targets
+        )
+
+    def _mask_logits_from_h(self, h, mask_feat):
+        # h: [B,Q,C] query features; mask_feat: [B,Cmask,Hm,Wm] -> [B,Q,Hm,Wm] logits.
+        mask_embed = self.mask_head(h) * (self.mask_dim**-0.5)  # scale like attention
+        return torch.einsum("bqc,bchw->bqhw", mask_embed, mask_feat)
+
+    def forward(self, feats, targets=None, low_level_feat=None):
+        enable_mask_head = self._should_do_masks(targets)
         # input projection and embedding
         memory, spatial_shapes = self._get_encoder_input(feats)
 
@@ -863,7 +922,7 @@ class DFINETransformer(nn.Module):
         )
 
         # decoder
-        out_bboxes, out_logits, out_corners, out_refs, pre_bboxes, pre_logits = self.decoder(
+        out_bboxes, out_logits, out_corners, out_refs, pre_bboxes, pre_logits, hs = self.decoder(
             init_ref_contents,
             init_ref_points_unact,
             memory,
@@ -877,6 +936,7 @@ class DFINETransformer(nn.Module):
             self.reg_scale,
             attn_mask=attn_mask,
             dn_meta=dn_meta,
+            return_queries=enable_mask_head,
         )
 
         if self.training and dn_meta is not None:
@@ -888,6 +948,21 @@ class DFINETransformer(nn.Module):
             dn_out_corners, out_corners = torch.split(out_corners, dn_meta["dn_num_split"], dim=2)
             dn_out_refs, out_refs = torch.split(out_refs, dn_meta["dn_num_split"], dim=2)
 
+            if enable_mask_head and hs is not None:
+                dn_hs, hs = torch.split(hs, dn_meta["dn_num_split"], dim=2)
+
+        # Instance masks (segmentation head): per-query embedding dot mask features.
+        pred_masks = aux_masks = dn_pred_masks = dn_aux_masks = None
+        if enable_mask_head:
+            mask_feats = list(feats) if low_level_feat is None else [low_level_feat] + list(feats)
+            mask_feat = self.mask_decoder(mask_feats)
+            pred_masks = self._mask_logits_from_h(hs[-1], mask_feat)  # [B,Q,Hm,Wm] logits
+            if self.training:
+                aux_masks = [self._mask_logits_from_h(h, mask_feat) for h in hs[:-1]]
+                if dn_meta is not None and dn_hs is not None:
+                    dn_pred_masks = self._mask_logits_from_h(dn_hs[-1], mask_feat)
+                    dn_aux_masks = [self._mask_logits_from_h(h, mask_feat) for h in dn_hs[:-1]]
+
         if self.training:
             out = {
                 "pred_logits": out_logits[-1],
@@ -897,8 +972,12 @@ class DFINETransformer(nn.Module):
                 "up": self.up,
                 "reg_scale": self.reg_scale,
             }
+            if enable_mask_head:
+                out["pred_masks"] = pred_masks  # logits (loss applies its own activation)
         else:
             out = {"pred_logits": out_logits[-1], "pred_boxes": out_bboxes[-1]}
+            if enable_mask_head:
+                out["pred_masks"] = torch.sigmoid(pred_masks)
 
         if self.training and self.aux_loss:
             out["aux_outputs"] = self._set_aux_loss2(
@@ -908,6 +987,7 @@ class DFINETransformer(nn.Module):
                 out_refs[:-1],
                 out_corners[-1],
                 out_logits[-1],
+                aux_masks=aux_masks,
             )
             out["enc_aux_outputs"] = self._set_aux_loss(enc_topk_logits_list, enc_topk_bboxes_list)
             out["pre_outputs"] = {"pred_logits": pre_logits, "pred_boxes": pre_bboxes}
@@ -921,7 +1001,10 @@ class DFINETransformer(nn.Module):
                     dn_out_refs,
                     dn_out_corners[-1],
                     dn_out_logits[-1],
+                    aux_masks=dn_aux_masks,
                 )
+                if dn_pred_masks is not None:
+                    out["dn_pred_masks"] = dn_pred_masks
                 out["dn_pre_outputs"] = {"pred_logits": dn_pre_logits, "pred_boxes": dn_pre_bboxes}
                 out["dn_meta"] = dn_meta
 
@@ -941,9 +1024,10 @@ class DFINETransformer(nn.Module):
         outputs_ref,
         teacher_corners=None,
         teacher_logits=None,
+        aux_masks=None,
     ):
         # workaround for torchscript: dicts can't mix Tensor and list values
-        return [
+        out = [
             {
                 "pred_logits": a,
                 "pred_boxes": b,
@@ -954,3 +1038,7 @@ class DFINETransformer(nn.Module):
             }
             for a, b, c, d in zip(outputs_class, outputs_coord, outputs_corners, outputs_ref)
         ]
+        if aux_masks is not None:
+            for d, m in zip(out, aux_masks):
+                d["pred_masks"] = m
+        return out
