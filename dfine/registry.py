@@ -12,6 +12,11 @@ Availability is not uniform: **N only has COCO weights** — upstream never rele
 Objects365 (``obj2coco``/``obj365``) checkpoints for N. Requesting a combination
 that doesn't exist raises a clear error listing what *is* available.
 
+Instance-segmentation checkpoints (``dfine-seg-n`` .. ``dfine-seg-x``) come from the
+D-FINE-seg project (© ArgoHA, Apache-2.0) and are hosted on Hugging Face rather than
+the GitHub releases (``source="hf"``); their ``task`` is ``"segment"`` so
+``config_for`` wires the mask head.
+
 ``DFINE.from_pretrained(name)`` resolves through here; the download/cache lives in
 ``dfine/downloads.py``.
 """
@@ -48,6 +53,12 @@ _FILES: dict[tuple[str, str], str] = {
 }
 
 
+# Instance-segmentation weights (D-FINE-seg, © ArgoHA, Apache-2.0) are hosted on
+# Hugging Face, not the GitHub releases. Same architecture as detection + a mask head.
+_SEG_REPO = "ArgoSA/D-FINE-seg"
+_SEG_SIZES = ("n", "s", "m", "l", "x")
+
+
 @dataclass(frozen=True)
 class CheckpointSpec:
     """Everything needed to fetch a checkpoint and build a model that loads it."""
@@ -57,7 +68,10 @@ class CheckpointSpec:
     dataset: str  # "coco" | "obj2coco" | "obj365"
     num_classes: int  # 80 (coco/obj2coco) or 366 (obj365)
     filename: str  # release asset filename
-    url: str  # full download URL
+    url: str  # full download URL (GitHub source); "" for Hugging Face specs
+    task: str = "detect"  # "detect" | "segment"
+    source: str = "github"  # "github" (release URL) | "hf" (Hugging Face repo)
+    repo_id: str | None = None  # Hugging Face repo id when source == "hf"
 
 
 def _name_for(size: str, dataset: str) -> str:
@@ -75,9 +89,26 @@ def _make_spec(size: str, dataset: str, filename: str) -> CheckpointSpec:
     )
 
 
+def _make_seg_spec(size: str) -> CheckpointSpec:
+    return CheckpointSpec(
+        name=f"dfine-seg-{size}",
+        size=size,
+        dataset="coco",
+        num_classes=DATASET_NUM_CLASSES["coco"],
+        filename=f"dfine_seg_{size}_coco.pt",
+        url="",
+        task="segment",
+        source="hf",
+        repo_id=_SEG_REPO,
+    )
+
+
 CHECKPOINTS: dict[str, CheckpointSpec] = {
-    (spec := _make_spec(size, dataset, filename)).name: spec
-    for (size, dataset), filename in _FILES.items()
+    **{
+        (spec := _make_spec(size, dataset, filename)).name: spec
+        for (size, dataset), filename in _FILES.items()
+    },
+    **{(spec := _make_seg_spec(size)).name: spec for size in _SEG_SIZES},
 }
 
 
@@ -124,9 +155,9 @@ def config_for(spec: CheckpointSpec | str, **overrides) -> DFINEConfig:
 
     if isinstance(spec, str):
         spec = resolve(spec)
-    # spec supplies num_classes; an explicit override (e.g. a custom-trained head)
-    # still wins.
-    return DFINEConfig.preset(spec.size, **{"num_classes": spec.num_classes, **overrides})
+    # spec supplies num_classes + task; explicit overrides (e.g. a custom head) win.
+    defaults = {"num_classes": spec.num_classes, "task": spec.task}
+    return DFINEConfig.preset(spec.size, **{**defaults, **overrides})
 
 
 def list_checkpoints() -> list[str]:

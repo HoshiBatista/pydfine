@@ -136,10 +136,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       nano model strict-loads the full `dfine_seg_n_coco.pt` (0 missing/0 unexpected) and its
       forward yields `pred_masks [1,300,H/4,W/4]` in [0,1]. Tests `test_seg_model.py` (5).
       Suite 218 passed / 12 skipped.
-- [ ] **S5 (remaining) Registry + HF weights**: `dfine_seg_<size>_coco` catalogue entries +
-      `huggingface_hub` download source (`[hf]` extra) so `DFINE.from_pretrained("dfine_seg_s")`
-      auto-fetches. (Config `task`/`mask_dim` fields already landed in S4.) The ArgoHA `.pt` is a
-      plain state_dict — check `native/loader.extract_state_dict` handles it (no `ema`/`model` wrap).
+- [x] **S5 (remaining) Registry + HF weights** *(2026-07-21)*. `CheckpointSpec` gained
+      `task`/`source`/`repo_id`; added `dfine-seg-{n,s,m,l,x}` entries (`source="hf"`,
+      `repo_id="ArgoSA/D-FINE-seg"`, `task="segment"`, 80-class) — all 5 confirmed present on HF.
+      `config_for` now propagates `spec.task` (wires the mask head). `downloads.download_weights`
+      branches on `source`: HF specs fetch via `huggingface_hub.hf_hub_download` (lazy import,
+      new `[hf]` extra; also in `[dev]`), GitHub specs unchanged. `native/loader` already handles
+      ArgoHA's plain state_dict (bare-tensor-dict branch). **`DFINE.from_pretrained("dfine-seg-n")`
+      works end-to-end** (download → build w/ mask head → strict-load → mask forward) — verified by
+      a (cache-gated) test. `docs/CONFIG_REFERENCE.md` done in S4. Registry stays torch-free (base
+      import check green). Tests: seg specs present/wired per size, source-aware URL check,
+      from_pretrained e2e. Suite 224 passed / 12 skipped. **Phase S inference chain complete
+      except S6 (Results.masks) + S7 (parity).**
 - [ ] **S6 Mask postprocessing + `Results.masks`**: sigmoid → threshold → crop-to-box →
       resize to original scale; new `Masks` container; `plot()`/`save()` overlay; interop
       (`to_coco` RLE, `to_supervision` masks). `predict(task=segment)` end-to-end.

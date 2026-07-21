@@ -69,3 +69,15 @@ def test_segment_model_strict_loads_seg_checkpoint():
     sd = torch.load(path, map_location="cpu", weights_only=True)
     missing, unexpected = model.load_state_dict(sd, strict=True)
     assert not missing and not unexpected
+
+
+def test_from_pretrained_seg_end_to_end():
+    """DFINE.from_pretrained("dfine-seg-n") builds the mask head + strict-loads HF weights."""
+    if _cached_seg_ckpt() is None:
+        pytest.skip("dfine_seg_n_coco.pt not cached — run the S1 probe to populate it")
+
+    model = DFINE.from_pretrained("dfine-seg-n")
+    assert hasattr(model.decoder, "mask_decoder")
+    with torch.no_grad():
+        out = model(torch.rand(1, 3, 640, 640))
+    assert out["pred_masks"].shape[0] == 1 and out["pred_masks"].dim() == 4
