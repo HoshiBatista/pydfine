@@ -126,7 +126,6 @@ def wrap_model_ddp(
     """
     if not is_dist_available_and_initialized():
         return model
-    # SyncBatchNorm only supports GPU modules; skip it on CPU (single-node CPU/gloo).
     if sync_bn and device is not None and device.type == "cuda":
         model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
     if device is not None and device.type == "cuda":
@@ -160,7 +159,7 @@ def wrap_loader_distributed(loader: DataLoader, *, shuffle: bool) -> DataLoader:
         pin_memory=loader.pin_memory,
     )
 
-    inner = loader  # keep a handle so the dataset/collate epoch hooks still fire
+    inner = loader
 
     def set_epoch(epoch: int) -> None:
         sampler.set_epoch(epoch)

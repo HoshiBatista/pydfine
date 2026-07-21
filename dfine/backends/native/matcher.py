@@ -53,7 +53,7 @@ class HungarianMatcher(nn.Module):
                 "cost_bbox": cfg.cost_bbox,
                 "cost_giou": cfg.cost_giou,
             },
-            use_focal_loss=True,  # D-FINE fixes use_focal_loss=True globally
+            use_focal_loss=True,
             alpha=cfg.matcher_alpha,
             gamma=cfg.matcher_gamma,
         )
@@ -74,7 +74,6 @@ class HungarianMatcher(nn.Module):
         tgt_ids = torch.cat([v["labels"] for v in targets])
         tgt_bbox = torch.cat([v["boxes"] for v in targets])
 
-        # Classification cost (focal approximation of 1 - p[target class]).
         if self.use_focal_loss:
             out_prob = out_prob[:, tgt_ids]
             neg_cost_class = (

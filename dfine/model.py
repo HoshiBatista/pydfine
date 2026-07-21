@@ -49,7 +49,6 @@ def _resolve_device(device: str | torch.device | None) -> torch.device:
 
 
 def _coco_names() -> dict[int, str]:
-    # Contiguous 0..79 label -> COCO display name (postprocessor labels are contiguous).
     from .backends.native.coco import mscoco_category2name
 
     return dict(enumerate(mscoco_category2name.values()))
@@ -141,8 +140,6 @@ class DFINE:
         self.device = _resolve_device(device)
         self.names = _build_names(self.config)
 
-        # Backend is imported here (not at module top) so it's only pulled in when a
-        # model is actually built.
         from .backends.native import DFINE as _NativeDFINE
         from .backends.native import DFINEPostProcessor
 
@@ -164,7 +161,6 @@ class DFINE:
         from .registry import resolve
 
         spec = resolve(name)
-        # Skip the ImageNet backbone fetch — the checkpoint overwrites it anyway.
         model = cls(
             size=spec.size,
             device=device,
@@ -227,7 +223,7 @@ class DFINE:
 
         outputs = self.model(batch)
         detections = self.postprocessor(outputs, orig_sizes)
-        pred_masks = outputs.get("pred_masks")  # [B,Q,Hm,Wm] sigmoid probs, or None
+        pred_masks = outputs.get("pred_masks")
         return [
             self._to_results(
                 im, det, conf, None if pred_masks is None else pred_masks[b], mask_thresh
@@ -256,10 +252,8 @@ class DFINE:
 
         masks_obj = None
         if pred_masks is not None:
-            # Gather the surviving detections' masks, resize to original scale, threshold,
-            # and clip to each box (matches D-FINE-seg's inference postprocess).
             qidx = det["query_index"][keep]
-            m = pred_masks[qidx]  # [K, Hm, Wm] probs
+            m = pred_masks[qidx]
             if m.numel():
                 h0, w0 = image.height, image.width
                 m = torch.nn.functional.interpolate(
@@ -323,7 +317,6 @@ class DFINE:
         """
         from .train.distributed import launched_via_torchrun, setup_distributed
 
-        # This process is the launcher: spawn one worker per GPU and reload the result.
         if devices is not None and int(devices) > 1 and not launched_via_torchrun():
             return self._train_multigpu(
                 int(devices),
@@ -338,7 +331,6 @@ class DFINE:
                 visualize=visualize,
             )
 
-        # Launched under torchrun: join the group and bind this rank's GPU.
         if launched_via_torchrun():
             setup_distributed()
             self._bind_local_rank_device()
@@ -394,7 +386,6 @@ class DFINE:
         elif train_loader is None:
             raise ValueError("Provide training data via `data=` or `train_loader=`.")
 
-        # Default to COCO evaluation each epoch when we have a val loader but no hook.
         if val_loader is not None and val_fn is None:
             from .train.evaluator import coco_val_fn
 
@@ -535,9 +526,6 @@ class DFINE:
             raise ValueError(f"Unsupported export format {format!r}; only 'onnx' is available.")
         from .export.onnx import export_onnx
 
-        # The encoder precomputes positional embeddings sized to cfg.imgsz, so the export
-        # resolution must match the model it was built with — otherwise the traced graph
-        # crashes deep in the encoder with a cryptic shape mismatch.
         imgsz = imgsz or self.config.imgsz
         if imgsz != self.config.imgsz:
             raise ValueError(

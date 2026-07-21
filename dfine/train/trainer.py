@@ -27,6 +27,7 @@ from typing import Callable
 import torch
 import torch.nn as nn
 
+from ..log import LOGGER, banner, colorstr, metrics_line
 from .ema import ModelEMA
 from .logger import MetricLogger, SmoothedValue
 from .scheduler import LinearWarmup, build_lr_scheduler
@@ -34,10 +35,6 @@ from .visualizer import TrainingVisualizer
 
 __all__ = ["build_param_groups", "train_one_epoch", "Trainer"]
 
-# Copied verbatim from D-FINE configs/dfine/include/optimizer.yml so the AdamW param
-# grouping is identical to upstream. Upstream ships two schemes: L/X (and the base) put
-# only `norm|bn` in the zero-weight-decay encoder/decoder group, while N/S/M also include
-# `bias` — selected per size by `cfg.zero_wd_encdec_bias`.
 _BACKBONE_NO_NORM = r"^(?=.*backbone)(?!.*norm).*$"
 _ENC_DEC_NORM = r"^(?=.*(?:encoder|decoder))(?=.*(?:norm|bn)).*$"
 _ENC_DEC_NORM_BIAS = r"^(?=.*(?:encoder|decoder))(?=.*(?:norm|bn|bias)).*$"
@@ -172,7 +169,7 @@ def train_one_epoch(
             )
 
     stats = logger.global_avg_dict()
-    print("Averaged stats:", logger)
+    LOGGER.info(f"{colorstr('green', 'bold', header)}  {metrics_line(stats)}")
     return stats
 
 
@@ -205,8 +202,6 @@ class Trainer:
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.is_main = is_main_process()
 
-        # ``module`` is the raw model (optimizer/EMA/checkpoints target it); ``model`` is
-        # the possibly-DDP-wrapped module used for the forward/backward.
         self.module = model.to(self.device)
         self.criterion = DFINECriterion.from_config(cfg).to(self.device)
         self.optimizer = build_optimizer(self.module, cfg)
@@ -230,7 +225,6 @@ class Trainer:
             if want_ema
             else None
         )
-        # Only rank 0 writes TensorBoard/loss-curve/W&B artifacts.
         self.visualizer = (
             TrainingVisualizer(
                 self.output_dir,
@@ -266,8 +260,11 @@ class Trainer:
             else None
         )
 
+        if self.is_main:
+            LOGGER.info(self._start_banner(epochs, train_loader, val_loader is not None))
+        best_ap = -1.0
+
         for epoch in range(epochs):
-            # Let the sampler / multi-scale collate know the epoch (no-op for plain loaders).
             if hasattr(train_loader, "set_epoch"):
                 train_loader.set_epoch(epoch)
             stats = train_one_epoch(
@@ -291,6 +288,12 @@ class Trainer:
             if val_fn is not None and val_loader is not None:
                 module = self.ema.module if self.ema else de_parallel(self.model)
                 metrics = val_fn(module, val_loader)
+                if self.is_main:
+                    ap = metrics.get("AP")
+                    if ap is not None and ap > best_ap:
+                        best_ap = ap
+                        LOGGER.info("  " + colorstr("green", "bold", f"↑ new best AP {ap:.4f}"))
+                        self.save_checkpoint(self.output_dir / "best.pth", epoch)
             if self.visualizer is not None:
                 self.visualizer.log_epoch(epoch, stats, metrics)
             if self.is_main:
@@ -299,7 +302,32 @@ class Trainer:
 
         if self.visualizer is not None:
             self.visualizer.close()
+        if self.is_main and best_ap >= 0:
+            LOGGER.info(colorstr("green", "bold", f"Training complete — best AP {best_ap:.4f}"))
         return self.ema.module if self.ema else de_parallel(self.model)
+
+    def _start_banner(self, epochs: int, train_loader, has_val: bool) -> str:
+        """A colored key/value summary of the run, logged once before the first epoch."""
+        total = sum(p.numel() for p in self.module.parameters())
+        trainable = sum(p.numel() for p in self.module.parameters() if p.requires_grad)
+        n_iter = len(train_loader) if hasattr(train_loader, "__len__") else "?"
+        cfg = self.cfg
+        return banner(
+            f"D-FINE {cfg.size or 'custom'} · task={cfg.task} · {cfg.num_classes} classes",
+            {
+                "params": f"{trainable / 1e6:.2f}M trainable / {total / 1e6:.2f}M total",
+                "device": str(self.device),
+                "epochs": epochs,
+                "imgsz": cfg.imgsz,
+                "batches/epoch": n_iter,
+                "optimizer": f"AdamW  lr={cfg.lr:g}  lr_backbone={cfg.lr_backbone:g}"
+                f"  wd={cfg.weight_decay:g}",
+                "amp": "on" if self.scaler is not None else "off",
+                "ema": "on" if self.ema is not None else "off",
+                "validation": "on" if has_val else "off",
+                "output": str(self.output_dir),
+            },
+        )
 
     def save_checkpoint(self, path: str | Path, epoch: int) -> None:
         from .distributed import de_parallel

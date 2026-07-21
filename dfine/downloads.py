@@ -35,8 +35,6 @@ def download(url: str, filename: str | None = None, cache_dir_override=None, pro
 
     import torch.hub
 
-    # Download to a temp name, then atomically rename so a killed download never
-    # leaves a truncated file that later looks "cached".
     tmp = dst.with_suffix(dst.suffix + ".part")
     torch.hub.download_url_to_file(url, str(tmp), progress=progress)
     tmp.replace(dst)

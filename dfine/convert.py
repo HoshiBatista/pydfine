@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 _IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")
 
-# YOLO split -> COCO split-folder name (matches build_coco_dataloaders defaults).
 _DEFAULT_SPLIT_NAMES = {"train": "train2017", "val": "val2017", "test": "test2017"}
 
 
@@ -56,7 +55,7 @@ def _require_pil():
 def _label_path_for_image(image: Path) -> Path:
     """Mirror an ``.../images/<...>/x.jpg`` path to ``.../labels/<...>/x.txt`` (YOLO rule)."""
     parts = list(image.parts)
-    for i in range(len(parts) - 1, -1, -1):  # replace the *last* "images" segment
+    for i in range(len(parts) - 1, -1, -1):
         if parts[i] == "images":
             parts[i] = "labels"
             break
@@ -79,7 +78,7 @@ def _parse_label_line(line: str) -> tuple[int, list[float]] | None:
     coords = [float(v) for v in tok[1:]]
     if len(coords) == 4:
         cx, cy, w, h = coords
-    else:  # polygon (x1,y1,x2,y2,...) -> tight bbox
+    else:
         xs, ys = coords[0::2], coords[1::2]
         if len(xs) != len(ys) or len(xs) < 2:
             return None
@@ -103,7 +102,7 @@ def _resolve_class_names(yolo_root: Path, class_names) -> list[str] | None:
                     "or pass class_names=[...] explicitly."
                 ) from exc
             names = yaml.safe_load(yaml_path.read_text()).get("names")
-            if isinstance(names, dict):  # {0: 'cat', 1: 'dog'}
+            if isinstance(names, dict):
                 return [names[k] for k in sorted(names)]
             if names is not None:
                 return list(names)
@@ -144,7 +143,6 @@ def _convert_split(
         with Image.open(img_path) as im:
             w, h = im.size
 
-        # Flatten into the output dir, disambiguating any duplicate basenames.
         file_name = img_path.name
         if file_name in used_names:
             used_names[file_name] += 1
@@ -163,7 +161,7 @@ def _convert_split(
 
         label_path = _label_path_for_image(img_path)
         if not label_path.is_file():
-            continue  # image with no objects (a valid background/negative sample)
+            continue
         for line in label_path.read_text().splitlines():
             line = line.strip()
             if not line:
@@ -183,7 +181,7 @@ def _convert_split(
                 {
                     "id": ann_id,
                     "image_id": img_id,
-                    "category_id": cls,  # 0-indexed, == YOLO class id
+                    "category_id": cls,
                     "bbox": [x, y, bw_px, bh_px],
                     "area": bw_px * bh_px,
                     "iscrowd": 0,
@@ -242,13 +240,10 @@ def yolo_to_coco(
             len(coco_splits[out_name]["annotations"]),
         )
 
-    # Resolve the category table: explicit/yaml names, else infer from the labels.
     if names is None:
         n = (max(num_classes_seen) + 1) if num_classes_seen else 0
         names = [f"class_{i}" for i in range(n)]
     elif num_classes_seen and max(num_classes_seen) >= len(names):
-        # Guard against a names list shorter than the labels: otherwise annotations would
-        # carry a category_id with no `categories` entry and COCO eval fails cryptically.
         raise ValueError(
             f"labels reference class id {max(num_classes_seen)} but only {len(names)} class "
             f"name(s) were provided — pass class_names with at least "

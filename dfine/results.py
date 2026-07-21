@@ -18,7 +18,6 @@ from PIL import Image, ImageDraw
 
 __all__ = ["Boxes", "Masks", "Results"]
 
-# Distinct-ish palette; indexed by class id (wraps around).
 _PALETTE = [
     (255, 56, 56),
     (255, 159, 56),
@@ -127,7 +126,6 @@ class Results:
             track_id = int(ids[i]) if ids is not None else None
             return _PALETTE[(track_id if track_id is not None else cls_id) % len(_PALETTE)]
 
-        # Masks first (under the boxes), alpha-blended into each detection's color.
         if self.masks is not None and len(self.masks):
             arr = np.asarray(img).astype(np.float32)
             alpha = 0.5
@@ -159,8 +157,6 @@ class Results:
         path = Path(filename)
         Image.fromarray(self.plot()).save(path)
         return path
-
-    # -- interop ---------------------------------------------------------------
 
     def to_pandas(self):
         """Return detections as a ``pandas.DataFrame`` (one row per box).

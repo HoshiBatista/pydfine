@@ -41,7 +41,6 @@ class TrainingVisualizer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.plot = plot
-        # (global_step, total_loss) points for the PNG curve.
         self._steps: list[int] = []
         self._losses: list[float] = []
         self._epoch_x: list[int] = []
@@ -105,7 +104,6 @@ class TrainingVisualizer:
             payload.update({f"metrics/{k}": v for k, v in (metrics or {}).items()})
             payload["epoch"] = epoch
             self.wandb.log(payload)
-        # "AP" is the primary COCO mAP@[.50:.95] (see evaluator.COCO_STAT_NAMES).
         if metrics and "AP" in metrics:
             self._epoch_x.append(epoch)
             self._epoch_ap.append(metrics["AP"])
@@ -119,7 +117,7 @@ class TrainingVisualizer:
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
         except ImportError:
-            self.plot = False  # only warn once, then stop trying
+            self.plot = False
             print("[visualizer] matplotlib not installed — skipping loss_curve.png.")
             return
         if not self._steps:

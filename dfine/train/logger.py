@@ -19,6 +19,8 @@ from collections.abc import Iterable
 
 import torch
 
+from ..log import LOGGER, colorstr
+
 __all__ = ["SmoothedValue", "MetricLogger"]
 
 
@@ -106,15 +108,15 @@ class MetricLogger:
         space_fmt = ":" + str(len(str(n))) + "d" if n is not None else ":d"
         cuda = torch.cuda.is_available()
         parts = [
-            header,
-            "[{0" + space_fmt + "}/{1}]",
-            "eta: {eta}",
+            colorstr("bright_blue", "bold", header) if header else "",
+            colorstr("gray", "[{0" + space_fmt + "}/{1}]"),
+            colorstr("dim", "eta:") + " {eta}",
             "{meters}",
-            "time: {time}",
-            "data: {data}",
+            colorstr("dim", "time:") + " {time}",
+            colorstr("dim", "data:") + " {data}",
         ]
         if cuda:
-            parts.append("max mem: {memory:.0f}")
+            parts.append(colorstr("dim", "max mem:") + " {memory:.0f}")
         log_msg = self.delimiter.join(parts)
         MB = 1024.0 * 1024.0
 
@@ -129,14 +131,14 @@ class MetricLogger:
                 fields = dict(eta=eta, meters=str(self), time=str(iter_time), data=str(data_time))
                 if cuda:
                     fields["memory"] = torch.cuda.max_memory_allocated() / MB
-                print(log_msg.format(i, n if n is not None else "?", **fields))
+                LOGGER.info(log_msg.format(i, n if n is not None else "?", **fields))
             i += 1
             end = time.time()
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         per_it = total_time / max(i, 1)
-        print(f"{header} Total time: {total_time_str} ({per_it:.4f} s / it)")
+        LOGGER.info(colorstr("dim", f"{header} total time: {total_time_str} ({per_it:.4f} s/it)"))
 
     def global_avg_dict(self) -> dict[str, float]:
         """`{meter: global_avg}` — the per-epoch summary returned by the train loop."""

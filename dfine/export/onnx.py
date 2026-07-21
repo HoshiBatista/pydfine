@@ -70,21 +70,16 @@ def export_onnx(
     file = Path(file)
     deploy = DeployModel(model, postprocessor).to(device).eval()
 
-    # The decoder takes a batched code path only when batch > 1; trace with >= 2 for a
-    # dynamic export so the graph generalizes to any N (it still serves batch 1). Upstream
-    # traces with 32 for the same reason.
     trace_batch = max(batch, 2) if dynamic else batch
     images = torch.rand(trace_batch, 3, imgsz, imgsz, device=device)
     orig_target_sizes = torch.tensor([[imgsz, imgsz]] * trace_batch, device=device)
-    deploy(images, orig_target_sizes)  # sanity forward before export
+    deploy(images, orig_target_sizes)
 
     dynamic_axes = None
     if dynamic:
         dynamic_axes = {name: {0: "N"} for name in ("images", "orig_target_sizes")}
         dynamic_axes.update({name: {0: "N"} for name in ("labels", "boxes", "scores")})
 
-    # Force the legacy TorchScript exporter (what upstream validated at opset 16); newer
-    # torch defaults to the dynamo exporter, which needs the extra ``onnxscript`` dep.
     export_kwargs = dict(
         input_names=["images", "orig_target_sizes"],
         output_names=["labels", "boxes", "scores"],

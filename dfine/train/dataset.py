@@ -40,7 +40,6 @@ except ImportError as exc:  # pragma: no cover - exercised only without the trai
         "COCO training data needs faster-coco-eval — install with `pip install pydfine[train]`."
     ) from exc
 
-# torchvision >= 0.16 exposes tv_tensors; 0.15.x still calls them datapoints.
 try:
     from torchvision.tv_tensors import BoundingBoxes, BoundingBoxFormat
     from torchvision.tv_tensors import Image as TVImage
@@ -83,7 +82,7 @@ class _PrepareCocoTarget:
         anno = [obj for obj in target["annotations"] if obj.get("iscrowd", 0) == 0]
 
         boxes = torch.as_tensor([obj["bbox"] for obj in anno], dtype=torch.float32).reshape(-1, 4)
-        boxes[:, 2:] += boxes[:, :2]  # xywh -> xyxy
+        boxes[:, 2:] += boxes[:, :2]
         boxes[:, 0::2].clamp_(min=0, max=w)
         boxes[:, 1::2].clamp_(min=0, max=h)
 
@@ -148,16 +147,12 @@ class CocoDetection(FasterCocoDetection):
 
     def set_epoch(self, epoch: int) -> None:
         self._epoch = epoch
-        # Forward to epoch-aware transforms (e.g. augment.TrainCompose's no-aug policy).
         if hasattr(self._transforms, "set_epoch"):
             self._transforms.set_epoch(epoch)
 
     @property
     def epoch(self) -> int:
         return getattr(self, "_epoch", -1)
-
-
-# --- transforms ---------------------------------------------------------------
 
 
 class _ConvertPILImage(T.Transform):
@@ -177,9 +172,9 @@ class _ConvertBoxes(T.Transform):
     _transformed_types = (BoundingBoxes,)
 
     def transform(self, inpt: Any, params: dict[str, Any]) -> Any:
-        canvas = getattr(inpt, _CANVAS_KEY)  # (H, W)
+        canvas = getattr(inpt, _CANVAS_KEY)
         boxes = torchvision.ops.box_convert(inpt, in_fmt="xyxy", out_fmt="cxcywh")
-        norm = torch.tensor([canvas[1], canvas[0]]).tile(2)[None]  # [W,H,W,H]
+        norm = torch.tensor([canvas[1], canvas[0]]).tile(2)[None]
         return boxes / norm
 
 
@@ -197,9 +192,6 @@ def default_transforms(imgsz: int = 640, train: bool = True) -> T.Compose:
             _ConvertBoxes(),
         ]
     )
-
-
-# --- collate / dataloader -----------------------------------------------------
 
 
 def batch_image_collate_fn(items):
@@ -338,10 +330,8 @@ def build_coco_dataloader(
         remap_mscoco_category=remap_mscoco_category,
     )
 
-    # Multi-scale only for training, and only up to the no-aug tail (like upstream).
     repeat = 3 if (train and multiscale) else None
     stop_epoch = (cfg.epochs - cfg.no_aug_epoch) if cfg is not None else None
-    # Floor the jitter so a small scale never starves the decoder's top-k (num_queries).
     min_size = min_multiscale_size(cfg.feat_strides, cfg.num_queries) if cfg is not None else None
     collate = BatchImageCollateFunction(
         base_size=imgsz, base_size_repeat=repeat, stop_epoch=stop_epoch, min_size=min_size
@@ -481,6 +471,5 @@ def build_coco_val_dataloader(
     )
 
 
-# Re-exported for callers building custom label maps / class-name lists.
 COCO_CATEGORY2LABEL = mscoco_category2label
 COCO_CATEGORY2NAME = mscoco_category2name

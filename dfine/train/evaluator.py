@@ -24,17 +24,18 @@ from typing import Callable
 import torch
 import torch.nn as nn
 
+from ..log import LOGGER, metrics_line, rule
+
 __all__ = ["evaluate", "coco_val_fn", "COCO_STAT_NAMES"]
 
-# Order of the classic 12-element COCO ``summarize()`` stats array.
 COCO_STAT_NAMES = (
-    "AP",  # AP @ IoU=0.50:0.95 (primary mAP)
-    "AP50",  # AP @ IoU=0.50
-    "AP75",  # AP @ IoU=0.75
+    "AP",
+    "AP50",
+    "AP75",
     "AP_small",
     "AP_medium",
     "AP_large",
-    "AR_1",  # AR given 1 detection per image
+    "AR_1",
     "AR_10",
     "AR_100",
     "AR_small",
@@ -93,7 +94,9 @@ def evaluate(
     evaluator.summarize()
 
     stats = evaluator.coco_eval[iou_type].stats.tolist()
-    return {name: float(v) for name, v in zip(COCO_STAT_NAMES, stats)}
+    metrics = {name: float(v) for name, v in zip(COCO_STAT_NAMES, stats)}
+    LOGGER.info(f"{rule(f'eval · {iou_type}', 'cyan')}  {metrics_line(metrics)}")
+    return metrics
 
 
 def coco_val_fn(

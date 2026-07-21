@@ -99,8 +99,6 @@ def _cmd_export(args: argparse.Namespace) -> int:
     if args.model.lower() in CHECKPOINTS:
         model = DFINE.from_pretrained(args.model.lower())
     else:
-        # Build at the requested imgsz so the encoder's precomputed positional
-        # embeddings (sized to cfg.imgsz) match the export resolution.
         overrides = {"imgsz": args.imgsz} if args.imgsz else {}
         model = DFINE(size=args.model, **overrides)
         if args.weights:

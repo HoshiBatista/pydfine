@@ -59,7 +59,6 @@ def translate_gt(gt, reg_max, reg_scale, up):
     gt = gt.reshape(-1)
     function_values = weighting_function(reg_max, up, reg_scale)
 
-    # closest left-side index per value
     diffs = function_values.unsqueeze(0) - gt.unsqueeze(1)
     mask = diffs <= 0
     closest_left_indices = torch.sum(mask, dim=1) - 1

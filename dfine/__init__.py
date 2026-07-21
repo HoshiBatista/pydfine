@@ -26,8 +26,6 @@ __all__ = [
     "__version__",
 ]
 
-# Inference symbols live in modules that import torch; expose them lazily so a bare
-# `import dfine` (config/CLI only) never requires the torch extra.
 _LAZY = {
     "DFINE": "model",
     "Results": "results",
@@ -40,7 +38,7 @@ def __getattr__(name: str) -> Any:
     if name in _LAZY:
         try:
             mod = __import__(f"dfine.{_LAZY[name]}", fromlist=[name])
-        except ImportError as exc:  # torch/torchvision/pillow not installed
+        except ImportError as exc:
             raise AttributeError(
                 f"dfine.{name} needs the inference deps — install with "
                 f"`pip install pydfine[torch]` (missing: {exc.name})."

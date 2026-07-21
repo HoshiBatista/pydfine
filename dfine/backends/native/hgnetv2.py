@@ -183,7 +183,6 @@ class HG_Block(nn.Module):
                     )
                 )
 
-        # feature aggregation
         total_chs = in_chs + layer_num * mid_chs
         if agg == "se":
             aggregation_squeeze_conv = ConvBNAct(
@@ -288,8 +287,6 @@ class HGNetv2(nn.Module):
         local_model_dir: cache dir for the download (None = torch hub default).
     """
 
-    # in_channels, mid_channels, out_channels, num_blocks, downsample, light_block,
-    # kernel_size, layer_num
     arch_configs: dict[str, dict] = {
         "B0": {
             "stem_channels": [3, 16, 16],
@@ -490,7 +487,7 @@ class HGNetv2(nn.Module):
             state = torch.hub.load_state_dict_from_url(url, **kwargs)
             self.load_state_dict(state)
             logger.info("Loaded pretrained HGNetV2 %s backbone.", self.name)
-        except Exception as exc:  # network/offline — non-fatal for a library
+        except Exception as exc:
             logger.warning(
                 "Could not load pretrained HGNetV2 %s (%s). Continuing with random "
                 "init; download it manually from %s if you need the weights.",

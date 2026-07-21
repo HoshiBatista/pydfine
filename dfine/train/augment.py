@@ -36,7 +36,6 @@ torchvision.disable_beta_transforms_warning()
 
 __all__ = ["RandomIoUCrop", "TrainCompose", "train_transforms", "ADVANCED_OPS"]
 
-# Ops disabled during the trailing no-aug epochs (matches upstream's stop_epoch policy).
 ADVANCED_OPS = ("RandomPhotometricDistort", "RandomZoomOut", "RandomIoUCrop")
 
 

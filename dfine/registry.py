@@ -31,11 +31,8 @@ if TYPE_CHECKING:
 
 _BASE = "https://github.com/Peterande/storage/releases/download/dfinev1.0"
 
-# dataset variant -> the num_classes its checkpoints were trained with.
 DATASET_NUM_CLASSES: dict[str, int] = {"coco": 80, "obj2coco": 80, "obj365": 366}
 
-# (size, dataset) -> release filename. Only the pairs listed here exist upstream;
-# N is COCO-only. L's obj2coco asset carries an "_e25" suffix (no plain variant).
 _FILES: dict[tuple[str, str], str] = {
     ("n", "coco"): "dfine_n_coco.pth",
     ("s", "coco"): "dfine_s_coco.pth",
@@ -54,7 +51,6 @@ _FILES: dict[tuple[str, str], str] = {
 
 
 # Instance-segmentation weights (D-FINE-seg, © ArgoHA, Apache-2.0) are hosted on
-# Hugging Face, not the GitHub releases. Same architecture as detection + a mask head.
 _SEG_REPO = "ArgoSA/D-FINE-seg"
 _SEG_SIZES = ("n", "s", "m", "l", "x")
 
@@ -63,15 +59,15 @@ _SEG_SIZES = ("n", "s", "m", "l", "x")
 class CheckpointSpec:
     """Everything needed to fetch a checkpoint and build a model that loads it."""
 
-    name: str  # friendly name, e.g. "dfine-l-obj365"
-    size: str  # preset size the weights were trained for ("n".."x")
-    dataset: str  # "coco" | "obj2coco" | "obj365"
-    num_classes: int  # 80 (coco/obj2coco) or 366 (obj365)
-    filename: str  # release asset filename
-    url: str  # full download URL (GitHub source); "" for Hugging Face specs
-    task: str = "detect"  # "detect" | "segment"
-    source: str = "github"  # "github" (release URL) | "hf" (Hugging Face repo)
-    repo_id: str | None = None  # Hugging Face repo id when source == "hf"
+    name: str
+    size: str
+    dataset: str
+    num_classes: int
+    filename: str
+    url: str
+    task: str = "detect"
+    source: str = "github"
+    repo_id: str | None = None
 
 
 def _name_for(size: str, dataset: str) -> str:
@@ -155,7 +151,6 @@ def config_for(spec: CheckpointSpec | str, **overrides) -> DFINEConfig:
 
     if isinstance(spec, str):
         spec = resolve(spec)
-    # spec supplies num_classes + task; explicit overrides (e.g. a custom head) win.
     defaults = {"num_classes": spec.num_classes, "task": spec.task}
     return DFINEConfig.preset(spec.size, **{**defaults, **overrides})
 
