@@ -200,7 +200,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       identity-size argmax match, **+ (cache-gated) the assembled model's reused fuser
       strict-loads `dfine_seg_n_coco.pt`'s `decoder.mask_decoder.*`**. Base import torch-free.
       Suite 248 passed / 16 skipped.
-- [ ] **SS3 `Results` sem_seg surface** (`r.sem_seg` label map, palette overlay plot).
+- [x] **SS3 `Results` sem_seg surface** *(2026-07-21)*. New `SemSeg` container (`results.py`,
+      lazily exported from `dfine`): `data` uint8 `[H,W]` at original scale, `.shape`, repr with
+      class count (255 = void, excluded). `Results` gained `sem_seg` (+ repr note); `plot()`
+      overlays each class with a palette color (alpha 0.5, void pixels untouched), before/besides
+      the box+mask drawing. `DFINE.__init__` builds a `SemSegPostProcessor` when `task="sem_seg"`;
+      `predict` branches to it → `_to_semseg_results` wraps each `[H0,W0]` label map in a boxless
+      `Results` (no `Masks`). **Detect/segment predict unchanged** (`sem_seg=None`). Tests
+      (`test_sem_seg_predict.py`, 5): `SemSeg` shape/repr, palette plot tints classes & skips void,
+      boxless result, `predict(task="sem_seg")` → uint8 label map at original `(H,W)` with valid
+      ids, detect has no `sem_seg`. Base import torch-free. Suite 253 passed / 16 skipped.
 - [ ] **SS4 sem_seg weights + parity** (HF `dfine_seg_*`; fixture vs D-FINE-seg).
 
 ### Phase TS — Segmentation training (largest, optional / later)

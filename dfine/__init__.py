@@ -31,6 +31,7 @@ _LAZY = {
     "Results": "results",
     "Boxes": "results",
     "Masks": "results",
+    "SemSeg": "results",
 }
 
 

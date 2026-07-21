@@ -25,7 +25,7 @@ import torchvision.transforms as T
 from PIL import Image
 
 from .config import DFINEConfig
-from .results import Boxes, Masks, Results
+from .results import Boxes, Masks, Results, SemSeg
 
 __all__ = ["DFINE"]
 
@@ -141,10 +141,16 @@ class DFINE:
         self.names = _build_names(self.config)
 
         from .backends.native import DFINE as _NativeDFINE
-        from .backends.native import DFINEPostProcessor
 
         self.model = _NativeDFINE.from_config(self.config).to(self.device).eval()
-        self.postprocessor = DFINEPostProcessor.from_config(self.config).to(self.device).eval()
+        if self.config.task == "sem_seg":
+            from .backends.native import SemSegPostProcessor
+
+            self.postprocessor = SemSegPostProcessor.from_config(self.config).to(self.device).eval()
+        else:
+            from .backends.native import DFINEPostProcessor
+
+            self.postprocessor = DFINEPostProcessor.from_config(self.config).to(self.device).eval()
 
         if weights is not None:
             self.load(weights)
@@ -207,6 +213,8 @@ class DFINE:
         original pixel scale. ``conf`` drops low-scoring detections. For a
         ``task="segment"`` model, each result also carries per-instance
         :class:`~dfine.results.Masks` (original scale), thresholded at ``mask_thresh``.
+        For a ``task="sem_seg"`` model each result instead carries a
+        :class:`~dfine.results.SemSeg` label map (uint8, original scale) and no boxes.
         """
         images = _load_images(source)
         size = imgsz or self.config.imgsz
@@ -222,6 +230,10 @@ class DFINE:
         orig_sizes = torch.tensor([[im.width, im.height] for im in images], device=self.device)
 
         outputs = self.model(batch)
+        if self.config.task == "sem_seg":
+            label_maps = self.postprocessor(outputs, orig_sizes)
+            return [self._to_semseg_results(im, m) for im, m in zip(images, label_maps)]
+
         detections = self.postprocessor(outputs, orig_sizes)
         pred_masks = outputs.get("pred_masks")
         return [
@@ -266,6 +278,15 @@ class DFINE:
             masks_obj = Masks(binm.cpu())
 
         return Results(image, boxes_obj, self.names, masks=masks_obj)
+
+    def _to_semseg_results(self, image: Image.Image, label_map: torch.Tensor) -> Results:
+        """Wrap a ``[H0, W0]`` uint8 label map (original scale) in a boxless Results."""
+        empty = Boxes(
+            xyxy=torch.zeros((0, 4)),
+            conf=torch.zeros((0,)),
+            cls=torch.zeros((0,), dtype=torch.long),
+        )
+        return Results(image, empty, self.names, sem_seg=SemSeg(label_map.cpu()))
 
     def train(
         self,
