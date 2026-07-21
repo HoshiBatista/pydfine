@@ -16,7 +16,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
-__all__ = ["Boxes", "Masks", "Results"]
+__all__ = ["Boxes", "Masks", "Results", "SemSeg"]
 
 _PALETTE = [
     (255, 56, 56),
@@ -84,6 +84,27 @@ class Masks:
         return f"Masks(n={len(self)}, {w}x{h})"
 
 
+class SemSeg:
+    """Dense semantic-segmentation label map for one image: ``data`` is uint8 ``[H, W]``.
+
+    Each pixel holds a class id at the original image resolution; ``255`` is treated as
+    void/ignore (left un-tinted by :meth:`Results.plot`). Populated for ``task="sem_seg"``
+    models; ``None`` on detection/instance-segmentation results.
+    """
+
+    def __init__(self, data: torch.Tensor):
+        self.data = data
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        return (int(self.data.shape[-2]), int(self.data.shape[-1]))
+
+    def __repr__(self) -> str:
+        h, w = self.shape
+        n = int((self.data.unique() != 255).sum()) if self.data.numel() else 0
+        return f"SemSeg({w}x{h}, {n} classes)"
+
+
 class Results:
     """Detections for one image + helpers to visualize them."""
 
@@ -93,10 +114,12 @@ class Results:
         boxes: Boxes,
         names: dict[int, str],
         masks: Masks | None = None,
+        sem_seg: SemSeg | None = None,
     ):
         self.orig_img = orig_img
         self.boxes = boxes
         self.masks = masks
+        self.sem_seg = sem_seg
         self.names = names
         self.orig_shape = (orig_img.height, orig_img.width)
 
@@ -104,7 +127,12 @@ class Results:
         return len(self.boxes)
 
     def __repr__(self) -> str:
-        return f"Results(image={self.orig_shape[1]}x{self.orig_shape[0]}, boxes={len(self)})"
+        extra = (
+            ""
+            if self.sem_seg is None
+            else f", sem_seg={self.sem_seg.shape[1]}x{self.sem_seg.shape[0]}"
+        )
+        return f"Results(image={self.orig_shape[1]}x{self.orig_shape[0]}, boxes={len(self)}{extra})"
 
     def _label(self, cls_id: int, conf: float, track_id: int | None = None) -> str:
         name = self.names.get(cls_id, str(cls_id)) if self.names else str(cls_id)
@@ -117,7 +145,9 @@ class Results:
         When the boxes carry track ids (``boxes.id``), each label is prefixed with
         ``#<id>`` and boxes are colored by track id so an object keeps its color.
         Instance masks (``self.masks``), when present, are overlaid semi-transparently
-        in each detection's color before boxes/labels are drawn on top.
+        in each detection's color before boxes/labels are drawn on top. A semantic-
+        segmentation label map (``self.sem_seg``) is overlaid per class with a palette
+        color (``255`` void pixels left untouched).
         """
         img = self.orig_img.convert("RGB").copy()
         ids = self.boxes.id
@@ -125,6 +155,18 @@ class Results:
         def _color(i: int, cls_id: int) -> tuple[int, int, int]:
             track_id = int(ids[i]) if ids is not None else None
             return _PALETTE[(track_id if track_id is not None else cls_id) % len(_PALETTE)]
+
+        if self.sem_seg is not None:
+            arr = np.asarray(img).astype(np.float32)
+            labels = np.asarray(self.sem_seg.data)
+            alpha = 0.5
+            for cls_id in np.unique(labels):
+                if int(cls_id) == 255:
+                    continue
+                color = np.array(_PALETTE[int(cls_id) % len(_PALETTE)], dtype=np.float32)
+                sel = labels == cls_id
+                arr[sel] = arr[sel] * (1 - alpha) + color * alpha
+            img = Image.fromarray(arr.clip(0, 255).astype(np.uint8))
 
         if self.masks is not None and len(self.masks):
             arr = np.asarray(img).astype(np.float32)
