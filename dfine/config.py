@@ -142,6 +142,14 @@ class DFINEConfig:
         """Whether the decoder runs the instance-mask branch (task="segment")."""
         return self.task == "segment"
 
+    @property
+    def uses_mask_fuser(self) -> bool:
+        """Whether the model builds the MaskDecoder fuser (segment or sem_seg).
+
+        Both tasks share the fuser, so both need the nano low-level-feat plumbing.
+        """
+        return self.task in ("segment", "sem_seg")
+
     @classmethod
     def preset(cls, size: str, **overrides: Any) -> DFINEConfig:
         """Build a config from a size preset, then apply inline overrides.

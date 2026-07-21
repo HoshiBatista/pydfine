@@ -17,6 +17,7 @@ from .mask_decoder import MaskDecoder
 from .matcher import HungarianMatcher
 from .postprocessor import DFINEPostProcessor
 from .sem_seg_decoder import SemSegDecoder
+from .sem_seg_postprocessor import SemSegPostProcessor
 
 __all__ = [
     "DFINE",
@@ -28,6 +29,7 @@ __all__ = [
     "HybridEncoder",
     "MaskDecoder",
     "SemSegDecoder",
+    "SemSegPostProcessor",
     "extract_state_dict",
     "load_checkpoint",
 ]

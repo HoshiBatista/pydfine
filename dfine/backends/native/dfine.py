@@ -26,6 +26,7 @@ from .dfine_decoder import DFINETransformer
 from .hgnetv2 import HGNetv2
 from .hybrid_encoder import HybridEncoder
 from .loader import load_checkpoint
+from .sem_seg_decoder import SemSegDecoder
 
 if TYPE_CHECKING:
     from ...config import DFINEConfig
@@ -44,11 +45,12 @@ class DFINE(nn.Module):
     def _seg_wiring(cfg: DFINEConfig) -> tuple[list[int] | None, int | None]:
         """Segmentation wiring: (backbone return_idx override, mask_low_level_ch).
 
-        When the mask head is on and the encoder has no native stride-8 level (nano),
-        the backbone must emit an extra stride-8 feature (stage index 1) for the mask
-        decoder's low-level input. Returns ``(None, None)`` for the detection path.
+        When a mask-fuser task is on (segment or sem_seg) and the encoder has no native
+        stride-8 level (nano), the backbone must emit an extra stride-8 feature (stage
+        index 1) for the mask decoder's low-level input. Returns ``(None, None)`` for the
+        detection path.
         """
-        if not cfg.enable_mask_head or 8 in cfg.feat_strides:
+        if not cfg.uses_mask_fuser or 8 in cfg.feat_strides:
             return None, None
         return_idx = cfg.return_idx if 1 in cfg.return_idx else [1, *cfg.return_idx]
         name = HGNetv2._normalize_name(cfg.backbone)
@@ -57,17 +59,25 @@ class DFINE(nn.Module):
 
     @classmethod
     def from_config(cls, cfg: DFINEConfig) -> DFINE:
-        """Build the full model (backbone + encoder + decoder) from a config."""
+        """Build the full model (backbone + encoder + decoder) from a config.
+
+        For ``task="sem_seg"`` the whole detection decoder is replaced by
+        :class:`SemSegDecoder`; ``detect``/``segment`` use :class:`DFINETransformer`.
+        """
         backbone_return_idx, mask_low_level_ch = cls._seg_wiring(cfg)
-        return cls(
-            backbone=HGNetv2.from_config(cfg, return_idx=backbone_return_idx),
-            encoder=HybridEncoder.from_config(cfg),
-            decoder=DFINETransformer.from_config(
+        if cfg.task == "sem_seg":
+            decoder: nn.Module = SemSegDecoder.from_config(cfg, mask_low_level_ch=mask_low_level_ch)
+        else:
+            decoder = DFINETransformer.from_config(
                 cfg,
                 enable_mask_head=cfg.enable_mask_head,
                 mask_dim=cfg.mask_dim,
                 mask_low_level_ch=mask_low_level_ch,
-            ),
+            )
+        return cls(
+            backbone=HGNetv2.from_config(cfg, return_idx=backbone_return_idx),
+            encoder=HybridEncoder.from_config(cfg),
+            decoder=decoder,
         )
 
     @classmethod
