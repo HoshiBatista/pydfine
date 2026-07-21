@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 
 from dfine import log
@@ -42,8 +43,15 @@ def test_banner_and_metrics_line_content(monkeypatch):
     assert "eval" in rule("eval")
 
 
-def test_logger_emits_message(monkeypatch, caplog):
+def test_logger_emits_message(monkeypatch):
+    # LOGGER.propagate is False (avoids double logging), so pytest's root-attached
+    # caplog can't see it — capture from the logger's own handler instead.
     _with_color(monkeypatch, False)
-    with caplog.at_level(logging.INFO, logger="dfine"):
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    LOGGER.addHandler(handler)
+    try:
         LOGGER.info("training started")
-    assert "training started" in caplog.text
+    finally:
+        LOGGER.removeHandler(handler)
+    assert "training started" in buf.getvalue()
