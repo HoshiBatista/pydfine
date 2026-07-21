@@ -146,8 +146,8 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       works end-to-end** (download → build w/ mask head → strict-load → mask forward) — verified by
       a (cache-gated) test. `docs/CONFIG_REFERENCE.md` done in S4. Registry stays torch-free (base
       import check green). Tests: seg specs present/wired per size, source-aware URL check,
-      from_pretrained e2e. Suite 224 passed / 12 skipped. **Phase S inference chain complete
-      except S6 (Results.masks) + S7 (parity).**
+      from_pretrained e2e. Suite 224 passed / 12 skipped. **Phase S inference chain wired up to
+      here; S6 (Results.masks) + S7 (parity) close it out.**
 - [x] **S6 Mask postprocessing + `Results.masks`** *(2026-07-21)*. The postprocessor now
       surfaces each detection's `query_index` (from its top-k `index // num_classes`), so
       `predict` gathers the surviving queries' masks from `outputs["pred_masks"]`, resizes them
@@ -161,9 +161,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       original scale + detection-has-no-masks (`test_seg_model.py`). Base import torch-free.
       Suite 230 passed / 12 skipped. *(COCO-RLE `to_coco` deferred — needs an RLE encoder;
       not on the critical path.)*
-- [ ] **S7 Instance-seg parity test** (gated on weights): fixture from `./D-FINE-seg` torch
-      run vs our port on a seeded input — masks + boxes + scores. Target: bit-exact or
-      documented tolerance.
+- [x] **S7 Instance-seg parity test** *(2026-07-21)*. `scripts/gen_seg_parity_fixture.py`
+      (dev-only) runs genuine **D-FINE-seg** (`build_model`, strict-load) on a seeded input and
+      saves raw `pred_logits`/`pred_boxes` (all queries) + an 8-query slice of instance-mask maps
+      (fp16, ~0.5 MB) to `tests/data/seg_parity_<size>.pt`. `tests/test_seg_parity.py` builds our
+      port from the *same* seg checkpoint, feeds the *same* input, and asserts it reproduces those
+      numbers (gated on the seg `.pt` being in the HF cache; D-FINE-seg not imported). **Result on
+      nano: bit-exact** — `pred_logits`/`pred_boxes` max-abs diff `0.0`; masks max-abs `2.4e-4`,
+      i.e. only the fixture's fp16 storage rounding (< fp16 eps `9.8e-4`), so the port is byte-for-
+      byte faithful up to storage. Fixtures for `s/m/l/x` regenerate the same way (test skips until
+      present). **Phase S (instance segmentation, inference) complete.** Suite 231 passed / 16
+      skipped.
 
 ### Phase SS — Semantic-seg inference
 - [ ] **SS1 Port `SemSegDecoder`** (`native/sem_seg_decoder.py`, reuses `MaskDecoder`).
