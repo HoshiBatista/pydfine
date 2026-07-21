@@ -68,6 +68,11 @@ class TrainingVisualizer:
             except ImportError:
                 print("[visualizer] wandb not installed — skipping W&B logs.")
 
+    @property
+    def tb_logdir(self) -> Path | None:
+        """The TensorBoard event directory, or ``None`` when TB logging is off/unavailable."""
+        return self.output_dir / "tb" if self.writer is not None else None
+
     def log_step(
         self, global_step: int, total_loss: float, lrs: list[float], loss_dict: dict[str, float]
     ) -> None:

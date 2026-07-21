@@ -200,3 +200,41 @@ def test_overfit_one_batch_drops_loss():
     # Overfitting a single batch should cut the total loss substantially. Check the best
     # loss reached, not the last epoch's, so a bit of tail wobble can't flake the test.
     assert best < first["loss"] * 0.5
+
+
+def test_visualizer_tb_logdir(tmp_path):
+    from dfine.train.visualizer import TrainingVisualizer
+
+    assert TrainingVisualizer(tmp_path, use_tensorboard=False, plot=False).tb_logdir is None
+    v = TrainingVisualizer(tmp_path, use_tensorboard=True, plot=False)
+    # tb_logdir points at the tb subdir when tensorboard is installed, else None.
+    assert v.tb_logdir in (None, tmp_path / "tb")
+    if v.writer is not None:
+        assert v.tb_logdir == tmp_path / "tb"
+    v.close()
+
+
+def test_tensorboard_hint_logged_before_train(tmp_path):
+    import io
+    import logging
+    import types
+
+    from dfine.log import LOGGER
+    from dfine.train.trainer import Trainer
+    from dfine.train.visualizer import TrainingVisualizer
+
+    v = TrainingVisualizer(tmp_path, use_tensorboard=True, plot=False)
+    if v.tb_logdir is None:
+        pytest.skip("tensorboard not installed — no hint to print")
+
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    LOGGER.addHandler(handler)
+    try:
+        # _log_tensorboard_hint only touches self.visualizer — a stub stands in for Trainer.
+        Trainer._log_tensorboard_hint(types.SimpleNamespace(visualizer=v))
+    finally:
+        LOGGER.removeHandler(handler)
+        v.close()
+    out = buf.getvalue()
+    assert "tensorboard --logdir" in out and str(v.tb_logdir) in out and "localhost:6006" in out

@@ -262,6 +262,7 @@ class Trainer:
 
         if self.is_main:
             LOGGER.info(self._start_banner(epochs, train_loader, val_loader is not None))
+            self._log_tensorboard_hint()
         best_ap = -1.0
 
         for epoch in range(epochs):
@@ -305,6 +306,17 @@ class Trainer:
         if self.is_main and best_ap >= 0:
             LOGGER.info(colorstr("green", "bold", f"Training complete — best AP {best_ap:.4f}"))
         return self.ema.module if self.ema else de_parallel(self.model)
+
+    def _log_tensorboard_hint(self) -> None:
+        """Print the TensorBoard launch command + local URL before training starts."""
+        logdir = self.visualizer.tb_logdir if self.visualizer is not None else None
+        if logdir is None:
+            return
+        LOGGER.info(
+            colorstr("magenta", "bold", "TensorBoard:")
+            + f" tensorboard --logdir {logdir}"
+            + colorstr("dim", "  →  http://localhost:6006/")
+        )
 
     def _start_banner(self, epochs: int, train_loader, has_val: bool) -> str:
         """A colored key/value summary of the run, logged once before the first epoch."""
