@@ -16,7 +16,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
-__all__ = ["Boxes", "Results"]
+__all__ = ["Boxes", "Masks", "Results"]
 
 # Distinct-ish palette; indexed by class id (wraps around).
 _PALETTE = [
@@ -63,12 +63,41 @@ class Boxes:
         return f"Boxes(n={len(self)})"
 
 
+class Masks:
+    """Per-instance binary masks for one image: ``data`` is ``[N, H, W]`` (original scale).
+
+    Rows align 1:1 with the image's :class:`Boxes`. ``data`` is a bool CPU tensor at the
+    original image resolution (post-threshold, cleaned to each box); cast as needed.
+    """
+
+    def __init__(self, data: torch.Tensor):
+        self.data = data
+
+    def __len__(self) -> int:
+        return int(self.data.shape[0])
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self.data[i]
+
+    def __repr__(self) -> str:
+        h, w = (self.data.shape[-2], self.data.shape[-1]) if len(self) else (0, 0)
+        return f"Masks(n={len(self)}, {w}x{h})"
+
+
 class Results:
     """Detections for one image + helpers to visualize them."""
 
-    def __init__(self, orig_img: Image.Image, boxes: Boxes, names: dict[int, str]):
+    def __init__(
+        self,
+        orig_img: Image.Image,
+        boxes: Boxes,
+        names: dict[int, str],
+        masks: Masks | None = None,
+    ):
         self.orig_img = orig_img
         self.boxes = boxes
+        self.masks = masks
         self.names = names
         self.orig_shape = (orig_img.height, orig_img.width)
 
@@ -88,17 +117,33 @@ class Results:
 
         When the boxes carry track ids (``boxes.id``), each label is prefixed with
         ``#<id>`` and boxes are colored by track id so an object keeps its color.
+        Instance masks (``self.masks``), when present, are overlaid semi-transparently
+        in each detection's color before boxes/labels are drawn on top.
         """
         img = self.orig_img.convert("RGB").copy()
+        ids = self.boxes.id
+
+        def _color(i: int, cls_id: int) -> tuple[int, int, int]:
+            track_id = int(ids[i]) if ids is not None else None
+            return _PALETTE[(track_id if track_id is not None else cls_id) % len(_PALETTE)]
+
+        # Masks first (under the boxes), alpha-blended into each detection's color.
+        if self.masks is not None and len(self.masks):
+            arr = np.asarray(img).astype(np.float32)
+            alpha = 0.5
+            for i, m in enumerate(self.masks):
+                mask = np.asarray(m).astype(bool)
+                color = np.array(_color(i, int(self.boxes.cls[i])), dtype=np.float32)
+                arr[mask] = arr[mask] * (1 - alpha) + color * alpha
+            img = Image.fromarray(arr.clip(0, 255).astype(np.uint8))
+
         draw = ImageDraw.Draw(img)
         lw = line_width or max(2, round(sum(self.orig_shape) / 600))
-        ids = self.boxes.id
 
         for i, (xyxy, conf, cls) in enumerate(self.boxes):
             cls_id = int(cls)
             track_id = int(ids[i]) if ids is not None else None
-            # Color by track id when tracking (stable per object), else by class.
-            color = _PALETTE[(track_id if track_id is not None else cls_id) % len(_PALETTE)]
+            color = _color(i, cls_id)
             box = [float(v) for v in xyxy]
             draw.rectangle(box, outline=color, width=lw)
 
@@ -176,7 +221,8 @@ class Results:
         """Convert to a ``supervision.Detections`` (``xyxy``/``confidence``/``class_id``).
 
         Boxes are the original-scale ``xyxy`` corners (float32); class ids are the
-        contiguous labels. Requires the ``supervision`` package.
+        contiguous labels. Instance masks (when present) are attached as a bool
+        ``[N, H, W]`` ``mask`` array. Requires the ``supervision`` package.
         """
         try:
             import supervision as sv
@@ -189,4 +235,7 @@ class Results:
         xyxy = self.boxes.xyxy.cpu().numpy().reshape(-1, 4).astype(np.float32)
         conf = self.boxes.conf.cpu().numpy().reshape(-1).astype(np.float32)
         cls = self.boxes.cls.cpu().numpy().reshape(-1).astype(int)
-        return sv.Detections(xyxy=xyxy, confidence=conf, class_id=cls)
+        mask = None
+        if self.masks is not None and len(self.masks):
+            mask = self.masks.data.cpu().numpy().astype(bool)
+        return sv.Detections(xyxy=xyxy, confidence=conf, class_id=cls, mask=mask)

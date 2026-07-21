@@ -25,9 +25,21 @@ import torchvision.transforms as T
 from PIL import Image
 
 from .config import DFINEConfig
-from .results import Boxes, Results
+from .results import Boxes, Masks, Results
 
 __all__ = ["DFINE"]
+
+
+def _cleanup_masks(masks: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
+    """Zero out mask pixels outside each detection's box (masks ``[N,H,W]``, boxes xyxy)."""
+    if masks.numel() == 0:
+        return masks
+    n, h, w = masks.shape
+    ys = torch.arange(h, device=masks.device)[None, :, None]
+    xs = torch.arange(w, device=masks.device)[None, None, :]
+    x1, y1, x2, y2 = boxes.T[:, :, None, None]
+    inside = (xs >= x1) & (xs < x2) & (ys >= y1) & (ys < y2)
+    return masks & inside
 
 
 def _resolve_device(device: str | torch.device | None) -> torch.device:
@@ -186,11 +198,19 @@ class DFINE:
         return self
 
     @torch.no_grad()
-    def predict(self, source, conf: float = 0.25, imgsz: int | None = None) -> list[Results]:
+    def predict(
+        self,
+        source,
+        conf: float = 0.25,
+        imgsz: int | None = None,
+        mask_thresh: float = 0.5,
+    ) -> list[Results]:
         """Detect objects in ``source`` (path / PIL / array, or a list of them).
 
         Returns one :class:`~dfine.results.Results` per image; boxes are in the
-        original pixel scale. ``conf`` drops low-scoring detections.
+        original pixel scale. ``conf`` drops low-scoring detections. For a
+        ``task="segment"`` model, each result also carries per-instance
+        :class:`~dfine.results.Masks` (original scale), thresholded at ``mask_thresh``.
         """
         images = _load_images(source)
         size = imgsz or self.config.imgsz
@@ -207,19 +227,51 @@ class DFINE:
 
         outputs = self.model(batch)
         detections = self.postprocessor(outputs, orig_sizes)
-        return [self._to_results(im, det, conf) for im, det in zip(images, detections)]
+        pred_masks = outputs.get("pred_masks")  # [B,Q,Hm,Wm] sigmoid probs, or None
+        return [
+            self._to_results(
+                im, det, conf, None if pred_masks is None else pred_masks[b], mask_thresh
+            )
+            for b, (im, det) in enumerate(zip(images, detections))
+        ]
 
     __call__ = predict
 
-    def _to_results(self, image: Image.Image, det: dict, conf: float) -> Results:
+    def _to_results(
+        self,
+        image: Image.Image,
+        det: dict,
+        conf: float,
+        pred_masks: torch.Tensor | None = None,
+        mask_thresh: float = 0.5,
+    ) -> Results:
         scores, labels, boxes = det["scores"], det["labels"], det["boxes"]
         keep = scores > conf
-        boxes = Boxes(
-            xyxy=boxes[keep].cpu(),
+        kept_boxes = boxes[keep]
+        boxes_obj = Boxes(
+            xyxy=kept_boxes.cpu(),
             conf=scores[keep].cpu(),
             cls=labels[keep].cpu(),
         )
-        return Results(image, boxes, self.names)
+
+        masks_obj = None
+        if pred_masks is not None:
+            # Gather the surviving detections' masks, resize to original scale, threshold,
+            # and clip to each box (matches D-FINE-seg's inference postprocess).
+            qidx = det["query_index"][keep]
+            m = pred_masks[qidx]  # [K, Hm, Wm] probs
+            if m.numel():
+                h0, w0 = image.height, image.width
+                m = torch.nn.functional.interpolate(
+                    m.unsqueeze(0).float(), size=(h0, w0), mode="bilinear", align_corners=False
+                ).squeeze(0)
+                binm = m >= mask_thresh
+                binm = _cleanup_masks(binm, kept_boxes.round().long())
+            else:
+                binm = torch.zeros((0, image.height, image.width), dtype=torch.bool)
+            masks_obj = Masks(binm.cpu())
+
+        return Results(image, boxes_obj, self.names, masks=masks_obj)
 
     def train(
         self,

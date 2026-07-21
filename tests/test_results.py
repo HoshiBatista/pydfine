@@ -8,17 +8,49 @@ torch = pytest.importorskip("torch")
 np = pytest.importorskip("numpy")
 from PIL import Image  # noqa: E402
 
-from dfine.results import Boxes, Results  # noqa: E402
+from dfine.results import Boxes, Masks, Results  # noqa: E402
 
 
-def _results(n=2):
+def _results(n=2, masks=False):
     img = Image.fromarray((np.zeros((64, 96, 3))).astype("uint8"))
     boxes = Boxes(
         xyxy=torch.tensor([[1.0, 1.0, 20.0, 20.0], [5.0, 5.0, 40.0, 30.0]][:n]),
         conf=torch.tensor([0.9, 0.5][:n]),
         cls=torch.tensor([0, 2][:n]),
     )
-    return Results(img, boxes, names={0: "person", 2: "car"})
+    masks_obj = None
+    if masks:
+        data = torch.zeros((n, 64, 96), dtype=torch.bool)
+        for i in range(n):
+            data[i, 2 : 20 + i, 2 : 20 + i] = True  # a filled block per instance
+        masks_obj = Masks(data)
+    return Results(img, boxes, names={0: "person", 2: "car"}, masks=masks_obj)
+
+
+def test_masks_container_len_iter_repr():
+    r = _results(2, masks=True)
+    assert len(r.masks) == 2
+    assert r.masks.data.shape == (2, 64, 96) and r.masks.data.dtype == torch.bool
+    assert list(r.masks)[0].shape == (64, 96)
+    assert "96x64" in repr(r.masks)
+
+
+def test_plot_with_masks_overlays_and_keeps_shape():
+    arr = _results(2, masks=True).plot()
+    assert arr.shape == (64, 96, 3) and arr.dtype == np.uint8
+    assert arr.sum() > 0  # mask overlay tinted some pixels on the black image
+
+
+def test_to_supervision_attaches_masks():
+    sv = pytest.importorskip("supervision")  # noqa: F841
+    det = _results(2, masks=True).to_supervision()
+    assert det.mask is not None and det.mask.shape == (2, 64, 96) and det.mask.dtype == bool
+
+
+def test_detection_results_have_no_masks():
+    r = _results(2)
+    assert r.masks is None
+    assert _results(2).to_supervision().mask is None
 
 
 def test_boxes_len_and_iter():
