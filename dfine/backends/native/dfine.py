@@ -9,6 +9,10 @@ upstream:
 - Dropped ``@register()`` / ``__inject__``; submodules are built from a
   :class:`DFINEConfig` via :meth:`from_config`.
 - Added :meth:`load` for loading upstream ``.pth`` checkpoints.
+- Segmentation wiring (``_seg_wiring``: the stride-8 low-level-feature plumbing and
+  the ``SemSegDecoder`` decoder swap) follows D-FINE-seg's model assembly
+  (Apache-2.0, © ArgoHA, https://github.com/ArgoHA/D-FINE-seg). No-ops for
+  ``task="detect"`` — the detection path is byte-identical.
 
 The submodule attribute names (``backbone``/``encoder``/``decoder``) match
 upstream so a released checkpoint's ``state_dict`` loads with ``strict=True``.

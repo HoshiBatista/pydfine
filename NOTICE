@@ -13,6 +13,21 @@ The ported modules under `dfine/backends/native/` preserve upstream layer and
 parameter names (so released D-FINE `.pth` checkpoints load unchanged) and each
 carries a per-file header naming its source file, license, and the changes made.
 
+The segmentation heads (instance and semantic) are ported from a separate project:
+
+  D-FINE-seg — https://github.com/ArgoHA/D-FINE-seg
+  Copyright ArgoHA
+  Licensed under the Apache License, Version 2.0.
+
+D-FINE-seg is an independent, from-scratch framework whose detection core follows
+the D-FINE paper; its segmentation heads, training, export and inference are its
+own work. pydfine ports only the modules needed for inference parity — the mask
+feature fuser (`MaskDecoder`), the instance-mask branch of the decoder, the
+semantic-segmentation head (`SemSegDecoder`), and the sem_seg postprocessor —
+preserving their layer/parameter names so D-FINE-seg's released
+`dfine_seg_<size>_coco.pt` weights (hosted at `ArgoSA/D-FINE-seg` on Hugging Face)
+load unchanged. Each ported file carries a per-file header crediting D-FINE-seg.
+
 D-FINE itself builds on earlier work; those attributions are retained in the
 relevant ported source files:
 

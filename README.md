@@ -159,5 +159,12 @@ It is a **derivative work of D-FINE**
 D-FINE Authors): the model is a native port of upstream `src/`, with layer and
 parameter names preserved so released `.pth` checkpoints load unchanged. Every ported
 module under `dfine/backends/native/` carries a per-file header crediting its source
-and describing the changes. See [`NOTICE`](NOTICE) for the full attribution, including
-D-FINE's own lineage (RT-DETR, DETR, PaddleDetection).
+and describing the changes.
+
+The segmentation heads are ported from
+[ArgoHA/D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg) (Apache-2.0, © ArgoHA) — an
+independent, from-scratch framework whose detection core follows the D-FINE paper. Its
+released `dfine_seg_<size>_coco.pt` weights are loaded unchanged.
+
+See [`NOTICE`](NOTICE) for the full attribution, including D-FINE's own lineage
+(RT-DETR, DETR, PaddleDetection).

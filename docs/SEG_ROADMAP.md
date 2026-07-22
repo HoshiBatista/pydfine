@@ -235,8 +235,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
 ### Phase XS — Export & polish (later)
 - [ ] **XS1 ONNX export** with fused mask/argmax graph (segment + sem_seg output contracts).
 - [ ] **XS2 Docs**: API pages, README seg quickstart, `CONFIG_REFERENCE` seg fields.
-- [ ] **XS3 Attribution**: NOTICE/README credit to `ArgoHA/D-FINE-seg` (Apache-2.0) +
-      per-file provenance headers on ported modules.
+- [x] **XS3 Attribution** *(2026-07-22)*. `NOTICE` gained a dedicated D-FINE-seg section
+      (© ArgoHA, Apache-2.0) explaining it is an independent from-scratch framework and
+      listing exactly which modules pydfine ports (`MaskDecoder`, the decoder mask branch,
+      `SemSegDecoder`, the sem_seg postprocessor) + the HF weights (`ArgoSA/D-FINE-seg`).
+      `README.md` "License & attribution" now credits D-FINE-seg alongside D-FINE. Verified
+      every ported seg module already carries a per-file provenance header naming its source
+      file, license, © ArgoHA, and changes (`mask_decoder.py`, `sem_seg_decoder.py`,
+      `sem_seg_postprocessor.py`, the mask-branch note in `dfine_decoder.py`, the HF-weights
+      note in `registry.py`); added a matching note to `dfine.py`'s `_seg_wiring` assembly.
+      Docs-only — base import torch-free, ruff clean, suite unchanged.
 
 ---
 
