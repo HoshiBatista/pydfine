@@ -234,7 +234,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
 
 ### Phase XS — Export & polish (later)
 - [ ] **XS1 ONNX export** with fused mask/argmax graph (segment + sem_seg output contracts).
-- [ ] **XS2 Docs**: API pages, README seg quickstart, `CONFIG_REFERENCE` seg fields.
+- [x] **XS2 Docs** *(2026-07-22)*. Added a **Segmentation** quickstart to `README.md`
+      (instance via `from_pretrained("dfine-seg-l")` → `r.masks`/`r.boxes`/`r.plot()`;
+      sem_seg via `DFINE(task="sem_seg")` → `r.sem_seg`; notes on the `[hf]` extra,
+      original-scale outputs, and parity). Documented the `Masks` and `SemSeg` containers
+      in `docs/api/results.md` (mkdocstrings `:::` blocks + a prose intro mapping
+      task→attribute). Polished `CONFIG_REFERENCE` §1: `mask_dim` now noted as used by
+      **both** segment and sem_seg, plus a note that `enable_mask_head`/`uses_mask_fuser`/
+      `mask_low_level_ch` are derived (not user-set) and detect stays byte-identical.
+      Docs build clean under `mkdocs --strict`. Docs-only.
 - [x] **XS3 Attribution** *(2026-07-22)*. `NOTICE` gained a dedicated D-FINE-seg section
       (© ArgoHA, Apache-2.0) explaining it is an independent from-scratch framework and
       listing exactly which modules pydfine ports (`MaskDecoder`, the decoder mask branch,
