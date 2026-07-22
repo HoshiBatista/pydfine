@@ -24,7 +24,12 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 | `imgsz` | int | 640 | Square inference/training resolution (`eval_spatial_size`). |
 | `device` | str | "cpu" | `"cpu"\|"cuda"\|"cuda:0"\|"mps"`. |
 | `remap_mscoco_category` | bool | False | COCO-id remap; keep False for custom datasets. |
-| `mask_dim` | int | 256 | Instance-mask embedding dim (**128 for N**); used when `task="segment"`. |
+| `mask_dim` | int | 256 | Mask-feature dim of the shared fuser (**128 for N**); used by `task="segment"` **and** `task="sem_seg"`. |
+
+The mask head is enabled automatically for `task="segment"`/`"sem_seg"` (the derived
+`enable_mask_head`/`uses_mask_fuser` properties) — you don't set it. `mask_low_level_ch`
+(the backbone stride-8 channel count threaded into the fuser on models with no native 1/8
+level, e.g. nano) is derived too. Detection is byte-identical when `task="detect"`.
 
 ## 2. Backbone (HGNetV2)
 

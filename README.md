@@ -53,6 +53,37 @@ model = DFINE(
 )
 ```
 
+## Segmentation
+
+The same one-class façade covers **instance** and **semantic** segmentation — pass
+`task=` and load the matching pretrained weights (from
+[ArgoHA/D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), auto-downloaded from Hugging
+Face; needs the `pydfine[hf]` extra). Predictions come back at the **original image
+scale**, ready to plot or export.
+
+```python
+from dfine import DFINE
+
+# Instance segmentation — masks + boxes
+model = DFINE.from_pretrained("dfine-seg-l")     # dfine-seg-{n,s,m,l,x}
+r = model.predict("street.jpg", conf=0.4)[0]
+r.boxes.xyxy          # (N, 4) original-scale boxes
+r.masks.data          # (N, H, W) bool masks, aligned 1:1 with boxes
+r.plot()              # boxes + per-instance mask overlays
+
+# Semantic segmentation — dense per-pixel label map (boxless)
+model = DFINE(size="l", task="sem_seg", num_classes=19)
+r = model.predict("street.jpg")[0]
+r.sem_seg.data        # (H, W) uint8 class ids (255 = void)
+r.plot()              # per-class color overlay
+```
+
+`predict` returns a `list[Results]`; see the [Results API](docs/api/results.md) for the
+`Masks` / `SemSeg` containers and `to_supervision()` interop. Instance-seg weights ship
+from D-FINE-seg; sem_seg is inference-ready and loads the trained mask fuser, with the
+neck/classifier trained on your own dataset (training lands in a later phase). Both paths
+are numeric-parity-tested against D-FINE-seg.
+
 ## Status
 
 Inference is complete and bit-exact with upstream; the training stack (loop, data,
