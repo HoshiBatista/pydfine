@@ -15,7 +15,13 @@ pytest.importorskip("onnx")
 ort = pytest.importorskip("onnxruntime")
 
 from dfine import DFINE  # noqa: E402
-from dfine.export.onnx import DeployModel, export_onnx, tensorrt_command  # noqa: E402
+from dfine.export.onnx import (  # noqa: E402
+    DeployModel,
+    SegInstanceDeployModel,
+    SemSegDeployModel,
+    export_onnx,
+    tensorrt_command,
+)
 
 # Small but >= the decoder's 300-query top-k needs (320px -> 500 encoder tokens).
 IMGSZ = 320
@@ -126,6 +132,90 @@ def test_tensorrt_command_uses_imgsz_and_max_batch():
     assert "--optShapes=images:1x3x320x320" in cmd
     assert "--maxShapes=images:8x3x320x320" in cmd
     assert "640" not in cmd  # no hardcoded resolution leaking through
+
+
+def test_export_segment_adds_masks_output(tmp_path):
+    m = _model(task="segment")
+    path = export_onnx(m.model, m.postprocessor, tmp_path / "seg.onnx", task="segment", imgsz=IMGSZ)
+    import onnx
+
+    graph = onnx.load(str(path)).graph
+    assert [i.name for i in graph.input] == ["images", "orig_target_sizes"]
+    assert [o.name for o in graph.output] == ["labels", "boxes", "scores", "masks"]
+
+
+def test_export_segment_onnx_matches_torch(tmp_path):
+    m = _model(task="segment")
+    ref = SegInstanceDeployModel(m.model, m.postprocessor).eval()
+    path = export_onnx(m.model, m.postprocessor, tmp_path / "seg.onnx", task="segment", imgsz=IMGSZ)
+
+    images = torch.rand(1, 3, IMGSZ, IMGSZ)
+    sizes = torch.tensor([[IMGSZ, IMGSZ]])
+    with torch.no_grad():
+        _, _, t_scores, t_masks = ref(images, sizes)
+    sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    labels, boxes, scores, masks = sess.run(
+        ["labels", "boxes", "scores", "masks"],
+        {"images": images.numpy(), "orig_target_sizes": sizes.numpy()},
+    )
+    # masks are the top-k queries' sigmoid maps at 1/4 resolution.
+    assert masks.shape == (1, 300, IMGSZ // 4, IMGSZ // 4) == tuple(t_masks.shape)
+    assert ((masks >= 0) & (masks <= 1)).all() and np.isfinite(masks).all()
+    # Sorted scores compare cleanly regardless of top-k index ties (the same ties make a
+    # per-query mask compare meaningless with untrained weights; numeric mask parity is
+    # covered bit-exactly on trained weights by test_seg_parity.py).
+    np.testing.assert_allclose(
+        np.sort(scores, axis=1), np.sort(t_scores.numpy(), axis=1), atol=1e-4
+    )
+
+
+def test_export_sem_seg_single_input_label_map(tmp_path):
+    m = _model(task="sem_seg", num_classes=19)
+    path = export_onnx(m.model, m.postprocessor, tmp_path / "ss.onnx", task="sem_seg", imgsz=IMGSZ)
+    import onnx
+
+    graph = onnx.load(str(path)).graph
+    assert [i.name for i in graph.input] == ["images"]  # no orig_target_sizes
+    assert [o.name for o in graph.output] == ["sem_seg"]
+
+
+def test_export_sem_seg_onnx_matches_torch(tmp_path):
+    m = _model(task="sem_seg", num_classes=19)
+    ref = SemSegDeployModel(m.model).eval()
+    path = export_onnx(m.model, m.postprocessor, tmp_path / "ss.onnx", task="sem_seg", imgsz=IMGSZ)
+
+    images = torch.rand(2, 3, IMGSZ, IMGSZ)
+    with torch.no_grad():
+        t_map = ref(images)
+    sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    (label_map,) = sess.run(["sem_seg"], {"images": images.numpy()})
+    # argmax label map at network resolution, uint8. The graph agrees with torch on
+    # essentially every pixel — only ties where the top-two class logits fall within
+    # ONNX's ~1e-6 float rounding can flip, so allow a sub-permille disagreement.
+    assert label_map.shape == (2, IMGSZ, IMGSZ)
+    assert label_map.dtype == np.uint8
+    agree = (label_map == t_map.numpy()).mean()
+    assert agree > 0.999, f"sem_seg label map agrees on only {agree:.4%} of pixels"
+
+
+def test_facade_exports_seg_by_task(tmp_path):
+    import onnx
+
+    seg = _model(task="segment").export(imgsz=IMGSZ, file=tmp_path / "seg.onnx")
+    assert [o.name for o in onnx.load(str(seg)).graph.output][-1] == "masks"
+
+    ss = _model(task="sem_seg", num_classes=19).export(imgsz=IMGSZ, file=tmp_path / "ss.onnx")
+    ss_graph = onnx.load(str(ss)).graph
+    assert [i.name for i in ss_graph.input] == ["images"]
+    assert [o.name for o in ss_graph.output] == ["sem_seg"]
+
+
+def test_tensorrt_command_sem_seg_is_single_input():
+    cmd = tensorrt_command("ss.onnx", task="sem_seg", imgsz=320)
+    assert "images:1x3x320x320" in cmd
+    assert "orig_target_sizes" not in cmd  # sem_seg graph has no sizes input
+    # detect/segment keep the two-input profile.
+    assert "orig_target_sizes" in tensorrt_command("m.onnx", task="segment")
 
 
 def test_cli_export(tmp_path):

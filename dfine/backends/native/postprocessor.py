@@ -95,6 +95,12 @@ class DFINEPostProcessor(nn.Module):
                 )
 
         if self.deploy_mode:
+            pred_masks = outputs.get("pred_masks")
+            if pred_masks is not None and self.use_focal_loss:
+                mh, mw = pred_masks.shape[-2:]
+                gather_idx = index.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, mh, mw)
+                masks = pred_masks.gather(dim=1, index=gather_idx)
+                return labels, boxes, scores, masks
             return labels, boxes, scores
 
         if self.remap_mscoco_category:
