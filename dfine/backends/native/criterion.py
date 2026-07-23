@@ -11,6 +11,11 @@ and the contrastive-denoising groups. Changes from upstream:
   import; box/distance helpers come from ``.box_ops``/``.dfine_utils`` and the
   distributed helpers from ``.dist``.
 - Added :meth:`DFINECriterion.from_config` (also builds the matcher).
+- Instance-mask losses (``loss_masks`` + the ``_cropped_bce_loss`` /
+  ``_cropped_dice_loss`` / target-prep helpers and the ``dn_pred_masks`` final-layer
+  term) are ported from ``D-FINE-seg/src/d_fine/dfine_criterion.py`` (Apache-2.0,
+  © ArgoHA — an independent from-scratch framework). They only activate when the model
+  runs the mask branch (``task="segment"``); detection is byte-identical.
 
 Loss math and reductions are unchanged.
 """
@@ -71,18 +76,25 @@ class DFINECriterion(nn.Module):
         """Build the criterion (and its matcher) from a :class:`DFINEConfig`.
 
         Uses upstream's fixed ``losses=['vfl', 'boxes', 'local']`` and the loss
-        weights / focal params from the config.
+        weights / focal params from the config. For ``task="segment"`` the instance-mask
+        losses (``masks``) and their weights are appended, following D-FINE-seg.
         """
+        weight_dict = {
+            "loss_vfl": cfg.loss_vfl_weight,
+            "loss_bbox": cfg.loss_bbox_weight,
+            "loss_giou": cfg.loss_giou_weight,
+            "loss_fgl": cfg.loss_fgl_weight,
+            "loss_ddf": cfg.loss_ddf_weight,
+        }
+        losses = ["vfl", "boxes", "local"]
+        if cfg.enable_mask_head:
+            weight_dict["loss_mask_bce"] = cfg.loss_mask_bce_weight
+            weight_dict["loss_mask_dice"] = cfg.loss_mask_dice_weight
+            losses.append("masks")
         return cls(
             matcher=HungarianMatcher.from_config(cfg),
-            weight_dict={
-                "loss_vfl": cfg.loss_vfl_weight,
-                "loss_bbox": cfg.loss_bbox_weight,
-                "loss_giou": cfg.loss_giou_weight,
-                "loss_fgl": cfg.loss_fgl_weight,
-                "loss_ddf": cfg.loss_ddf_weight,
-            },
-            losses=["vfl", "boxes", "local"],
+            weight_dict=weight_dict,
+            losses=losses,
             alpha=cfg.focal_alpha,
             gamma=cfg.focal_gamma,
             num_classes=cfg.num_classes,
@@ -244,6 +256,115 @@ class DFINECriterion(nn.Module):
 
         return losses
 
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        """YOLO-style box-cropped BCE + Dice on the matched queries' mask logits.
+
+        ``outputs['pred_masks']`` is ``[B, Q, Hm, Wm]`` logits (1/4 res); each target's
+        ``masks`` is ``[Ni, H, W]`` per-instance. GT masks are resized to ``(Hm, Wm)`` and
+        both losses are computed only inside the GT box, normalized by box area. Skipped
+        (returns ``{}``) when the output has no ``pred_masks`` (detection / enc / pre).
+        """
+        if "pred_masks" not in outputs:
+            return {}
+
+        pred_masks = outputs["pred_masks"]
+        Hm, Wm = pred_masks.shape[-2:]
+        b_idx, q_idx = self._get_src_permutation_idx(indices)
+        if b_idx.numel() == 0:
+            zero = pred_masks.sum() * 0
+            return {"loss_mask_bce": zero, "loss_mask_dice": zero}
+
+        pred_sel = pred_masks[b_idx, q_idx]  # [M, Hm, Wm]
+        tgt_sel, valid_M = self._prepare_target_masks(targets, indices, Hm, Wm, pred_masks.device)
+        if valid_M == 0:
+            zero = pred_sel.sum() * 0
+            return {"loss_mask_bce": zero, "loss_mask_dice": zero}
+
+        tgt_boxes = self._prepare_target_boxes_for_masks(
+            targets, indices, Hm, Wm, pred_masks.device
+        )
+        if pred_sel.shape[0] != tgt_sel.shape[0]:
+            raise AssertionError(
+                f"matched predictions ({pred_sel.shape[0]}) != target masks ({tgt_sel.shape[0]})"
+            )
+        return {
+            "loss_mask_bce": self._cropped_bce_loss(pred_sel, tgt_sel, tgt_boxes),
+            "loss_mask_dice": self._cropped_dice_loss(pred_sel, tgt_sel, tgt_boxes),
+        }
+
+    def _prepare_target_masks(self, targets, indices, out_h, out_w, device):
+        """Matched GT masks resized to ``(out_h, out_w)`` -> ``[M, out_h, out_w]`` in {0,1}.
+
+        Images without masks (or with an unexpected mask shape / no matches) are skipped.
+        Returns the stacked masks and the valid match count.
+        """
+        tgt_masks_list, valid = [], 0
+        for t, (_, J) in zip(targets, indices):
+            m = t.get("masks")
+            if m is None or m.numel() == 0 or m.dim() != 3 or J.numel() == 0:
+                continue
+            m_sel = m[J].unsqueeze(1).float().to(device)  # [Mi,1,H,W]
+            m_sel = F.interpolate(m_sel, size=(out_h, out_w), mode="bilinear", align_corners=False)
+            m_sel = m_sel.squeeze(1).clamp_(0, 1)
+            tgt_masks_list.append(m_sel)
+            valid += m_sel.shape[0]
+
+        if not tgt_masks_list:
+            return torch.zeros(0, out_h, out_w, device=device, dtype=torch.float32), 0
+        return torch.cat(tgt_masks_list, dim=0), valid
+
+    def _prepare_target_boxes_for_masks(self, targets, indices, out_h, out_w, device):
+        """Matched GT boxes as ``xyxy`` in mask-pixel space ``[M, 4]`` (for the crop)."""
+        boxes_list = []
+        for t, (_, J) in zip(targets, indices):
+            m = t.get("masks")
+            if m is None or m.numel() == 0 or m.dim() != 3 or J.numel() == 0:
+                continue
+            cx, cy, w, h = (t["boxes"][J]).unbind(-1)  # normalized cxcywh
+            x1 = ((cx - w / 2) * out_w).clamp(0, out_w - 1)
+            y1 = ((cy - h / 2) * out_h).clamp(0, out_h - 1)
+            x2 = ((cx + w / 2) * out_w).clamp(1, out_w)
+            y2 = ((cy + h / 2) * out_h).clamp(1, out_h)
+            boxes_list.append(torch.stack([x1, y1, x2, y2], dim=1).to(device))
+
+        if not boxes_list:
+            return torch.zeros(0, 4, device=device, dtype=torch.float32)
+        return torch.cat(boxes_list, dim=0)
+
+    @staticmethod
+    def _inside_box_mask(boxes, H, W, device, dtype):
+        """``[M, H, W]`` 0/1 mask of pixels inside each ``xyxy`` box (in mask-pixel space)."""
+        ys = torch.arange(H, device=device, dtype=dtype)[None, :, None]
+        xs = torch.arange(W, device=device, dtype=dtype)[None, None, :]
+        x1, y1, x2, y2 = (boxes[:, i : i + 1, None] for i in range(4))
+        return ((xs >= x1) & (xs < x2)).float() * ((ys >= y1) & (ys < y2)).float()
+
+    def _cropped_bce_loss(self, pred_logits, tgt_masks, boxes, eps=1e-6):
+        """Box-cropped BCE: per-instance BCE summed inside the box, normalized by box area."""
+        if pred_logits.shape[0] == 0:
+            return pred_logits.sum() * 0.0
+        inside = self._inside_box_mask(
+            boxes, *pred_logits.shape[-2:], pred_logits.device, pred_logits.dtype
+        )
+        bce = F.binary_cross_entropy_with_logits(pred_logits, tgt_masks, reduction="none")
+        box_area = ((boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])).clamp(min=1.0)
+        loss_per_inst = (bce * inside).sum(dim=(1, 2)) / box_area
+        return loss_per_inst.mean() if loss_per_inst.numel() > 0 else pred_logits.sum() * 0.0
+
+    def _cropped_dice_loss(self, pred_logits, tgt_masks, boxes, eps=1e-6):
+        """Box-cropped Dice: soft Dice over sigmoid mask probs, masked to inside the box."""
+        if pred_logits.shape[0] == 0:
+            return pred_logits.sum() * 0.0
+        inside = self._inside_box_mask(
+            boxes, *pred_logits.shape[-2:], pred_logits.device, pred_logits.dtype
+        )
+        pred = (pred_logits.sigmoid() * inside).flatten(1)
+        tgt = (tgt_masks * inside).flatten(1)
+        inter = (pred * tgt).sum(dim=1)
+        denom = pred.sum(dim=1) + tgt.sum(dim=1) + eps
+        dice = 1.0 - (2.0 * inter + eps) / denom
+        return dice.mean() if dice.numel() > 0 else pred_logits.sum() * 0.0
+
     def _get_src_permutation_idx(self, indices):
         batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
         src_idx = torch.cat([src for (src, _) in indices])
@@ -288,6 +409,7 @@ class DFINECriterion(nn.Module):
             "focal": self.loss_labels_focal,
             "vfl": self.loss_labels_vfl,
             "local": self.loss_local,
+            "masks": self.loss_masks,
         }
         assert loss in loss_map, f"do you really want to compute {loss} loss?"
         return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
@@ -415,6 +537,18 @@ class DFINECriterion(nn.Module):
                     }
                     l_dict = {k + f"_dn_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
+
+            if "dn_pred_masks" in outputs and "masks" in self.losses:
+                dn_final = {
+                    "pred_masks": outputs["dn_pred_masks"],
+                    "pred_boxes": outputs["dn_outputs"][-1]["pred_boxes"],
+                }
+                l_dict = self.loss_masks(dn_final, targets, indices_dn, dn_num_boxes)
+                l_dict = {
+                    k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict
+                }
+                l_dict = {k + "_dn_final": v for k, v in l_dict.items()}
+                losses.update(l_dict)
 
             if "dn_pre_outputs" in outputs:
                 aux_outputs = outputs["dn_pre_outputs"]
