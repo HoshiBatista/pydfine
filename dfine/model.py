@@ -420,11 +420,22 @@ class DFINE:
         elif train_loader is None:
             raise ValueError("Provide training data via `data=` or `train_loader=`.")
 
-        # COCO box metrics need the detection postprocessor; sem_seg has no box eval.
-        if val_loader is not None and val_fn is None and self.config.task != "sem_seg":
-            from .train.evaluator import coco_val_fn
+        if val_loader is not None and val_fn is None:
+            if self.config.task in ("segment", "sem_seg"):
+                # seg val: mask AP (segment) or mIoU (sem_seg), scored at loader resolution.
+                from .train.seg_evaluator import seg_val_fn
 
-            val_fn = coco_val_fn(self.postprocessor, self.device)
+                val_fn = seg_val_fn(
+                    self.config.task,
+                    postprocessor=self.postprocessor,
+                    device=self.device,
+                    num_classes=self.config.num_classes,
+                    ignore_index=self.config.sem_seg_ignore_index,
+                )
+            else:
+                from .train.evaluator import coco_val_fn
+
+                val_fn = coco_val_fn(self.postprocessor, self.device)
 
         from .train import Trainer
 

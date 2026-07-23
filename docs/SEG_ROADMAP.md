@@ -292,6 +292,20 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       (left/right two-class split) drives the dense CE+Dice+aux loss <½. base import torch-free;
       suite 286 passed / 16 skipped. **Phase TS (segmentation training) complete** — instance +
       semantic seg now train through the public `DFINE.train` API with parity-faithful losses.
+- [x] **TS6 Seg val evaluation** *(2026-07-23)*. New `dfine/train/seg_evaluator.py` with two
+      task-matched validators scored at the loader (square `imgsz`) resolution. `sem_seg` →
+      `SemSegConfusionMatrix` / `evaluate_sem_seg`: a dep-free streaming `[C, C]` pixel confusion
+      matrix (rows=GT, cols=pred, `ignore_index` excluded) → `{mIoU, pixel_acc}` (mIoU over
+      GT-present classes), following D-FINE-seg's `SemSegValidator`. `segment` →
+      `evaluate_mask_ap`: decodes each image's top-k queries, upsamples their mask maps to input
+      res, thresholds, and scores COCO mask AP via `torchmetrics` `MeanAveragePrecision(
+      iou_type="segm", backend="faster_coco_eval")` → `{mAP_50_95_mask, mAP_50_mask, mAP_75_mask}`
+      (the same metric D-FINE-seg uses; `torchmetrics` added to the `train`/`dev` extras).
+      `seg_val_fn(task, …)` factory + `DFINE._fit` auto-selects it when a seg `val_loader` is
+      present (mIoU for sem_seg, mask AP for segment); `Trainer.fit` best-checkpoint picks the
+      primary metric per task (`AP`/`mAP_50_95_mask`/`mIoU`). Tests: confusion-matrix mIoU/ignore
+      math + out-of-range guard, end-to-end mIoU + mask-AP bounded outputs, and the val_fn factory
+      gating. base import torch-free; suite 292 passed / 16 skipped.
 
 ### Phase XS — Export & polish (later)
 - [x] **XS1 ONNX export** *(2026-07-23)*. `export_onnx`/`tensorrt_command` gained a `task`

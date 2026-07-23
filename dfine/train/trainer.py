@@ -293,10 +293,14 @@ class Trainer:
                 module = self.ema.module if self.ema else de_parallel(self.model)
                 metrics = val_fn(module, val_loader)
                 if self.is_main:
-                    ap = metrics.get("AP")
-                    if ap is not None and ap > best_ap:
-                        best_ap = ap
-                        LOGGER.info("  " + colorstr("green", "bold", f"↑ new best AP {ap:.4f}"))
+                    # primary metric by task: detection AP, seg mask AP, or sem_seg mIoU.
+                    name = next((k for k in ("AP", "mAP_50_95_mask", "mIoU") if k in metrics), None)
+                    score = metrics.get(name) if name else None
+                    if score is not None and score > best_ap:
+                        best_ap = score
+                        LOGGER.info(
+                            "  " + colorstr("green", "bold", f"↑ new best {name} {score:.4f}")
+                        )
                         self.save_checkpoint(self.output_dir / "best.pth", epoch)
             if self.visualizer is not None:
                 self.visualizer.log_epoch(epoch, stats, metrics)

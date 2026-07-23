@@ -47,6 +47,7 @@ train = [
     "pydfine[torch]",
     "scipy>=1.10",
     "faster-coco-eval>=1.6.6",
+    "torchmetrics>=1.0",  # segmentation mask AP (iou_type="segm")
     "tensorboard>=2.13",
     "matplotlib>=3.6",  # loss_curve.png training-progress plot
     "pyyaml>=6.0",
@@ -90,6 +91,7 @@ dev = [
     "opencv-python-headless>=4.6",  # so predict_video tests run in CI (headless)
     "scipy>=1.10",  # Hungarian matcher — so criterion/matcher tests run in CI
     "faster-coco-eval>=1.6.6",  # COCO parser — so dataset tests run in CI
+    "torchmetrics>=1.0",  # seg mask AP — so the seg val-eval test runs in CI
     "pyyaml>=6.0",  # data.yaml parsing — so yolo_to_coco tests run in CI
     "onnx>=1.14",  # ONNX export smoke test
     "onnxruntime>=1.16",  # run the exported graph in CI
