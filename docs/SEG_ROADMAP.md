@@ -314,6 +314,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       seg val loader (scored with mask AP / mIoU) instead of requiring an explicit one. Tests:
       label-path mapping, ratio split (determinism + disjoint + `val_split=0`), subdir layout,
       and the paired builder. suite 296 passed / 16 skipped.
+      *(2026-07-23, docs)* Added a **Segmentation training** quickstart (`docs/seg-training.md`,
+      in the mkdocs nav): dataset layout (YOLO polygons / sem_seg PNGs, flat + `train/val`
+      subdir), instance + sem_seg training snippets, the `val_split`/auto-eval flow, BYO
+      dataloaders, and the loss/matcher config knobs. README seg section now links it (dropped
+      the stale "training lands in a later phase" note). Docs build clean under `mkdocs --strict`.
 
 ### Phase XS — Export & polish (later)
 - [x] **XS1 ONNX export** *(2026-07-23)*. `export_onnx`/`tensorrt_command` gained a `task`

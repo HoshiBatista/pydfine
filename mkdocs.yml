@@ -59,6 +59,7 @@ nav:
   - Home: index.md
   - Architecture: ARCHITECTURE.md
   - Config reference: CONFIG_REFERENCE.md
+  - Segmentation training: seg-training.md
   - API:
       - DFINE: api/model.md
       - DFINEConfig: api/config.md

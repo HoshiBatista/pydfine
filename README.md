@@ -81,8 +81,9 @@ r.plot()              # per-class color overlay
 `predict` returns a `list[Results]`; see the [Results API](docs/api/results.md) for the
 `Masks` / `SemSeg` containers and `to_supervision()` interop. Instance-seg weights ship
 from D-FINE-seg; sem_seg is inference-ready and loads the trained mask fuser, with the
-neck/classifier trained on your own dataset (training lands in a later phase). Both paths
-are numeric-parity-tested against D-FINE-seg.
+neck/classifier trained on your own dataset. Both paths are numeric-parity-tested against
+D-FINE-seg. To train either task on your own data, see the
+[segmentation training guide](docs/seg-training.md).
 
 ## Status
 
