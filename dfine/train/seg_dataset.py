@@ -23,6 +23,7 @@ Needs ``pip install pydfine[train]`` (``opencv-python`` for ``fillPoly``).
 
 from __future__ import annotations
 
+import random
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,6 +41,7 @@ __all__ = [
     "SemSegDataset",
     "YoloInstanceSegDataset",
     "build_seg_dataloader",
+    "build_seg_dataloaders",
     "parse_yolo_seg_label",
     "polygons_to_masks",
 ]
@@ -105,10 +107,44 @@ def polygons_to_masks(polys_norm: list[np.ndarray], h: int, w: int) -> torch.Ten
 
 
 def _list_images(root: Path) -> list[Path]:
-    imgs = sorted(p for p in (root / "images").iterdir() if p.suffix.lower() in _IMG_EXTS)
+    imgs = sorted(p for p in root.iterdir() if p.suffix.lower() in _IMG_EXTS)
     if not imgs:
-        raise FileNotFoundError(f"no images under {root / 'images'} (expected an images/ folder)")
+        raise FileNotFoundError(f"no images under {root} (expected an images/ folder)")
     return imgs
+
+
+def _label_path(img_path: Path, suffix: str) -> Path:
+    """Map an image path to its label path (Ultralytics convention: ``/images/`` → ``/labels/``).
+
+    Rewrites the last ``images`` path segment to ``labels`` and swaps the suffix, so both a flat
+    ``images/`` + ``labels/`` root and an ``images/{train,val}`` split layout resolve correctly.
+    """
+    parts = list(img_path.parts)
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i] == "images":
+            parts[i] = "labels"
+            break
+    return Path(*parts).with_suffix(suffix)
+
+
+def _resolve_split(root: Path, val_split: float, seed: int) -> tuple[list[Path], list[Path]]:
+    """Return ``(train_images, val_images)`` for a YOLO seg ``root``.
+
+    If ``images/train`` and ``images/val`` subdirs exist (Ultralytics layout), use them as-is.
+    Otherwise deterministically carve ``val_split`` of the flat ``images/`` list into val (seeded
+    shuffle); ``val_split <= 0`` (or a single image) yields an empty val split.
+    """
+    img_dir = root / "images"
+    if (img_dir / "train").is_dir() and (img_dir / "val").is_dir():
+        return _list_images(img_dir / "train"), _list_images(img_dir / "val")
+
+    imgs = _list_images(img_dir)
+    if val_split <= 0 or len(imgs) < 2:
+        return imgs, []
+    shuffled = imgs.copy()
+    random.Random(seed).shuffle(shuffled)
+    n_val = max(1, int(len(imgs) * val_split))
+    return sorted(shuffled[n_val:]), sorted(shuffled[:n_val])
 
 
 def _load_image(path: Path, imgsz: int) -> tuple[torch.Tensor, tuple[int, int]]:
@@ -121,13 +157,17 @@ def _load_image(path: Path, imgsz: int) -> tuple[torch.Tensor, tuple[int, int]]:
 
 
 class YoloInstanceSegDataset(data.Dataset):
-    """YOLO-Seg instance dataset: ``images/<stem>.*`` + ``labels/<stem>.txt`` polygons."""
+    """YOLO-Seg instance dataset: ``images/<stem>.*`` + ``labels/<stem>.txt`` polygons.
 
-    def __init__(self, root: str | Path, imgsz: int = 640):
+    Pass ``images`` (a list of image paths) to use a specific split; otherwise every image
+    under ``root/images`` is used. Each label is resolved next to its image (``/images/`` →
+    ``/labels/``), so both flat and ``images/{train,val}`` layouts work.
+    """
+
+    def __init__(self, root: str | Path, imgsz: int = 640, *, images: list[Path] | None = None):
         self.root = Path(root)
         self.imgsz = imgsz
-        self.images = _list_images(self.root)
-        self.labels_dir = self.root / "labels"
+        self.images = images if images is not None else _list_images(self.root / "images")
 
     def __len__(self) -> int:
         return len(self.images)
@@ -135,7 +175,7 @@ class YoloInstanceSegDataset(data.Dataset):
     def __getitem__(self, idx: int):
         img_path = self.images[idx]
         image, (orig_w, orig_h) = _load_image(img_path, self.imgsz)
-        boxes, polys = parse_yolo_seg_label(self.labels_dir / f"{img_path.stem}.txt")
+        boxes, polys = parse_yolo_seg_label(_label_path(img_path, ".txt"))
 
         labels = torch.from_numpy(boxes[:, 0].astype(np.int64))
         boxes_t = torch.from_numpy(boxes[:, 1:5].astype(np.float32))  # cxcywh, normalized
@@ -152,17 +192,27 @@ class YoloInstanceSegDataset(data.Dataset):
 
 
 class SemSegDataset(data.Dataset):
-    """Semantic-seg dataset: ``images/<stem>.*`` + ``labels/<stem>.png`` dense label maps."""
+    """Semantic-seg dataset: ``images/<stem>.*`` + ``labels/<stem>.png`` dense label maps.
+
+    Pass ``images`` (a list of image paths) to use a specific split; otherwise every image
+    under ``root/images`` is used. Each mask is resolved next to its image (``/images/`` →
+    ``/labels/``), so both flat and ``images/{train,val}`` layouts work.
+    """
 
     def __init__(
-        self, root: str | Path, num_classes: int, imgsz: int = 640, ignore_index: int = 255
+        self,
+        root: str | Path,
+        num_classes: int,
+        imgsz: int = 640,
+        ignore_index: int = 255,
+        *,
+        images: list[Path] | None = None,
     ):
         self.root = Path(root)
         self.imgsz = imgsz
         self.num_classes = num_classes
         self.ignore_index = ignore_index
-        self.images = _list_images(self.root)
-        self.labels_dir = self.root / "labels"
+        self.images = images if images is not None else _list_images(self.root / "images")
 
     def __len__(self) -> int:
         return len(self.images)
@@ -171,7 +221,7 @@ class SemSegDataset(data.Dataset):
         img_path = self.images[idx]
         image, (orig_w, orig_h) = _load_image(img_path, self.imgsz)
 
-        mask_path = self.labels_dir / f"{img_path.stem}.png"
+        mask_path = _label_path(img_path, ".png")
         if not mask_path.exists():
             raise FileNotFoundError(f"sem_seg mask not found: {mask_path}")
         mask_img = Image.open(mask_path).resize((self.imgsz, self.imgsz), Image.NEAREST)
@@ -191,6 +241,28 @@ class SemSegDataset(data.Dataset):
         return image, target
 
 
+def _make_seg_dataset(root, task, num_classes, imgsz, ignore_index, images):
+    """Build the task's dataset over ``images`` (or all of ``root/images`` if ``None``)."""
+    if task == "sem_seg":
+        if num_classes is None:
+            raise ValueError("sem_seg needs num_classes (pass it or a cfg).")
+        return SemSegDataset(root, num_classes, imgsz, ignore_index, images=images)
+    if task == "segment":
+        return YoloInstanceSegDataset(root, imgsz, images=images)
+    raise ValueError(f"seg dataloaders support task in (segment, sem_seg), got {task!r}.")
+
+
+def _seg_loader(dataset, *, batch_size, num_workers, train):
+    return data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=train,
+        num_workers=num_workers,
+        collate_fn=batch_image_collate_fn,
+        drop_last=train,
+    )
+
+
 def build_seg_dataloader(
     root: str | Path,
     *,
@@ -199,43 +271,63 @@ def build_seg_dataloader(
     num_classes: int | None = None,
     imgsz: int = 640,
     ignore_index: int = 255,
+    images: list[Path] | None = None,
     batch_size: int = 4,
     train: bool = True,
-    shuffle: bool | None = None,
     num_workers: int = 4,
-    drop_last: bool | None = None,
 ) -> data.DataLoader:
-    """Build a segmentation dataloader for a YOLO-style ``root`` (``images/`` + ``labels/``).
+    """Build one segmentation dataloader for a YOLO-style ``root`` (``images/`` + ``labels/``).
 
     Pass ``cfg`` (a :class:`~dfine.config.DFINEConfig`) to inherit ``task`` / ``num_classes`` /
-    ``imgsz`` / ``sem_seg_ignore_index``; explicit kwargs override it. ``task="segment"`` builds
+    ``imgsz`` / ``sem_seg_ignore_index``; explicit kwargs override it. ``images`` restricts to a
+    specific split (defaults to every image under ``root/images``). ``task="segment"`` builds
     :class:`YoloInstanceSegDataset`, ``task="sem_seg"`` builds :class:`SemSegDataset`. Yields
     ``(images, targets)`` batches consumable directly by ``DFINE.train`` / ``dfine.train.Trainer``.
+    Use :func:`build_seg_dataloaders` to get a train/val pair.
     """
     if cfg is not None:
         task = task or cfg.task
         num_classes = num_classes if num_classes is not None else cfg.num_classes
         imgsz = cfg.imgsz
         ignore_index = cfg.sem_seg_ignore_index
-    if shuffle is None:
-        shuffle = train
-    if drop_last is None:
-        drop_last = train
 
-    if task == "sem_seg":
-        if num_classes is None:
-            raise ValueError("sem_seg needs num_classes (pass it or a cfg).")
-        dataset: data.Dataset = SemSegDataset(root, num_classes, imgsz, ignore_index)
-    elif task == "segment":
-        dataset = YoloInstanceSegDataset(root, imgsz)
-    else:
-        raise ValueError(f"build_seg_dataloader supports task in (segment, sem_seg), got {task!r}.")
+    dataset = _make_seg_dataset(root, task, num_classes, imgsz, ignore_index, images)
+    return _seg_loader(dataset, batch_size=batch_size, num_workers=num_workers, train=train)
 
-    return data.DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        num_workers=num_workers,
-        collate_fn=batch_image_collate_fn,
-        drop_last=drop_last,
-    )
+
+def build_seg_dataloaders(
+    root: str | Path,
+    *,
+    cfg: DFINEConfig | None = None,
+    task: str | None = None,
+    num_classes: int | None = None,
+    imgsz: int = 640,
+    ignore_index: int = 255,
+    batch_size: int = 4,
+    num_workers: int = 4,
+    val_split: float = 0.2,
+    split_seed: int = 0,
+) -> tuple[data.DataLoader, data.DataLoader | None]:
+    """Build ``(train_loader, val_loader)`` for a YOLO-style seg ``root``, splitting train/val.
+
+    If ``root/images/train`` and ``root/images/val`` subdirs exist, they are used verbatim.
+    Otherwise the flat ``root/images`` list is split deterministically — ``val_split`` of it
+    (seeded by ``split_seed``) becomes val, the rest train. ``val_split <= 0`` (or a single
+    image) returns ``val_loader=None``. The val loader runs unshuffled with no ``drop_last``.
+    """
+    root = Path(root)
+    if cfg is not None:
+        task = task or cfg.task
+        num_classes = num_classes if num_classes is not None else cfg.num_classes
+        imgsz = cfg.imgsz
+        ignore_index = cfg.sem_seg_ignore_index
+
+    train_imgs, val_imgs = _resolve_split(root, val_split, split_seed)
+
+    def make(imgs, train):
+        dataset = _make_seg_dataset(root, task, num_classes, imgsz, ignore_index, imgs)
+        return _seg_loader(dataset, batch_size=batch_size, num_workers=num_workers, train=train)
+
+    train_loader = make(train_imgs, True)
+    val_loader = make(val_imgs, False) if val_imgs else None
+    return train_loader, val_loader

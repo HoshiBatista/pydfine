@@ -306,6 +306,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       primary metric per task (`AP`/`mAP_50_95_mask`/`mIoU`). Tests: confusion-matrix mIoU/ignore
       math + out-of-range guard, end-to-end mIoU + mask-AP bounded outputs, and the val_fn factory
       gating. base import torch-free; suite 292 passed / 16 skipped.
+      *(2026-07-23, follow-up)* Added a **train/val split** for the YOLO seg root:
+      `build_seg_dataloaders` returns a `(train_loader, val_loader)` pair, splitting from
+      `images/{train,val}` subdirs (Ultralytics layout) if present, else a deterministic seeded
+      `val_split` fraction (default `0.2`) of the flat root; labels resolve per-image via
+      `/images/`→`/labels/` so both layouts work. `DFINE.train(val_split=…)` now auto-builds the
+      seg val loader (scored with mask AP / mIoU) instead of requiring an explicit one. Tests:
+      label-path mapping, ratio split (determinism + disjoint + `val_split=0`), subdir layout,
+      and the paired builder. suite 296 passed / 16 skipped.
 
 ### Phase XS — Export & polish (later)
 - [x] **XS1 ONNX export** *(2026-07-23)*. `export_onnx`/`tensorrt_command` gained a `task`

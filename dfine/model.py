@@ -298,6 +298,7 @@ class DFINE:
         num_workers: int = 4,
         augment: bool = True,
         remap_mscoco_category: bool = False,
+        val_split: float = 0.2,
         devices: int | None = None,
         val_loader=None,
         val_fn=None,
@@ -318,8 +319,10 @@ class DFINE:
           (set ``remap_mscoco_category=True`` for stock 80-class MS-COCO ids). For a
           ``task="segment"`` / ``"sem_seg"`` model, ``data=`` is instead a YOLO-style root
           (``images/`` + ``labels/``: polygon ``.txt`` for segment, class-id ``.png`` for
-          sem_seg) built via :func:`~dfine.train.seg_dataset.build_seg_dataloader`; seg has
-          no auto val eval yet — pass ``val_loader``/``val_fn`` to evaluate.
+          sem_seg) built via :func:`~dfine.train.seg_dataset.build_seg_dataloaders`. Train/val
+          are split from ``images/{train,val}`` subdirs if present, else a deterministic
+          ``val_split`` fraction (default ``0.2``; set ``0`` to train on everything) of the flat
+          root; the seg val loader is auto-scored with mask AP (segment) / mIoU (sem_seg).
         * ``train_loader=...`` — a ready dataloader yielding ``(samples, targets)``
           batches: ``samples`` a float ``BCHW`` image tensor, each ``target`` a dict
           with ``labels`` (``LongTensor``) and ``boxes`` (``cxcywh``, normalized).
@@ -351,6 +354,7 @@ class DFINE:
                 num_workers=num_workers,
                 augment=augment,
                 remap_mscoco_category=remap_mscoco_category,
+                val_split=val_split,
                 output_dir=output_dir,
                 use_wandb=use_wandb,
                 visualize=visualize,
@@ -368,6 +372,7 @@ class DFINE:
             num_workers=num_workers,
             augment=augment,
             remap_mscoco_category=remap_mscoco_category,
+            val_split=val_split,
             val_loader=val_loader,
             val_fn=val_fn,
             output_dir=output_dir,
@@ -386,6 +391,7 @@ class DFINE:
         num_workers,
         augment,
         remap_mscoco_category,
+        val_split,
         val_loader,
         val_fn,
         output_dir,
@@ -397,13 +403,19 @@ class DFINE:
             if train_loader is not None:
                 raise ValueError("Pass either `data=` or `train_loader=`, not both.")
             if self.config.task in ("segment", "sem_seg"):
-                # YOLO-style seg root (images/ + labels/); box/COCO val eval is not wired
-                # for seg yet, so no val loader is auto-built (pass one explicitly if needed).
-                from .train.seg_dataset import build_seg_dataloader
+                # YOLO-style seg root (images/ + labels/), split train/val by images/{train,val}
+                # subdirs or a deterministic val_split of the flat root.
+                from .train.seg_dataset import build_seg_dataloaders
 
-                train_loader = build_seg_dataloader(
-                    data, cfg=self.config, batch_size=batch_size, num_workers=num_workers
+                train_loader, auto_val_loader = build_seg_dataloaders(
+                    data,
+                    cfg=self.config,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    val_split=val_split,
                 )
+                if val_loader is None:
+                    val_loader = auto_val_loader
             else:
                 from .train.dataset import build_coco_dataloaders
 
@@ -469,6 +481,7 @@ class DFINE:
         num_workers,
         augment,
         remap_mscoco_category,
+        val_split,
         output_dir,
         use_wandb,
         visualize,
@@ -493,6 +506,7 @@ class DFINE:
             num_workers=num_workers,
             augment=augment,
             remap_mscoco_category=remap_mscoco_category,
+            val_split=val_split,
             output_dir=str(output_dir),
             use_wandb=use_wandb,
             visualize=visualize,

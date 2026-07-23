@@ -19,7 +19,10 @@ from dfine.config import DFINEConfig  # noqa: E402
 from dfine.train.seg_dataset import (  # noqa: E402
     SemSegDataset,
     YoloInstanceSegDataset,
+    _label_path,
+    _resolve_split,
     build_seg_dataloader,
+    build_seg_dataloaders,
     parse_yolo_seg_label,
     polygons_to_masks,
 )
@@ -91,7 +94,7 @@ def test_build_segment_dataloader_batches(tmp_path):
     pytest.importorskip("cv2")
     root = _seg_root(tmp_path, ["0 0.0 0.0 1.0 0.0 1.0 1.0 0.0 1.0"])
     cfg = DFINEConfig.preset("n", task="segment", imgsz=IMGSZ)
-    loader = build_seg_dataloader(root, cfg=cfg, batch_size=1, num_workers=0, shuffle=False)
+    loader = build_seg_dataloader(root, cfg=cfg, batch_size=1, num_workers=0, train=False)
     images, targets = next(iter(loader))
     assert images.shape == (1, 3, IMGSZ, IMGSZ)
     assert set(targets[0]) >= {"boxes", "labels", "masks"}
@@ -132,7 +135,64 @@ def test_build_sem_seg_dataloader_from_cfg(tmp_path):
     arr = np.zeros((40, 50), dtype=np.uint8)
     root = _sem_root(tmp_path, arr)
     cfg = DFINEConfig.preset("n", task="sem_seg", num_classes=19, imgsz=IMGSZ)
-    loader = build_seg_dataloader(root, cfg=cfg, batch_size=1, num_workers=0, shuffle=False)
+    loader = build_seg_dataloader(root, cfg=cfg, batch_size=1, num_workers=0, train=False)
     images, targets = next(iter(loader))
     assert images.shape == (1, 3, IMGSZ, IMGSZ)
     assert targets[0]["sem_mask"].shape == (IMGSZ, IMGSZ)
+
+
+# --- train/val split ----------------------------------------------------------
+
+
+def _flat_root(tmp_path, n=10):
+    root = tmp_path / "ds"
+    (root / "images").mkdir(parents=True)
+    (root / "labels").mkdir(parents=True)
+    for i in range(n):
+        _write_image(root / "images" / f"img{i:02d}.jpg")
+        (root / "labels" / f"img{i:02d}.txt").write_text("0 0.0 0.0 1.0 0.0 1.0 1.0 0.0 1.0")
+    return root
+
+
+def test_label_path_maps_images_to_labels_both_layouts(tmp_path):
+    flat = tmp_path / "images" / "a.jpg"
+    assert _label_path(flat, ".txt") == tmp_path / "labels" / "a.txt"
+    sub = tmp_path / "images" / "val" / "b.png"
+    assert _label_path(sub, ".png") == tmp_path / "labels" / "val" / "b.png"
+
+
+def test_resolve_split_ratio_is_deterministic_and_disjoint(tmp_path):
+    root = _flat_root(tmp_path, n=10)
+    train, val = _resolve_split(root, val_split=0.3, seed=0)
+    assert len(val) == 3 and len(train) == 7  # 30% -> 3 val
+    assert set(train).isdisjoint(val)  # no leakage
+    assert (train, val) == _resolve_split(root, val_split=0.3, seed=0)  # deterministic
+    # val_split=0 -> everything trains, no val split.
+    train_all, val_none = _resolve_split(root, val_split=0.0, seed=0)
+    assert len(train_all) == 10 and val_none == []
+
+
+def test_resolve_split_uses_train_val_subdirs(tmp_path):
+    root = tmp_path / "ds"
+    for split in ("train", "val"):
+        (root / "images" / split).mkdir(parents=True)
+        (root / "labels" / split).mkdir(parents=True)
+    _write_image(root / "images" / "train" / "a.jpg")
+    _write_image(root / "images" / "train" / "b.jpg")
+    _write_image(root / "images" / "val" / "c.jpg")
+    train, val = _resolve_split(root, val_split=0.5, seed=0)  # val_split ignored when subdirs exist
+    assert [p.stem for p in train] == ["a", "b"] and [p.stem for p in val] == ["c"]
+
+
+def test_build_seg_dataloaders_returns_train_and_val(tmp_path):
+    pytest.importorskip("cv2")
+    root = _flat_root(tmp_path, n=10)
+    cfg = DFINEConfig.preset("n", task="segment", imgsz=IMGSZ)
+    train_loader, val_loader = build_seg_dataloaders(
+        root, cfg=cfg, batch_size=2, num_workers=0, val_split=0.2
+    )
+    assert len(train_loader.dataset) == 8 and len(val_loader.dataset) == 2
+    assert val_loader.drop_last is False  # val runs unshuffled, keeps the tail batch
+    # val_split=0 -> no val loader.
+    _, none_val = build_seg_dataloaders(root, cfg=cfg, num_workers=0, val_split=0.0)
+    assert none_val is None
