@@ -20,6 +20,7 @@ from dfine.backends.native import (  # noqa: E402
     HungarianMatcher,
     HybridEncoder,
 )
+from dfine.backends.native.matcher import dice_cost, sigmoid_focal_cost  # noqa: E402
 
 IMGSZ = 320
 BASE_LOSSES = {"loss_vfl", "loss_bbox", "loss_giou", "loss_fgl"}
@@ -68,6 +69,51 @@ def test_matcher_returns_one_to_one_indices():
         assert src.shape == (n,) and tgt.shape == (n,)
         assert sorted(tgt.tolist()) == list(range(n))  # every target matched once
         assert src.unique().numel() == n  # distinct predictions
+
+
+def test_mask_cost_functions():
+    # Dice cost is ~0 for a perfect match and ~1 for the complement; focal cost is lower
+    # for the matching query than the opposite one.
+    gt = torch.zeros(1, 4, 4)
+    gt[0, :2] = 1.0  # top half foreground
+    dice = dice_cost(gt.clone(), gt)  # probs == gt
+    assert float(dice[0, 0]) < 1e-3
+    assert float(dice_cost(1 - gt, gt)[0, 0]) > 0.99
+
+    logits = torch.stack([(gt[0] * 20 - 10), (10 - gt[0] * 20)])  # [2, 4, 4]: match vs opposite
+    focal = sigmoid_focal_cost(logits.flatten(1), gt.flatten(1))  # [2, 1]
+    assert float(focal[0, 0]) < float(focal[1, 0])
+
+
+def test_matcher_from_config_segment_adds_mask_costs():
+    assert (HungarianMatcher.from_config(_cfg()).cost_mask,) == (0,)  # detect: off
+    ms = HungarianMatcher.from_config(_cfg(task="segment"))
+    assert ms.cost_mask == 1.0 and ms.cost_mask_dice == 1.0
+
+
+def test_matcher_mask_cost_breaks_box_tie():
+    # Two queries identical in class/box (tie); only their masks differ. The mask-aware
+    # (segment) matcher assigns the query whose mask matches the target; the mask-blind
+    # (detect) matcher ignores masks and falls back to the first query.
+    Hm = 8
+    outputs = {
+        "pred_logits": torch.zeros(1, 2, 80),  # identical class cost for both queries
+        "pred_boxes": torch.tensor([[[0.5, 0.5, 0.4, 0.4]] * 2]),  # both == target box
+        "pred_masks": torch.stack(
+            [torch.full((Hm, Hm), -10.0), torch.full((Hm, Hm), 10.0)]  # q0 empty, q1 full
+        ).view(1, 2, Hm, Hm),
+    }
+    targets = [
+        {
+            "labels": torch.tensor([1]),
+            "boxes": torch.tensor([[0.5, 0.5, 0.4, 0.4]]),
+            "masks": torch.ones(1, Hm, Hm),  # matches q1
+        }
+    ]
+    seg_src = HungarianMatcher.from_config(_cfg(task="segment"))(outputs, targets)["indices"][0][0]
+    det_src = HungarianMatcher.from_config(_cfg())(outputs, targets)["indices"][0][0]
+    assert int(seg_src) == 1  # mask cost pulls the match to the full-mask query
+    assert int(det_src) == 0  # no mask cost -> tie broken by query order
 
 
 def test_matcher_return_topk():

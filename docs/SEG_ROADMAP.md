@@ -237,7 +237,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       (incl. `_aux_`/`_dn_final`) with gradient reaching the mask branch; detect stays mask-free.
       Attribution added to the criterion module docstring (© ArgoHA, Apache-2.0). base import
       still torch-free; suite 267 passed / 16 skipped. Matcher mask costs are **TS2**.
-- [ ] **TS2 Matcher mask costs** (`dice_cost` + `sigmoid_focal_cost`).
+- [x] **TS2 Matcher mask costs** *(2026-07-23)*. Ported D-FINE-seg's instance-mask matching
+      costs into `HungarianMatcher`: module-level `dice_cost` (pairwise `1 - Dice` from mask
+      probs) and `sigmoid_focal_cost` (pairwise pixel-wise focal from logits, pixel-normalized),
+      added into the assignment cost via a new `_add_mask_cost` in-place helper. It resizes GT
+      masks (bilinear) to the prediction's `(Hm, Wm)`, drops leading denoising queries if present,
+      and accumulates `cost_mask_dice·dice + cost_mask·focal` per batch element. `from_config`
+      sets `cost_mask`/`cost_mask_dice` (both `1.0`, new config fields) **only when
+      `cfg.enable_mask_head`**; the helper is also a no-op unless the outputs carry `pred_masks`
+      and some target has masks — so detection matching is byte-identical (cost weights `0`).
+      Tests: `dice_cost`/`sigmoid_focal_cost` value checks, segment `from_config` gating, and a
+      controlled class/box tie broken by the mask cost (seg matcher picks the matching-mask query;
+      detect matcher ignores masks). Attribution added to the matcher module docstring (© ArgoHA,
+      Apache-2.0). base import torch-free; suite 270 passed / 16 skipped.
 - [ ] **TS3 `SemSegCriterion`** (CE + soft Dice + `ignore_index`).
 - [ ] **TS4 Seg datasets**: YOLO polygon labels → instance masks; PNG masks → sem_seg targets;
       wire into `build_coco_dataloaders`/a new loader. (Muon/Adan/mosaic are **out of scope** —

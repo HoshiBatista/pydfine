@@ -85,6 +85,8 @@ class DFINEConfig:
     cost_class: float = 2.0
     cost_bbox: float = 5.0
     cost_giou: float = 2.0
+    cost_mask: float = 1.0
+    cost_mask_dice: float = 1.0
     matcher_alpha: float = 0.25
     matcher_gamma: float = 2.0
 
