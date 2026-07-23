@@ -250,7 +250,20 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       controlled class/box tie broken by the mask cost (seg matcher picks the matching-mask query;
       detect matcher ignores masks). Attribution added to the matcher module docstring (© ArgoHA,
       Apache-2.0). base import torch-free; suite 270 passed / 16 skipped.
-- [ ] **TS3 `SemSegCriterion`** (CE + soft Dice + `ignore_index`).
+- [x] **TS3 `SemSegCriterion`** *(2026-07-23)*. New `dfine/backends/native/sem_seg_criterion.py`
+      ported from D-FINE-seg: pixel **cross-entropy + multi-class soft Dice** on
+      `outputs["sem_seg_logits"]` vs each target's `sem_mask` `[H, W]` long map, plus an
+      **auxiliary CE** on `sem_seg_logits_aux` when the decoder emits it (deep supervision).
+      `ignore_index` (default 255) pixels are excluded from both CE and Dice (masked out of the
+      softmax/one-hot), and an all-ignore batch returns a differentiable zero loss so fully-padded
+      crops never break the step. `from_config` wires the fixed `{loss_ce, loss_dice, loss_aux}`
+      weight dict (`1/1/0.4`) + `ignore_index`/label-smoothing from new config fields
+      (`loss_ce_weight`, `loss_dice_weight`, `loss_aux_weight`, `sem_seg_ignore_index`,
+      `sem_seg_label_smoothing`); exported from `dfine.backends.native`. Tests: from_config
+      weights, CE+Dice+aux finite/differentiable, aux skipped when absent, all-ignore→zero, and
+      ignore_index actually removing pixels from CE. base import torch-free; suite 275 passed /
+      16 skipped. Attribution in the module header (© ArgoHA, Apache-2.0). Wiring into
+      `DFINE.train` is **TS5**.
 - [ ] **TS4 Seg datasets**: YOLO polygon labels → instance masks; PNG masks → sem_seg targets;
       wire into `build_coco_dataloaders`/a new loader. (Muon/Adan/mosaic are **out of scope** —
       reuse pydfine's AdamW trainer; note the deviation, like the flatcosine one.)

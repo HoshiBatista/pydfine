@@ -97,6 +97,11 @@ class DFINEConfig:
     loss_ddf_weight: float = 1.5
     loss_mask_bce_weight: float = 1.0
     loss_mask_dice_weight: float = 1.0
+    loss_ce_weight: float = 1.0
+    loss_dice_weight: float = 1.0
+    loss_aux_weight: float = 0.4
+    sem_seg_ignore_index: int = 255
+    sem_seg_label_smoothing: float = 0.0
     focal_alpha: float = 0.75
     focal_gamma: float = 2.0
     aux_loss: bool = True
