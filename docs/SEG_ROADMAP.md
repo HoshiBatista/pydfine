@@ -224,7 +224,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       passed / 16 skipped.
 
 ### Phase TS — Segmentation training (largest, optional / later)
-- [ ] **TS1 Mask losses** in native criterion (box-cropped BCE + Dice; DN mask supervision).
+- [x] **TS1 Mask losses** *(2026-07-23)*. Ported D-FINE-seg's instance-mask losses into
+      `DFINECriterion`: `loss_masks` (YOLO-style **box-cropped BCE + soft Dice** on the matched
+      queries' 1/4-res mask logits — GT masks bilinear-resized to mask space, loss computed only
+      inside each GT box and normalized by box area) with `_prepare_target_masks` /
+      `_prepare_target_boxes_for_masks` / `_cropped_bce_loss` / `_cropped_dice_loss` helpers.
+      Registered `"masks"` in `loss_map`; the final/aux/DN layers already carry `pred_masks`, and
+      a dedicated `dn_pred_masks` block adds the `_dn_final` DN mask-supervision term.
+      `from_config` appends `"masks"` + `loss_mask_bce`/`loss_mask_dice` weights (both `1.0`, new
+      config fields) **only when `cfg.enable_mask_head`** — detection is byte-identical (no mask
+      loss, no mask weights). Tests: segment criterion emits finite, differentiable mask losses
+      (incl. `_aux_`/`_dn_final`) with gradient reaching the mask branch; detect stays mask-free.
+      Attribution added to the criterion module docstring (© ArgoHA, Apache-2.0). base import
+      still torch-free; suite 267 passed / 16 skipped. Matcher mask costs are **TS2**.
 - [ ] **TS2 Matcher mask costs** (`dice_cost` + `sigmoid_focal_cost`).
 - [ ] **TS3 `SemSegCriterion`** (CE + soft Dice + `ignore_index`).
 - [ ] **TS4 Seg datasets**: YOLO polygon labels → instance masks; PNG masks → sem_seg targets;

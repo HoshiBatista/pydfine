@@ -31,12 +31,15 @@ def _cfg(**kw):
     )
 
 
-def _target(n, num_classes=80):
+def _target(n, num_classes=80, masks=False):
     # cxcywh boxes safely inside the image; random class labels.
-    return {
+    t = {
         "labels": torch.randint(0, num_classes, (n,)),
         "boxes": torch.rand(n, 4) * 0.5 + 0.25,
     }
+    if masks:
+        t["masks"] = (torch.rand(n, IMGSZ, IMGSZ) > 0.5).float()
+    return t
 
 
 def _synthetic_outputs(batch=2, num_queries=300, num_classes=80):
@@ -138,3 +141,46 @@ def test_criterion_no_denoising_still_works():
     assert BASE_LOSSES.issubset(losses.keys())
     assert not any("_dn_" in k for k in losses)
     assert torch.isfinite(sum(losses.values()))
+
+
+# --- segmentation mask losses (TS1) -------------------------------------------
+
+
+def test_criterion_detect_has_no_mask_losses():
+    # Detection is byte-identical: no "masks" loss, no loss_mask_* weights/keys.
+    c = DFINECriterion.from_config(_cfg())
+    assert "masks" not in c.losses
+    assert not any("mask" in k for k in c.weight_dict)
+
+
+def test_criterion_from_config_segment_adds_mask_losses():
+    c = DFINECriterion.from_config(_cfg(task="segment"))
+    assert c.losses == ["vfl", "boxes", "local", "masks"]
+    assert c.weight_dict["loss_mask_bce"] == 1.0
+    assert c.weight_dict["loss_mask_dice"] == 1.0
+
+
+def test_criterion_segment_mask_losses_finite_and_differentiable():
+    torch.manual_seed(2)
+    from dfine.backends.native import DFINE as NativeDFINE
+
+    cfg = _cfg(task="segment")
+    model = NativeDFINE.from_config(cfg).train()
+    targets = [_target(3, masks=True), _target(2, masks=True)]
+    outputs = model(torch.randn(2, 3, IMGSZ, IMGSZ), targets)
+    # The seg decoder emits per-instance mask logits on the final + denoising layers.
+    assert "pred_masks" in outputs and "dn_pred_masks" in outputs
+
+    losses = DFINECriterion.from_config(cfg)(outputs, targets)
+    assert {"loss_mask_bce", "loss_mask_dice"}.issubset(losses)
+    assert "loss_mask_bce_dn_final" in losses  # DN mask supervision term
+    assert any(k.startswith("loss_mask_bce_aux_") for k in losses)  # aux-layer mask loss
+    assert all(torch.isfinite(v) for v in losses.values())
+
+    sum(losses.values()).backward()
+    mask_grad = sum(
+        p.grad.abs().sum()
+        for n, p in model.named_parameters()
+        if p.grad is not None and "mask" in n
+    )
+    assert float(mask_grad) > 0  # the mask branch actually receives gradient

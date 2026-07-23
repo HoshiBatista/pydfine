@@ -93,6 +93,8 @@ class DFINEConfig:
     loss_giou_weight: float = 2.0
     loss_fgl_weight: float = 0.15
     loss_ddf_weight: float = 1.5
+    loss_mask_bce_weight: float = 1.0
+    loss_mask_dice_weight: float = 1.0
     focal_alpha: float = 0.75
     focal_gamma: float = 2.0
     aux_loss: bool = True
