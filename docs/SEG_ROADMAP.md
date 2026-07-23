@@ -264,9 +264,22 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       ignore_index actually removing pixels from CE. base import torch-free; suite 275 passed /
       16 skipped. Attribution in the module header (© ArgoHA, Apache-2.0). Wiring into
       `DFINE.train` is **TS5**.
-- [ ] **TS4 Seg datasets**: YOLO polygon labels → instance masks; PNG masks → sem_seg targets;
-      wire into `build_coco_dataloaders`/a new loader. (Muon/Adan/mosaic are **out of scope** —
-      reuse pydfine's AdamW trainer; note the deviation, like the flatcosine one.)
+- [x] **TS4 Seg datasets** *(2026-07-23)*. New `dfine/train/seg_dataset.py` with two YOLO-style
+      datasets that emit exactly the target keys the seg criteria consume. `YoloInstanceSegDataset`
+      (`task="segment"`) parses YOLO-Seg polygon labels (`parse_yolo_seg_label`: det + polygon
+      lines, box from polygon bbox) and rasterizes each polygon to a binary instance mask
+      (`polygons_to_masks` via `cv2.fillPoly`, det-only rows → zero mask kept row-aligned) →
+      `masks` `[N, imgsz, imgsz]` uint8 + `boxes` (cxcywh norm) + `labels`. `SemSegDataset`
+      (`task="sem_seg"`) reads a single-channel PNG label map (NEAREST resize, `ignore_index`
+      preserved, out-of-range class ids rejected) → `sem_mask` `[imgsz, imgsz]` long. Images are
+      resized to a square `imgsz` (normalized boxes are resize-invariant), so a plain
+      `batch_image_collate_fn` stacks them. `build_seg_dataloader` picks the dataset by
+      `cfg.task` and inherits `num_classes`/`imgsz`/`sem_seg_ignore_index`. Mosaic/heavy aug
+      **out of scope** (reuse pydfine's AdamW trainer). Tests: parsing (det+poly, missing file),
+      rasterization (area + row-alignment), instance/sem_seg `__getitem__` shapes+dtypes,
+      ignore_index preservation + out-of-range rejection, and both dataloader builders. Follows
+      D-FINE-seg's `src/dl` (© ArgoHA, Apache-2.0). base import torch-free; suite 283 passed /
+      16 skipped. End-to-end wiring is **TS5**.
 - [ ] **TS5 `DFINE.train(task=...)`** end-to-end (overfit-one-batch mask-loss-drops test).
 
 ### Phase XS — Export & polish (later)
