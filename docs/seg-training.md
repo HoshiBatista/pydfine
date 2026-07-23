@@ -10,9 +10,12 @@ pip install pydfine[train]        # torch + matcher (scipy) + cv2 + torchmetrics
 
 ## Dataset layout
 
-A seg dataset is an `images/` folder plus a parallel `labels/` folder (the label is resolved
-per image by swapping `/images/` → `/labels/`). Train/val is split from `images/{train,val}`
-subdirs if present, otherwise from a deterministic `val_split` fraction of the flat root.
+A seg dataset is an `images/` folder plus a parallel `labels/` folder; each label is resolved
+next to its image by swapping `/images/` → `/labels/`, so the two layouts below work the same
+way. (This mirrors the detection path, whose `data=` root uses the parallel generic COCO layout
+`train/` + `val/` + `annotations/` — the `2017` folder names are auto-detected, not required.)
+
+The label file per image depends on the task:
 
 **Instance (`segment`)** — `labels/<stem>.txt`, one object per line in **normalized**
 coordinates:
@@ -22,29 +25,34 @@ cls x1 y1 x2 y2 … xN yN     # a polygon (≥3 points) → rasterized to an ins
 cls xc yc w h               # a plain box (5 cols) → box only, empty mask
 ```
 
-```
-dataset/
-  images/  a.jpg  b.jpg  …
-  labels/  a.txt  b.txt  …          # YOLO-Seg polygons
-```
-
 **Semantic (`sem_seg`)** — `labels/<stem>.png`, a single-channel `uint8` label map where the
 pixel value is the class id; `ignore_index` pixels (default `255`) are excluded from loss and
-metrics:
+metrics (ids must be contiguous `0..num_classes-1`).
+
+### Flat root (auto-split)
+
+Put every image/label directly under `images/` + `labels/`; `DFINE.train` carves out a
+`val_split` fraction (default `0.2`, seeded) for validation:
 
 ```
 dataset/
-  images/  a.jpg  b.jpg  …
-  labels/  a.png  b.png  …          # class-id maps (contiguous 0..num_classes-1)
+  images/  a.jpg  b.jpg  c.jpg  …
+  labels/  a.txt  b.txt  c.txt  …   # .txt for segment · .png for sem_seg
 ```
 
-**Explicit train/val split** — drop images and labels into `train/` and `val/` subdirs and the
-split is used verbatim (any `val_split` is ignored):
+### Explicit train/val split
+
+Sort images/labels into `train/` and `val/` subdirs and the split is used verbatim (any
+`val_split` is ignored):
 
 ```
 dataset/
-  images/  train/ …   val/ …
-  labels/  train/ …   val/ …
+  images/
+    train/  a.jpg  b.jpg  …
+    val/    c.jpg  …
+  labels/
+    train/  a.txt  b.txt  …          # .txt for segment · .png for sem_seg
+    val/    c.txt  …
 ```
 
 ## Instance segmentation
