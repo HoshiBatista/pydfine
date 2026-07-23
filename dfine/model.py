@@ -315,7 +315,11 @@ class DFINE:
           loader are built for you via
           :func:`~dfine.train.dataset.build_coco_dataloaders`. ``batch_size``,
           ``num_workers``, ``augment`` and ``remap_mscoco_category`` tune that build
-          (set ``remap_mscoco_category=True`` for stock 80-class MS-COCO ids).
+          (set ``remap_mscoco_category=True`` for stock 80-class MS-COCO ids). For a
+          ``task="segment"`` / ``"sem_seg"`` model, ``data=`` is instead a YOLO-style root
+          (``images/`` + ``labels/``: polygon ``.txt`` for segment, class-id ``.png`` for
+          sem_seg) built via :func:`~dfine.train.seg_dataset.build_seg_dataloader`; seg has
+          no auto val eval yet — pass ``val_loader``/``val_fn`` to evaluate.
         * ``train_loader=...`` — a ready dataloader yielding ``(samples, targets)``
           batches: ``samples`` a float ``BCHW`` image tensor, each ``target`` a dict
           with ``labels`` (``LongTensor``) and ``boxes`` (``cxcywh``, normalized).
@@ -392,22 +396,32 @@ class DFINE:
         if data is not None:
             if train_loader is not None:
                 raise ValueError("Pass either `data=` or `train_loader=`, not both.")
-            from .train.dataset import build_coco_dataloaders
+            if self.config.task in ("segment", "sem_seg"):
+                # YOLO-style seg root (images/ + labels/); box/COCO val eval is not wired
+                # for seg yet, so no val loader is auto-built (pass one explicitly if needed).
+                from .train.seg_dataset import build_seg_dataloader
 
-            train_loader, auto_val_loader = build_coco_dataloaders(
-                data,
-                cfg=self.config,
-                batch_size=batch_size,
-                num_workers=num_workers,
-                augment=augment,
-                remap_mscoco_category=remap_mscoco_category,
-            )
-            if val_loader is None:
-                val_loader = auto_val_loader
+                train_loader = build_seg_dataloader(
+                    data, cfg=self.config, batch_size=batch_size, num_workers=num_workers
+                )
+            else:
+                from .train.dataset import build_coco_dataloaders
+
+                train_loader, auto_val_loader = build_coco_dataloaders(
+                    data,
+                    cfg=self.config,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    augment=augment,
+                    remap_mscoco_category=remap_mscoco_category,
+                )
+                if val_loader is None:
+                    val_loader = auto_val_loader
         elif train_loader is None:
             raise ValueError("Provide training data via `data=` or `train_loader=`.")
 
-        if val_loader is not None and val_fn is None:
+        # COCO box metrics need the detection postprocessor; sem_seg has no box eval.
+        if val_loader is not None and val_fn is None and self.config.task != "sem_seg":
             from .train.evaluator import coco_val_fn
 
             val_fn = coco_val_fn(self.postprocessor, self.device)

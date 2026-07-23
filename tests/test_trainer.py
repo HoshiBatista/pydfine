@@ -15,7 +15,7 @@ pytest.importorskip("scipy")
 
 from dfine import DFINEConfig  # noqa: E402
 from dfine.backends.native import DFINE as NativeDFINE  # noqa: E402
-from dfine.backends.native import DFINECriterion  # noqa: E402
+from dfine.backends.native import DFINECriterion, SemSegCriterion  # noqa: E402
 from dfine.train import ModelEMA, SmoothedValue  # noqa: E402
 from dfine.train.logger import MetricLogger  # noqa: E402
 from dfine.train.scheduler import LinearWarmup, build_lr_scheduler  # noqa: E402
@@ -44,6 +44,31 @@ def _batch(batch=2, n=3, num_classes=80):
         for _ in range(batch)
     ]
     return samples, targets
+
+
+def _seg_batch(batch=2, n=2, num_classes=80):
+    # A fixed box + a filled-box instance mask, so the mask branch has a learnable target.
+    samples = torch.rand(batch, 3, IMGSZ, IMGSZ)
+    targets = []
+    for _ in range(batch):
+        boxes = torch.rand(n, 4) * 0.3 + 0.35  # cxcywh inside the image
+        masks = torch.zeros(n, IMGSZ, IMGSZ, dtype=torch.uint8)
+        for i, (cx, cy, w, h) in enumerate(boxes):
+            x0, y0 = int((cx - w / 2) * IMGSZ), int((cy - h / 2) * IMGSZ)
+            x1, y1 = int((cx + w / 2) * IMGSZ), int((cy + h / 2) * IMGSZ)
+            masks[i, y0:y1, x0:x1] = 1  # mask == box interior
+        targets.append(
+            {"labels": torch.randint(0, num_classes, (n,)), "boxes": boxes, "masks": masks}
+        )
+    return samples, targets
+
+
+def _sem_batch(batch=2, num_classes=4):
+    # A simple left/right two-class split — easy for the dense head to overfit.
+    samples = torch.rand(batch, 3, IMGSZ, IMGSZ)
+    sem = torch.zeros(IMGSZ, IMGSZ, dtype=torch.int64)
+    sem[:, IMGSZ // 2 :] = 1
+    return samples, [{"sem_mask": sem.clone()} for _ in range(batch)]
 
 
 # --- param groups -------------------------------------------------------------
@@ -200,6 +225,76 @@ def test_overfit_one_batch_drops_loss():
     # Overfitting a single batch should cut the total loss substantially. Check the best
     # loss reached, not the last epoch's, so a bit of tail wobble can't flake the test.
     assert best < first["loss"] * 0.5
+
+
+# --- seg training: task picks the criterion + the mask/pixel loss optimizes ---
+
+
+def _mask_loss(stats):
+    return sum(v for k, v in stats.items() if "mask" in k)
+
+
+def test_trainer_selects_criterion_by_task(tmp_path):
+    from dfine.train.trainer import Trainer
+
+    seg = Trainer(
+        NativeDFINE.from_config(_cfg(task="segment")),
+        _cfg(task="segment"),
+        device=torch.device("cpu"),
+        output_dir=tmp_path / "seg",
+        use_ema=False,
+        visualize=False,
+    )
+    assert isinstance(seg.criterion, DFINECriterion) and "masks" in seg.criterion.losses
+
+    ss = Trainer(
+        NativeDFINE.from_config(_cfg(task="sem_seg", num_classes=4)),
+        _cfg(task="sem_seg", num_classes=4),
+        device=torch.device("cpu"),
+        output_dir=tmp_path / "ss",
+        use_ema=False,
+        visualize=False,
+    )
+    assert isinstance(ss.criterion, SemSegCriterion)
+
+
+def test_overfit_one_batch_drops_segment_mask_loss():
+    torch.manual_seed(0)
+    cfg = _cfg(task="segment", lr=1e-3, lr_backbone=1e-3, clip_max_norm=0.1, num_denoising=0)
+    model = NativeDFINE.from_config(cfg)
+    criterion = DFINECriterion.from_config(cfg)
+    optimizer = build_optimizer(model, cfg)
+    loader = [_seg_batch(n=2)]  # single fixed batch, reused every epoch
+    device = torch.device("cpu")
+
+    first = train_one_epoch(model, criterion, loader, optimizer, device, 0, print_freq=100)
+    assert "loss_mask_bce" in first and "loss_mask_dice" in first  # mask terms supervised
+    best_total, best_mask = first["loss"], _mask_loss(first)
+    for epoch in range(1, 40):
+        s = train_one_epoch(model, criterion, loader, optimizer, device, epoch, print_freq=100)
+        best_total, best_mask = min(best_total, s["loss"]), min(best_mask, _mask_loss(s))
+        assert all(v == v for v in s.values())  # no NaNs
+    assert best_total < first["loss"] * 0.5
+    assert best_mask < _mask_loss(first)  # the mask branch actually optimizes
+
+
+def test_overfit_one_batch_drops_sem_seg_loss():
+    torch.manual_seed(0)
+    cfg = _cfg(task="sem_seg", num_classes=4, lr=1e-3, lr_backbone=1e-3, clip_max_norm=0.1)
+    model = NativeDFINE.from_config(cfg)
+    criterion = SemSegCriterion.from_config(cfg)
+    optimizer = build_optimizer(model, cfg)
+    loader = [_sem_batch(num_classes=4)]
+    device = torch.device("cpu")
+
+    first = train_one_epoch(model, criterion, loader, optimizer, device, 0, print_freq=100)
+    assert {"loss_ce", "loss_dice", "loss_aux"} <= set(first)
+    best = first["loss"]
+    for epoch in range(1, 40):
+        s = train_one_epoch(model, criterion, loader, optimizer, device, epoch, print_freq=100)
+        best = min(best, s["loss"])
+        assert all(v == v for v in s.values())
+    assert best < first["loss"] * 0.5  # the dense pixel loss optimizes
 
 
 def test_visualizer_tb_logdir(tmp_path):

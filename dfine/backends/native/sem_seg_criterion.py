@@ -78,7 +78,7 @@ class SemSegCriterion(nn.Module):
         dice = (2 * inter + 1.0) / (denom + 1.0)  # absent classes -> dice 1 -> zero loss
         return 1.0 - dice.mean()
 
-    def forward(self, outputs, targets):
+    def forward(self, outputs, targets, **kwargs):
         logits = outputs["sem_seg_logits"].float()
         target = torch.stack([t["sem_mask"] for t in targets])  # (B, H, W) long
         valid = target != self.ignore_index

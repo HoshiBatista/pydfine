@@ -195,7 +195,7 @@ class Trainer:
         visualize: bool = True,
         use_wandb: bool = False,
     ):
-        from ..backends.native import DFINECriterion
+        from ..backends.native import DFINECriterion, SemSegCriterion
         from .distributed import is_main_process, wrap_model_ddp
 
         self.cfg = cfg
@@ -203,7 +203,10 @@ class Trainer:
         self.is_main = is_main_process()
 
         self.module = model.to(self.device)
-        self.criterion = DFINECriterion.from_config(cfg).to(self.device)
+        # sem_seg uses the dense pixel loss; detect/segment share the detection criterion
+        # (segment adds mask terms via from_config when cfg.enable_mask_head).
+        criterion_cls = SemSegCriterion if cfg.task == "sem_seg" else DFINECriterion
+        self.criterion = criterion_cls.from_config(cfg).to(self.device)
         self.optimizer = build_optimizer(self.module, cfg)
         self.lr_scheduler = build_lr_scheduler(self.optimizer, cfg)
         self.model = wrap_model_ddp(

@@ -280,7 +280,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       ignore_index preservation + out-of-range rejection, and both dataloader builders. Follows
       D-FINE-seg's `src/dl` (© ArgoHA, Apache-2.0). base import torch-free; suite 283 passed /
       16 skipped. End-to-end wiring is **TS5**.
-- [ ] **TS5 `DFINE.train(task=...)`** end-to-end (overfit-one-batch mask-loss-drops test).
+- [x] **TS5 `DFINE.train(task=...)`** *(2026-07-23)*. Wired the seg training path end-to-end.
+      `Trainer` now selects the criterion by task — `SemSegCriterion` for `sem_seg`, else
+      `DFINECriterion` (segment gets mask terms via `from_config`). `DFINE._fit` builds a
+      `build_seg_dataloader` train loader from a YOLO-style `data=` root for segment/sem_seg (COCO
+      builder stays for detect), and the auto COCO-box `val_fn` is gated off for `sem_seg` (no box
+      eval); `SemSegCriterion.forward` now accepts the trainer's `**metas`. `DFINE.train` docstring
+      documents the seg `data=` layout. Tests: `Trainer` picks the right criterion per task, and
+      two **overfit-one-batch** smokes — a `task="segment"` batch (filled-box instance masks)
+      drives total loss <½ and the mask terms strictly down, and a `task="sem_seg"` batch
+      (left/right two-class split) drives the dense CE+Dice+aux loss <½. base import torch-free;
+      suite 286 passed / 16 skipped. **Phase TS (segmentation training) complete** — instance +
+      semantic seg now train through the public `DFINE.train` API with parity-faithful losses.
 
 ### Phase XS — Export & polish (later)
 - [x] **XS1 ONNX export** *(2026-07-23)*. `export_onnx`/`tensorrt_command` gained a `task`
