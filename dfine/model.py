@@ -535,11 +535,16 @@ class DFINE:
     ) -> Path:
         """Export the model to a deployable graph (Phase 3).
 
-        Currently ``format="onnx"``: writes a single ONNX graph with the two-input
-        signature ``(images, orig_target_sizes)`` → ``(labels, boxes, scores)`` (boxes
-        ``xyxy`` in original scale), batch dim dynamic by default. Returns the output
-        :class:`~pathlib.Path`. Needs ``pip install pydfine[export]``.
+        Currently ``format="onnx"``: writes a single ONNX graph, batch dim dynamic by
+        default. The outputs follow the model's ``task``:
 
+        - ``detect``  — ``(images, orig_target_sizes)`` → ``(labels, boxes, scores)``.
+        - ``segment`` — same inputs → ``(labels, boxes, scores, masks)`` (masks are the
+          top-k queries' sigmoid maps at 1/4 res; threshold/resize/clip on the host).
+        - ``sem_seg`` — ``images`` → ``sem_seg`` ``[N, H, W]`` uint8 label map (argmax
+          fused in; resize to the original size on the host).
+
+        Returns the output :class:`~pathlib.Path`. Needs ``pip install pydfine[export]``.
         ``file`` defaults to ``dfine-<size>.onnx``. Use ``simplify=True`` for ``onnxsim``,
         and :func:`dfine.export.tensorrt_command` for a downstream ``trtexec`` engine.
         """
@@ -560,6 +565,7 @@ class DFINE:
             self.model,
             self.postprocessor,
             file,
+            task=self.config.task,
             imgsz=imgsz,
             batch=batch,
             opset=opset,

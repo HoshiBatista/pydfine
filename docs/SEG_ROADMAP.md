@@ -233,7 +233,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
 - [ ] **TS5 `DFINE.train(task=...)`** end-to-end (overfit-one-batch mask-loss-drops test).
 
 ### Phase XS — Export & polish (later)
-- [ ] **XS1 ONNX export** with fused mask/argmax graph (segment + sem_seg output contracts).
+- [x] **XS1 ONNX export** *(2026-07-23)*. `export_onnx`/`tensorrt_command` gained a `task`
+      arg selecting the output contract: `segment` → `(labels, boxes, scores, masks)` where
+      `masks` are the top-k queries' sigmoid maps at 1/4 res (postprocessor deploy path
+      gathers them; threshold/resize/box-clip on host); `sem_seg` → single `images` input →
+      `sem_seg` `[N, H, W]` uint8 label map (argmax **fused into the graph** at network res,
+      host resizes nearest). Added `SegInstanceDeployModel`/`SemSegDeployModel` +
+      `_build_deploy` picking the deploy module and I/O names by task; `DFINE.export` passes
+      `task=self.config.task`. Detect export is byte-identical (task defaults `detect`).
+      onnxruntime-verified (sem_seg >99.9% pixel agreement; segment structural + sorted-scores
+      parity — numeric mask parity is covered bit-exactly by `test_seg_parity.py`).
 - [x] **XS2 Docs** *(2026-07-22)*. Added a **Segmentation** quickstart to `README.md`
       (instance via `from_pretrained("dfine-seg-l")` → `r.masks`/`r.boxes`/`r.plot()`;
       sem_seg via `DFINE(task="sem_seg")` → `r.sem_seg`; notes on the `[hf]` extra,
