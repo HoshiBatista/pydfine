@@ -129,7 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     conv = sub.add_parser("convert", help="convert a YOLO dataset to the COCO layout")
     conv.add_argument("yolo_root", help="YOLO dataset root (images/<split> + labels/<split>)")
-    conv.add_argument("output_dir", help="destination for the COCO train2017/…/annotations")
+    conv.add_argument("output_dir", help="destination for the COCO train/…/annotations")
     conv.add_argument(
         "--names", nargs="+", default=None, help="class names (else read data.yaml / infer)"
     )
@@ -146,9 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     val = sub.add_parser("val", help="evaluate COCO metrics on a dataset")
     _add_model_arg(val)
-    val.add_argument(
-        "--data", required=True, help="COCO dataset root (with val2017/ + annotations)"
-    )
+    val.add_argument("--data", required=True, help="COCO dataset root (with val/ + annotations)")
     val.add_argument(
         "--remap", action="store_true", help="remap to MS-COCO ids (for stock 80-class COCO GT)"
     )

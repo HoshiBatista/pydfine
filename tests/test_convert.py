@@ -45,18 +45,18 @@ def test_layout_and_return(tmp_path):
     out = tmp_path / "coco"
     written = yolo_to_coco(tmp_path / "yolo", out)
 
-    assert set(written) == {"train2017", "val2017"}
-    assert (out / "train2017/img1.jpg").exists()
-    assert (out / "val2017/img3.jpg").exists()
-    assert (out / "annotations/instances_train2017.json").exists()
-    assert (out / "annotations/instances_val2017.json").exists()
+    assert set(written) == {"train", "val"}
+    assert (out / "train/img1.jpg").exists()
+    assert (out / "val/img3.jpg").exists()
+    assert (out / "annotations/instances_train.json").exists()
+    assert (out / "annotations/instances_val.json").exists()
 
 
 def test_box_conversion_and_categories(tmp_path):
     _make_yolo(tmp_path / "yolo")
     out = tmp_path / "coco"
     yolo_to_coco(tmp_path / "yolo", out)
-    coco = _load(out / "annotations/instances_train2017.json")
+    coco = _load(out / "annotations/instances_train.json")
 
     assert coco["categories"] == [
         {"id": 0, "name": "person"},
@@ -81,7 +81,7 @@ def test_background_image_has_no_annotations(tmp_path):
     _make_yolo(tmp_path / "yolo")
     out = tmp_path / "coco"
     yolo_to_coco(tmp_path / "yolo", out)
-    coco = _load(out / "annotations/instances_train2017.json")
+    coco = _load(out / "annotations/instances_train.json")
 
     img2_id = next(i["id"] for i in coco["images"] if i["file_name"] == "img2.jpg")
     assert [a for a in coco["annotations"] if a["image_id"] == img2_id] == []
@@ -91,7 +91,7 @@ def test_explicit_names_override_yaml(tmp_path):
     _make_yolo(tmp_path / "yolo")
     out = tmp_path / "coco"
     yolo_to_coco(tmp_path / "yolo", out, class_names=["a", "b", "c"])
-    coco = _load(out / "annotations/instances_train2017.json")
+    coco = _load(out / "annotations/instances_train.json")
     assert [c["name"] for c in coco["categories"]] == ["a", "b", "c"]
 
 
@@ -99,7 +99,7 @@ def test_infer_names_without_yaml(tmp_path):
     _make_yolo(tmp_path / "yolo", with_yaml=False)
     out = tmp_path / "coco"
     yolo_to_coco(tmp_path / "yolo", out)
-    coco = _load(out / "annotations/instances_train2017.json")
+    coco = _load(out / "annotations/instances_train.json")
     # highest class id seen is 1 -> class_0, class_1.
     assert [c["name"] for c in coco["categories"]] == ["class_0", "class_1"]
 
@@ -120,7 +120,7 @@ def test_polygon_row_becomes_bbox(tmp_path):
     (root / "labels/train/p.txt").write_text("0 0.2 0.1 0.6 0.1 0.6 0.5 0.2 0.5\n")
     out = tmp_path / "coco"
     yolo_to_coco(root, out, class_names=["x"])
-    coco = _load(out / "annotations/instances_train2017.json")
+    coco = _load(out / "annotations/instances_train.json")
     assert coco["annotations"][0]["bbox"] == pytest.approx([20.0, 10.0, 40.0, 40.0])
 
 
@@ -128,7 +128,7 @@ def test_symlink_mode(tmp_path):
     _make_yolo(tmp_path / "yolo")
     out = tmp_path / "coco"
     yolo_to_coco(tmp_path / "yolo", out, copy_images=False)
-    assert (out / "train2017/img1.jpg").is_symlink()
+    assert (out / "train/img1.jpg").is_symlink()
 
 
 def test_missing_splits_raises(tmp_path):
@@ -146,8 +146,8 @@ def test_roundtrip_through_dataloader(tmp_path):
     yolo_to_coco(tmp_path / "yolo", out)
 
     loader = build_coco_dataloader(
-        str(out / "train2017"),
-        str(out / "annotations/instances_train2017.json"),
+        str(out / "train"),
+        str(out / "annotations/instances_train.json"),
         imgsz=64,
         batch_size=2,
         train=False,
@@ -197,4 +197,4 @@ def test_cli_convert(tmp_path):
     out = tmp_path / "coco"
     rc = main(["convert", str(tmp_path / "yolo"), str(out)])
     assert rc == 0
-    assert (out / "annotations/instances_train2017.json").exists()
+    assert (out / "annotations/instances_train.json").exists()

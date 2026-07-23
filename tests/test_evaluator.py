@@ -23,8 +23,8 @@ IMGSZ = 320
 
 def _make_val_root(tmp_path):
     _write_split(
-        tmp_path / "val2017",
-        tmp_path / "annotations" / "instances_val2017.json",
+        tmp_path / "val",
+        tmp_path / "annotations" / "instances_val.json",
         ((200, 150), (120, 90)),
     )
     return str(tmp_path)

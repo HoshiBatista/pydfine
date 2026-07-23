@@ -66,17 +66,22 @@ def _make_coco(tmp_path, sizes=((200, 150), (120, 90))):
     return str(img_dir), str(ann_file)
 
 
-def _make_coco_root(tmp_path, with_val=True):
-    """Write a standard COCO dataset root (train2017/ [+ val2017/] + annotations/)."""
+def _make_coco_root(tmp_path, with_val=True, legacy=False):
+    """Write a COCO dataset root (``train/`` [+ ``val/``] + ``annotations/``).
+
+    ``legacy=True`` writes the stock MS-COCO ``train2017/`` / ``val2017/`` layout instead,
+    to exercise the loader's auto-detection fallback.
+    """
+    suffix = "2017" if legacy else ""
     _write_split(
-        tmp_path / "train2017",
-        tmp_path / "annotations" / "instances_train2017.json",
+        tmp_path / f"train{suffix}",
+        tmp_path / "annotations" / f"instances_train{suffix}.json",
         ((200, 150), (120, 90)),
     )
     if with_val:
         _write_split(
-            tmp_path / "val2017",
-            tmp_path / "annotations" / "instances_val2017.json",
+            tmp_path / f"val{suffix}",
+            tmp_path / "annotations" / f"instances_val{suffix}.json",
             ((160, 120),),
         )
     return str(tmp_path)
@@ -224,6 +229,18 @@ def test_build_coco_dataloaders_from_root(tmp_path):
     v_images, v_targets = next(iter(val_loader))
     assert v_images.shape == (1, 3, IMGSZ, IMGSZ)
     assert len(v_targets) == 1
+
+
+def test_build_coco_dataloaders_detects_legacy_2017_layout(tmp_path):
+    # Default split names are generic (train/val); a stock MS-COCO train2017/val2017 root
+    # must still resolve with no override.
+    root = _make_coco_root(tmp_path, with_val=True, legacy=True)
+    train_loader, val_loader = build_coco_dataloaders(
+        root, imgsz=IMGSZ, batch_size=2, num_workers=0, augment=False
+    )
+    assert next(iter(train_loader))[0].shape[0] == 2
+    assert val_loader is not None
+    assert next(iter(val_loader))[0].shape == (1, 3, IMGSZ, IMGSZ)
 
 
 def test_build_coco_dataloaders_no_val(tmp_path):

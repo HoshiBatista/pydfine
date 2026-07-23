@@ -7,11 +7,11 @@ at the splits. D-FINE (via :func:`dfine.train.dataset.build_coco_dataloaders`) w
 COCO layout instead::
 
     output_dir/
-      train2017/                          # images
-      val2017/
+      train/                              # images
+      val/
       annotations/
-        instances_train2017.json
-        instances_val2017.json
+        instances_train.json
+        instances_val.json
 
 :func:`yolo_to_coco` writes exactly that, so the result feeds ``DFINE.train(data=…)`` /
 ``DFINE.val(data=…)`` directly. **Category ids are kept 0-indexed (= the YOLO class
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 _IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")
 
-_DEFAULT_SPLIT_NAMES = {"train": "train2017", "val": "val2017", "test": "test2017"}
+_DEFAULT_SPLIT_NAMES = {"train": "train", "val": "val", "test": "test"}
 
 
 def _require_pil():
@@ -205,15 +205,15 @@ def yolo_to_coco(
     Args:
         yolo_root: dataset root (with ``images/<split>`` + ``labels/<split>``, and an
             optional ``data.yaml``).
-        output_dir: where the COCO ``train2017/``/``val2017/`` + ``annotations/`` are
-            written (consumable directly by ``DFINE.train(data=output_dir)``).
+        output_dir: where the COCO ``train/``/``val/`` + ``annotations/`` are written
+            (consumable directly by ``DFINE.train(data=output_dir)``).
         class_names: class names (index = class id). Falls back to ``data.yaml``'s
             ``names``, then to inferred ``class_<i>`` if neither is available.
         splits: explicit ``{split: image_dir}`` (relative to ``yolo_root`` or absolute).
             Defaults to auto-detecting ``images/<split>`` and ``<split>/images``.
         copy_images: copy images (default) or symlink them into the output.
-        split_names: override the split→folder map (default ``train→train2017``,
-            ``val→val2017``, ``test→test2017``).
+        split_names: override the split→folder map (default ``train→train``,
+            ``val→val``, ``test→test``).
 
     Returns:
         ``{output_split_name: annotation_json_path}`` for each converted split.

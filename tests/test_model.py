@@ -127,8 +127,8 @@ def test_val_from_data_path(tmp_path):
     from tests.test_dataset import _write_split
 
     _write_split(
-        tmp_path / "val2017",
-        tmp_path / "annotations" / "instances_val2017.json",
+        tmp_path / "val",
+        tmp_path / "annotations" / "instances_val.json",
         ((200, 150),),
     )
     m = DFINE(size="n", imgsz=IMGSZ, backbone_pretrained=False)

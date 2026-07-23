@@ -310,10 +310,10 @@ class DFINE:
 
         Provide the data one of two ways:
 
-        * ``data="path/to/coco"`` — a standard COCO dataset root (``train2017/`` +
-          ``annotations/instances_train2017.json``, optional ``val2017/``). The train
-          loader (full two-phase augmentation + multi-scale) and, if present, a val
-          loader are built for you via
+        * ``data="path/to/coco"`` — a standard COCO dataset root (``train/`` +
+          ``annotations/instances_train.json``, optional ``val/``; a stock MS-COCO
+          ``train2017/`` layout is auto-detected too). The train loader (full two-phase
+          augmentation + multi-scale) and, if present, a val loader are built for you via
           :func:`~dfine.train.dataset.build_coco_dataloaders`. ``batch_size``,
           ``num_workers``, ``augment`` and ``remap_mscoco_category`` tune that build
           (set ``remap_mscoco_category=True`` for stock 80-class MS-COCO ids). For a
@@ -533,7 +533,8 @@ class DFINE:
         Provide the data one of two ways (mutually exclusive):
 
         * ``data="path/to/coco"`` — a COCO root; the val loader is built from
-          ``val2017/`` + ``annotations/instances_val2017.json`` for you.
+          ``val/`` + ``annotations/instances_val.json`` for you (a stock MS-COCO
+          ``val2017/`` layout is auto-detected too).
         * ``val_loader=...`` — a ready loader from ``build_coco_dataloader`` (its
           dataset must carry the ground-truth ``.coco``).
 

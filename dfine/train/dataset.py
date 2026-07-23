@@ -311,7 +311,7 @@ def build_coco_dataloader(
 
         m = DFINE(size="n", num_classes=80)
         loader = build_coco_dataloader(
-            "coco/train2017", "coco/annotations/instances_train2017.json",
+            "coco/train", "coco/annotations/instances_train.json",
             cfg=m.config, batch_size=4, remap_mscoco_category=True,
         )
         m.train(loader, epochs=10)
@@ -346,6 +346,23 @@ def build_coco_dataloader(
     )
 
 
+def _resolve_coco_split(data_root: str, images: str, ann: str) -> tuple[str, str]:
+    """Resolve ``(image_dir, ann_path)``, falling back to the legacy ``*2017`` COCO layout.
+
+    Prefers the generic ``<split>`` / ``instances_<split>.json`` names; if the image folder
+    is absent but the MS-COCO release layout (``<split>2017`` / ``instances_<split>2017.json``)
+    exists, that is used instead — so both a converted dataset and a stock MS-COCO download
+    work with no extra config.
+    """
+    img_dir = os.path.join(data_root, images)
+    ann_path = os.path.join(data_root, ann)
+    if not os.path.isdir(img_dir):
+        legacy_img = os.path.join(data_root, images + "2017")
+        if os.path.isdir(legacy_img):
+            return legacy_img, os.path.join(data_root, ann.replace(".json", "2017.json"))
+    return img_dir, ann_path
+
+
 def build_coco_dataloaders(
     data_root: str,
     *,
@@ -355,27 +372,28 @@ def build_coco_dataloaders(
     num_workers: int = 4,
     remap_mscoco_category: bool = False,
     augment: bool = True,
-    train_images: str = "train2017",
-    train_ann: str = "annotations/instances_train2017.json",
-    val_images: str = "val2017",
-    val_ann: str = "annotations/instances_val2017.json",
+    train_images: str = "train",
+    train_ann: str = "annotations/instances_train.json",
+    val_images: str = "val",
+    val_ann: str = "annotations/instances_val.json",
 ) -> tuple[_CocoDataLoader, _CocoDataLoader | None]:
     """Build ``(train_loader, val_loader)`` from a standard COCO dataset root.
 
-    Expects the MS-COCO on-disk layout under ``data_root`` (override the split names
-    for custom datasets)::
+    Expects a COCO on-disk layout under ``data_root`` (override the split names for custom
+    datasets)::
 
         data_root/
-          train2017/                                  # train images
-          val2017/                                    # val images (optional)
+          train/                                      # train images
+          val/                                        # val images (optional)
           annotations/
-            instances_train2017.json
-            instances_val2017.json                    # optional
+            instances_train.json
+            instances_val.json                        # optional
 
-    The train loader uses the full two-phase augmentation pipeline
-    (:func:`~dfine.train.augment.train_transforms`, ``stop_epoch`` derived from
-    ``cfg``) when ``augment`` is set, plus multi-scale collate. The val loader (built
-    only if its images/annotations exist) uses the plain resize preprocess and returns
+    A stock MS-COCO download (``train2017/`` / ``instances_train2017.json`` …) is detected
+    automatically, so no override is needed for it. The train loader uses the full two-phase
+    augmentation pipeline (:func:`~dfine.train.augment.train_transforms`, ``stop_epoch``
+    derived from ``cfg``) when ``augment`` is set, plus multi-scale collate. The val loader
+    (built only if its images/annotations exist) uses the plain resize preprocess and returns
     ``None`` when absent. This is what powers ``DFINE.train(data=...)``.
     """
     if cfg is not None:
@@ -385,8 +403,7 @@ def build_coco_dataloaders(
     if not os.path.isdir(data_root):
         raise FileNotFoundError(f"Dataset root not found: {data_root!r}")
 
-    train_img_dir = os.path.join(data_root, train_images)
-    train_ann_path = os.path.join(data_root, train_ann)
+    train_img_dir, train_ann_path = _resolve_coco_split(data_root, train_images, train_ann)
     if not os.path.isdir(train_img_dir):
         raise FileNotFoundError(f"Train image folder not found: {train_img_dir!r}")
     if not os.path.isfile(train_ann_path):
@@ -412,9 +429,8 @@ def build_coco_dataloaders(
     )
 
     val_loader = None
-    if os.path.isdir(os.path.join(data_root, val_images)) and os.path.isfile(
-        os.path.join(data_root, val_ann)
-    ):
+    val_img_dir, val_ann_path = _resolve_coco_split(data_root, val_images, val_ann)
+    if os.path.isdir(val_img_dir) and os.path.isfile(val_ann_path):
         val_loader = build_coco_val_dataloader(
             data_root,
             cfg=cfg,
@@ -436,23 +452,22 @@ def build_coco_val_dataloader(
     batch_size: int = 4,
     num_workers: int = 4,
     remap_mscoco_category: bool = False,
-    val_images: str = "val2017",
-    val_ann: str = "annotations/instances_val2017.json",
+    val_images: str = "val",
+    val_ann: str = "annotations/instances_val.json",
 ) -> _CocoDataLoader:
     """Build a single COCO **val** loader (plain resize, no multi-scale) from a root.
 
-    Resolves ``data_root/val2017`` + ``data_root/annotations/instances_val2017.json``
-    (split names overridable) and raises :class:`FileNotFoundError` if either is
-    missing. This is what powers ``DFINE.val(data=…)``; for eval only the ground-truth
-    ``.coco`` and the image tensors are used, so ``remap_mscoco_category`` (which only
-    affects target labels) does not change the reported metrics.
+    Resolves ``data_root/val`` + ``data_root/annotations/instances_val.json`` (split names
+    overridable; a stock MS-COCO ``val2017`` layout is auto-detected) and raises
+    :class:`FileNotFoundError` if either is missing. This is what powers ``DFINE.val(data=…)``;
+    for eval only the ground-truth ``.coco`` and the image tensors are used, so
+    ``remap_mscoco_category`` (which only affects target labels) does not change the metrics.
     """
     if cfg is not None:
         imgsz = cfg.imgsz
 
     data_root = os.fspath(data_root)
-    img_dir = os.path.join(data_root, val_images)
-    ann_path = os.path.join(data_root, val_ann)
+    img_dir, ann_path = _resolve_coco_split(data_root, val_images, val_ann)
     if not os.path.isdir(img_dir):
         raise FileNotFoundError(f"Val image folder not found: {img_dir!r}")
     if not os.path.isfile(ann_path):

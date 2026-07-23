@@ -114,8 +114,8 @@ def test_multigpu_spawn_end_to_end(tmp_path):
 
     # Enough images that each of the 2 ranks still gets a full batch after sharding.
     _write_split(
-        tmp_path / "train2017",
-        tmp_path / "annotations" / "instances_train2017.json",
+        tmp_path / "train",
+        tmp_path / "annotations" / "instances_train.json",
         ((200, 150), (120, 90), (160, 128), (96, 96)),
     )
     root = str(tmp_path)
