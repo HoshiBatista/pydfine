@@ -74,7 +74,7 @@ def _cmd_predict(args: argparse.Namespace) -> int:
         name=args.name,
     )
     for src, res in zip(args.source, results):
-        print(f"  {Path(src).name}: {len(res)} detections")
+        print(f"  {Path(src).name}: {res.verbose()}")
     return 0
 
 

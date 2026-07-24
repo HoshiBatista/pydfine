@@ -206,6 +206,13 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — `Results.verbose()` (per-class summary string) + CLI wiring.** Ultralytics-
+  style `"2 persons, 1 car"`: counts detections per class (naive plural `s`, ordered by class
+  id); a `sem_seg` result instead lists the classes present in the label map (`255` void
+  excluded, e.g. `"2 classes: road, sky"`); `"(no detections)"`/`"(empty)"` when nothing.
+  Pure Python. The `dfine predict` CLI now prints `res.verbose()` per image instead of the bare
+  `N detections` count. Tests: per-class counts, plural + class-id order, empty, sem_seg class
+  list (`test_results.py`). Suite 331 passed / 12 skipped.
 - **2026-07-24 — `dfine predict` CLI on the new save plumbing.** Rewired the CLI predict
   command to call `model.predict(save=True, …)` instead of its bespoke `<stem>_pred.jpg`
   loop. Replaced `--output` with ultralytics-consistent `--project` (default `runs/detect`)

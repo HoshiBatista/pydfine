@@ -455,3 +455,29 @@ class Results:
             img.crop((x1, y1, x2, y2)).save(path)
             saved.append(path)
         return saved
+
+    def verbose(self) -> str:
+        """A human-readable per-class summary, e.g. ``"2 persons, 1 car"`` (ultralytics-style).
+
+        Counts detections per class (naive plural ``s``), ordered by class id. For a
+        ``sem_seg`` result it instead lists the classes present in the label map (``255``
+        void excluded). Returns ``"(no detections)"`` / ``"(empty)"`` when there is nothing.
+        """
+        if self.sem_seg is not None:
+            ids = [int(c) for c in np.unique(np.asarray(self.sem_seg.data)) if int(c) != 255]
+            if not ids:
+                return "(empty)"
+            names = ", ".join(self._name(i) for i in ids)
+            return f"{len(ids)} classes: {names}"
+        if len(self) == 0:
+            return "(no detections)"
+        counts: dict[int, int] = {}
+        for c in self.boxes.cls:
+            counts[int(c)] = counts.get(int(c), 0) + 1
+        return ", ".join(
+            f"{n} {self._name(cls_id)}{'s' if n > 1 else ''}"
+            for cls_id, n in sorted(counts.items())
+        )
+
+    def _name(self, cls_id: int) -> str:
+        return self.names.get(cls_id, str(cls_id)) if self.names else str(cls_id)

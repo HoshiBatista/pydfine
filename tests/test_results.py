@@ -198,6 +198,42 @@ def test_tojson_is_valid_json():
     assert parsed[0]["name"] == "person" and parsed[0]["class"] == 0
 
 
+def test_verbose_counts_per_class():
+    # _results(2): one class-0 (person) + one class-2 (car), one each.
+    assert _results(2).verbose() == "1 person, 1 car"
+
+
+def test_verbose_pluralizes_and_orders_by_class_id():
+    img = Image.fromarray(np.zeros((64, 96, 3), "uint8"))
+    boxes = Boxes(
+        xyxy=torch.tensor([[1.0, 1.0, 5.0, 5.0]] * 3),
+        conf=torch.tensor([0.9, 0.8, 0.7]),
+        cls=torch.tensor([2, 0, 0]),  # two class-0, one class-2
+    )
+    r = Results(img, boxes, names={0: "person", 2: "car"})
+    assert r.verbose() == "2 persons, 1 car"  # class 0 before class 2, plural 's'
+
+
+def test_verbose_empty():
+    assert _results(0).verbose() == "(no detections)"
+
+
+def test_verbose_sem_seg_lists_classes():
+    from dfine.results import SemSeg
+
+    img = Image.fromarray(np.zeros((8, 8, 3), "uint8"))
+    data = torch.full((8, 8), 255, dtype=torch.uint8)  # start all-void
+    data[:4] = 0
+    data[4:] = 1
+    r = Results(
+        img,
+        Boxes(torch.zeros((0, 4)), torch.zeros(0), torch.zeros(0, dtype=torch.long)),
+        names={0: "road", 1: "sky"},
+        sem_seg=SemSeg(data),
+    )
+    assert r.verbose() == "2 classes: road, sky"  # 255 void excluded
+
+
 def test_save_txt_detection_yolo_format(tmp_path):
     out = _results(2).save_txt(tmp_path / "labels" / "img.txt")
     assert out is not None and out.exists()
