@@ -303,6 +303,7 @@ class DFINE:
         val_loader=None,
         val_fn=None,
         output_dir: str = "runs/train",
+        resume: str | os.PathLike | bool | None = None,
         use_wandb: bool = False,
         visualize: bool = True,
     ):
@@ -345,6 +346,10 @@ class DFINE:
         ``mIoU``), and — when ``config.checkpoint_freq > 0`` — a resumable
         ``weights/epoch{N}.pth`` snapshot every ``checkpoint_freq`` epochs.
 
+        **Resume:** pass ``resume=`` to continue an interrupted run — a checkpoint path, or
+        ``True`` for ``output_dir/last.pth``. Model, optimizer, LR scheduler, EMA and the
+        best metric are restored and training picks up at the saved epoch + 1.
+
         When a ``val_loader`` is available (passed, or auto-built from ``data``) and no
         ``val_fn`` is given, COCO metrics are computed each epoch via
         :func:`~dfine.train.evaluator.coco_val_fn` and logged alongside the loss.
@@ -362,6 +367,7 @@ class DFINE:
                 remap_mscoco_category=remap_mscoco_category,
                 val_split=val_split,
                 output_dir=output_dir,
+                resume=resume,
                 use_wandb=use_wandb,
                 visualize=visualize,
             )
@@ -382,6 +388,7 @@ class DFINE:
             val_loader=val_loader,
             val_fn=val_fn,
             output_dir=output_dir,
+            resume=resume,
             use_wandb=use_wandb,
             visualize=visualize,
         )
@@ -401,8 +408,9 @@ class DFINE:
         val_loader,
         val_fn,
         output_dir,
-        use_wandb,
-        visualize,
+        resume=None,
+        use_wandb=False,
+        visualize=True,
     ):
         """Build the loaders (if ``data=``) and run the training loop in this process."""
         if data is not None:
@@ -465,7 +473,9 @@ class DFINE:
             visualize=visualize,
             use_wandb=use_wandb,
         )
-        best = trainer.fit(train_loader, epochs=epochs, val_loader=val_loader, val_fn=val_fn)
+        best = trainer.fit(
+            train_loader, epochs=epochs, val_loader=val_loader, val_fn=val_fn, resume=resume
+        )
         self.model = best.to(self.device)
 
     def _bind_local_rank_device(self) -> None:
@@ -489,6 +499,7 @@ class DFINE:
         remap_mscoco_category,
         val_split,
         output_dir,
+        resume,
         use_wandb,
         visualize,
     ) -> DFINE:
@@ -514,6 +525,7 @@ class DFINE:
             remap_mscoco_category=remap_mscoco_category,
             val_split=val_split,
             output_dir=str(output_dir),
+            resume=resume,
             use_wandb=use_wandb,
             visualize=visualize,
         )

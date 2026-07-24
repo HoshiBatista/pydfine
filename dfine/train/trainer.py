@@ -255,8 +255,14 @@ class Trainer:
         epochs: int | None = None,
         val_loader: Iterable | None = None,
         val_fn: Callable[[nn.Module, Iterable], dict[str, float]] | None = None,
+        resume: str | Path | bool | None = None,
     ) -> nn.Module:
         """Train for ``epochs`` (default ``cfg.epochs``); return the eval module (EMA if on).
+
+        Pass ``resume=`` to continue an interrupted run: a checkpoint path, or ``True`` for
+        ``output_dir/last.pth``. Model + optimizer + LR scheduler + EMA + best-metric are
+        restored and training picks up at the saved epoch + 1 (warmup is skipped — it
+        already completed early in epoch 0).
 
         Under an active process group (multi-GPU) the loaders are sharded with a
         ``DistributedSampler``, only rank 0 saves/logs, and validation runs on all ranks
@@ -265,21 +271,30 @@ class Trainer:
         from .distributed import barrier, de_parallel, wrap_loader_distributed
 
         epochs = epochs or self.cfg.epochs
+        self._best_metric = -1.0
+        start_epoch = 0
+        if resume:
+            path = self.output_dir / "last.pth" if resume is True else Path(resume)
+            start_epoch = self.resume_from(path)
+
         train_loader = wrap_loader_distributed(train_loader, shuffle=True)
         if val_loader is not None:
             val_loader = wrap_loader_distributed(val_loader, shuffle=False)
+        # Warmup ramps LR over the first cfg.warmup_iters *iterations* (finishing early in
+        # epoch 0), so a mid-run resume must not re-ramp — its counter isn't checkpointed.
         warmup = (
             LinearWarmup(self.lr_scheduler, self.cfg.warmup_iters)
-            if self.cfg.warmup_iters > 0
+            if self.cfg.warmup_iters > 0 and start_epoch == 0
             else None
         )
 
         if self.is_main:
             LOGGER.info(self._start_banner(epochs, train_loader, val_loader is not None))
+            if start_epoch > 0:
+                LOGGER.info(colorstr("cyan", "bold", f"Resuming at epoch {start_epoch}/{epochs}"))
             self._log_tensorboard_hint()
-        best_ap = -1.0
 
-        for epoch in range(epochs):
+        for epoch in range(start_epoch, epochs):
             if hasattr(train_loader, "set_epoch"):
                 train_loader.set_epoch(epoch)
             stats = train_one_epoch(
@@ -307,8 +322,8 @@ class Trainer:
                     # primary metric by task: detection AP, seg mask AP, or sem_seg mIoU.
                     name = next((k for k in ("AP", "mAP_50_95_mask", "mIoU") if k in metrics), None)
                     score = metrics.get(name) if name else None
-                    if score is not None and score > best_ap:
-                        best_ap = score
+                    if score is not None and score > self._best_metric:
+                        self._best_metric = score
                         LOGGER.info(
                             "  " + colorstr("green", "bold", f"↑ new best {name} {score:.4f}")
                         )
@@ -322,8 +337,10 @@ class Trainer:
 
         if self.visualizer is not None:
             self.visualizer.close()
-        if self.is_main and best_ap >= 0:
-            LOGGER.info(colorstr("green", "bold", f"Training complete — best AP {best_ap:.4f}"))
+        if self.is_main and self._best_metric >= 0:
+            LOGGER.info(
+                colorstr("green", "bold", f"Training complete — best {self._best_metric:.4f}")
+            )
         return self.ema.module if self.ema else de_parallel(self.model)
 
     def _log_tensorboard_hint(self) -> None:
@@ -384,7 +401,30 @@ class Trainer:
             "model": de_parallel(self.model).state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "lr_scheduler": self.lr_scheduler.state_dict(),
+            "best_metric": getattr(self, "_best_metric", -1.0),
         }
         if self.ema is not None:
             state["ema"] = self.ema.state_dict()
         torch.save(state, path)
+
+    def resume_from(self, path: str | Path) -> int:
+        """Restore model + optimizer + LR scheduler + EMA + best-metric from a checkpoint.
+
+        Returns the epoch to resume at (saved ``epoch + 1``). Accepts checkpoints written by
+        :meth:`save_checkpoint` (``last.pth``/``best.pth``/``weights/epoch{N}.pth``).
+        """
+        from .distributed import de_parallel
+
+        path = Path(path)
+        if not path.is_file():
+            raise FileNotFoundError(f"resume checkpoint not found: {path}")
+        ckpt = torch.load(path, map_location=self.device, weights_only=False)
+        de_parallel(self.model).load_state_dict(ckpt["model"])
+        if "optimizer" in ckpt:
+            self.optimizer.load_state_dict(ckpt["optimizer"])
+        if "lr_scheduler" in ckpt:
+            self.lr_scheduler.load_state_dict(ckpt["lr_scheduler"])
+        if self.ema is not None and "ema" in ckpt:
+            self.ema.load_state_dict(ckpt["ema"])
+        self._best_metric = float(ckpt.get("best_metric", -1.0))
+        return int(ckpt.get("epoch", -1)) + 1

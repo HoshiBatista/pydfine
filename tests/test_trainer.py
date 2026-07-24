@@ -320,6 +320,51 @@ def test_fit_writes_last_best_and_periodic_checkpoints(tmp_path):
     assert {"epoch", "model", "optimizer", "lr_scheduler"} <= set(ckpt)
 
 
+def test_fit_resume_continues_from_saved_epoch(tmp_path):
+    """`fit(resume=…)` restores model/optimizer/scheduler/epoch and picks up where it left
+    off — a 2-epoch run resumed to 4 finishes at epoch 3 with the scheduler fully advanced."""
+    from dfine.train.trainer import Trainer
+
+    torch.manual_seed(0)
+    cfg = _cfg(num_denoising=0, warmup_iters=0, scheduler="multistep", lr_milestones=[1])
+    trainer = Trainer(
+        NativeDFINE.from_config(cfg),
+        cfg,
+        device=torch.device("cpu"),
+        output_dir=tmp_path / "run",
+        use_ema=False,
+        use_amp=False,
+        visualize=False,
+    )
+
+    loader = [_batch(n=2)]
+    trainer.fit(loader, epochs=2)  # epochs 0,1 → last.pth at epoch 1
+    assert trainer.resume_from(tmp_path / "run" / "last.pth") == 2  # picks up at saved+1
+
+    trainer.fit(loader, epochs=4, resume=True)  # resume=True → run/last.pth, runs epochs 2,3
+    last = torch.load(tmp_path / "run" / "last.pth", map_location="cpu", weights_only=False)
+    assert last["epoch"] == 3  # ran through the final epoch
+
+    # Scheduler advanced all 4 steps; the milestone at epoch 1 fired once → lr *= gamma.
+    lr = trainer.optimizer.param_groups[-1]["lr"]
+    assert lr == pytest.approx(cfg.lr * cfg.lr_gamma)
+
+
+def test_resume_from_missing_file_raises(tmp_path):
+    from dfine.train.trainer import Trainer
+
+    t = Trainer(
+        NativeDFINE.from_config(_cfg()),
+        _cfg(),
+        device=torch.device("cpu"),
+        output_dir=tmp_path / "run",
+        use_ema=False,
+        visualize=False,
+    )
+    with pytest.raises(FileNotFoundError):
+        t.resume_from(tmp_path / "nope.pth")
+
+
 def test_fit_no_periodic_checkpoints_when_freq_disabled(tmp_path):
     from dfine.train.trainer import Trainer
 
