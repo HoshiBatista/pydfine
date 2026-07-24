@@ -8,7 +8,8 @@ Mirrors upstream ``src/solver/det_engine.py::train_one_epoch`` +
   ``weight_decay=0``, everything else at the base ``lr``/``weight_decay``. The regex
   patterns are copied verbatim so grouping matches upstream.
 * ``train_one_epoch`` — AMP autocast, ``sum(loss_dict)`` backward, grad clip, optimizer
-  step, EMA update, per-iteration warmup, and the ``MetricLogger`` console progress.
+  step, EMA update, per-iteration warmup, and a ``ProgressBar`` (tqdm) console readout
+  showing total loss + lr (the full per-term loss breakdown streams to TensorBoard).
 * ``Trainer`` — wires model + criterion + optimizer + schedulers + EMA + the
   `TrainingVisualizer`, and runs ``.fit(train_loader, val_loader, epochs)``.
 
@@ -29,7 +30,7 @@ import torch.nn as nn
 
 from ..log import LOGGER, banner, colorstr, metrics_line
 from .ema import ModelEMA
-from .logger import MetricLogger, SmoothedValue
+from .logger import MetricLogger, ProgressBar, SmoothedValue
 from .scheduler import LinearWarmup, build_lr_scheduler
 from .visualizer import TrainingVisualizer
 
@@ -109,14 +110,20 @@ def train_one_epoch(
     visualizer: TrainingVisualizer | None = None,
 ) -> dict[str, float]:
     """Run one training epoch; return ``{meter: global_avg}`` (loss terms + lr)."""
+    from .distributed import is_main_process
+
     model.train()
     criterion.train()
+    # MetricLogger still accumulates every loss term (so the returned per-epoch stats and
+    # TensorBoard keep the full breakdown); only the *console* readout is trimmed to a
+    # progress bar with a total-loss + lr postfix.
     logger = MetricLogger(delimiter="  ")
     logger.add_meter("lr", SmoothedValue(window_size=1, fmt="{value:.6f}"))
     header = f"Epoch: [{epoch}]" if epochs is None else f"Epoch: [{epoch}/{epochs}]"
     n_iter = len(data_loader) if hasattr(data_loader, "__len__") else 0
+    bar = ProgressBar(data_loader, desc=header, enabled=is_main_process(), print_freq=print_freq)
 
-    for i, (samples, targets) in enumerate(logger.log_every(data_loader, print_freq, header)):
+    for i, (samples, targets) in enumerate(bar):
         global_step = epoch * n_iter + i
         metas = dict(epoch=epoch, step=i, global_step=global_step, epoch_step=n_iter)
         samples = samples.to(device)
@@ -158,8 +165,10 @@ def train_one_epoch(
             terms = {k: v.item() for k, v in loss_dict.items()}
             raise RuntimeError(f"Loss is {loss_value}, stopping training. Loss terms: {terms}")
 
+        cur_lr = optimizer.param_groups[0]["lr"]
         logger.update(loss=loss_value, **{k: v.item() for k, v in loss_dict.items()})
-        logger.update(lr=optimizer.param_groups[0]["lr"])
+        logger.update(lr=cur_lr)
+        bar.set_postfix(loss=loss_value, lr=cur_lr)
         if visualizer is not None and global_step % 10 == 0:
             visualizer.log_step(
                 global_step,
@@ -169,7 +178,9 @@ def train_one_epoch(
             )
 
     stats = logger.global_avg_dict()
-    LOGGER.info(f"{colorstr('green', 'bold', header)}  {metrics_line(stats)}")
+    # Clean epoch summary: total loss + lr only (per-term losses live in TensorBoard).
+    summary = metrics_line({"loss": stats["loss"], "lr": stats["lr"]})
+    LOGGER.info(f"{colorstr('green', 'bold', header)}  {summary}")
     return stats
 
 
@@ -306,6 +317,7 @@ class Trainer:
                 self.visualizer.log_epoch(epoch, stats, metrics)
             if self.is_main:
                 self.save_checkpoint(self.output_dir / "last.pth", epoch)
+                self._save_periodic(epoch, epochs)
             barrier()
 
         if self.visualizer is not None:
@@ -347,6 +359,22 @@ class Trainer:
                 "output": str(self.output_dir),
             },
         )
+
+    def _save_periodic(self, epoch: int, epochs: int) -> None:
+        """Snapshot ``weights/epoch{N}.pth`` every ``cfg.checkpoint_freq`` epochs.
+
+        ``last.pth``/``best.pth`` are always written separately; this adds resumable
+        per-epoch snapshots when ``cfg.checkpoint_freq > 0`` (``<= 0`` disables them, the
+        default). The final epoch is always kept so a periodic run never loses its tail.
+        """
+        freq = getattr(self.cfg, "checkpoint_freq", -1)
+        if freq is None or freq <= 0:
+            return
+        if (epoch + 1) % freq != 0 and epoch != epochs - 1:
+            return
+        wdir = self.output_dir / "weights"
+        wdir.mkdir(parents=True, exist_ok=True)
+        self.save_checkpoint(wdir / f"epoch{epoch}.pth", epoch)
 
     def save_checkpoint(self, path: str | Path, epoch: int) -> None:
         from .distributed import de_parallel

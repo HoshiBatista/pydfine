@@ -16,7 +16,7 @@ pytest.importorskip("scipy")
 from dfine import DFINEConfig  # noqa: E402
 from dfine.backends.native import DFINE as NativeDFINE  # noqa: E402
 from dfine.backends.native import DFINECriterion, SemSegCriterion  # noqa: E402
-from dfine.train import ModelEMA, SmoothedValue  # noqa: E402
+from dfine.train import ModelEMA, ProgressBar, SmoothedValue  # noqa: E402
 from dfine.train.logger import MetricLogger  # noqa: E402
 from dfine.train.scheduler import LinearWarmup, build_lr_scheduler  # noqa: E402
 from dfine.train.trainer import (  # noqa: E402
@@ -141,6 +141,33 @@ def test_smoothed_value_and_metric_logger():
     assert sv.global_avg == pytest.approx(2.0)
 
 
+def test_progress_bar_yields_all_items_and_takes_postfix():
+    bar = ProgressBar(list(range(5)), desc="Epoch: [0/1]", print_freq=2)
+    seen = []
+    for i, x in enumerate(bar):
+        seen.append(x)
+        bar.set_postfix(loss=1.0 / (i + 1), lr=1e-4)  # must not raise on either backend
+    assert seen == [0, 1, 2, 3, 4]
+    assert bar.total == 5
+
+
+def test_progress_bar_fallback_logs_without_tqdm(monkeypatch):
+    """With tqdm unavailable, the bar degrades to compact periodic log lines."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_tqdm(name, *args, **kwargs):
+        if name.startswith("tqdm"):
+            raise ImportError("tqdm disabled for test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_tqdm)
+    bar = ProgressBar(range(4), desc="Epoch: [0/1]", print_freq=1)
+    assert bar._tqdm is None  # fell back
+    assert list(bar) == [0, 1, 2, 3]
+
+
 def test_model_ema_moves_toward_model():
     model = NativeDFINE.from_config(_cfg())
     ema = ModelEMA(model, decay=0.5, warmups=0)
@@ -256,6 +283,59 @@ def test_trainer_selects_criterion_by_task(tmp_path):
         visualize=False,
     )
     assert isinstance(ss.criterion, SemSegCriterion)
+
+
+def test_fit_writes_last_best_and_periodic_checkpoints(tmp_path):
+    """`fit` always writes last.pth; best.pth on metric improvement; periodic snapshots
+    under weights/ every `checkpoint_freq` epochs (and never on freq <= 0)."""
+    from dfine.train.trainer import Trainer
+
+    # A val_fn returning an improving AP each epoch → best.pth rewritten every epoch.
+    scores = iter([0.1, 0.2, 0.3, 0.4])
+
+    def val_fn(module, loader):
+        return {"AP": next(scores)}
+
+    cfg = _cfg(checkpoint_freq=2, num_denoising=0)
+    trainer = Trainer(
+        NativeDFINE.from_config(cfg),
+        cfg,
+        device=torch.device("cpu"),
+        output_dir=tmp_path / "run",
+        use_ema=False,
+        use_amp=False,
+        visualize=False,
+    )
+    loader = [_batch(n=2)]
+    trainer.fit(loader, epochs=4, val_loader=loader, val_fn=val_fn)
+
+    run = tmp_path / "run"
+    assert (run / "last.pth").exists()
+    assert (run / "best.pth").exists()
+    # checkpoint_freq=2 over 4 epochs (0..3) → epochs 1 and 3 snapshot (3 is also the last).
+    saved = sorted(p.name for p in (run / "weights").glob("*.pth"))
+    assert saved == ["epoch1.pth", "epoch3.pth"]
+    # A saved checkpoint carries the full resumable state (model + optimizer + epoch).
+    ckpt = torch.load(run / "weights" / "epoch1.pth", map_location="cpu", weights_only=False)
+    assert {"epoch", "model", "optimizer", "lr_scheduler"} <= set(ckpt)
+
+
+def test_fit_no_periodic_checkpoints_when_freq_disabled(tmp_path):
+    from dfine.train.trainer import Trainer
+
+    cfg = _cfg(checkpoint_freq=-1, num_denoising=0)  # the default: periodic snapshots off
+    trainer = Trainer(
+        NativeDFINE.from_config(cfg),
+        cfg,
+        device=torch.device("cpu"),
+        output_dir=tmp_path / "run",
+        use_ema=False,
+        use_amp=False,
+        visualize=False,
+    )
+    trainer.fit([_batch(n=2)], epochs=2)
+    assert (tmp_path / "run" / "last.pth").exists()
+    assert not (tmp_path / "run" / "weights").exists()  # nothing periodic written
 
 
 def test_overfit_one_batch_drops_segment_mask_loss():

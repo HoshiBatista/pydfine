@@ -158,7 +158,7 @@ B4/B5 `[512,1024,2048]` (L/X). See the §11 per-size table for the full mapping.
 | `no_aug_epoch` | int | 2 | Trailing epochs with advanced augs off (M/S: 4). |
 | `seed` | int | 0 | RNG seed. |
 | `workers` | int | 4 | Dataloader workers. |
-| `checkpoint_freq` | int | 1 | Save every N epochs. |
+| `checkpoint_freq` | int | -1 | Extra `weights/epoch{N}.pth` snapshot every N epochs; `<=0` disables (`last.pth`/`best.pth` are always written). |
 | `sync_bn` | bool | True | Convert BN→SyncBN under multi-GPU DDP (GPU-only; no-op single-process/CPU). |
 | `find_unused_parameters` | bool | False | DDP: allow params that get no gradient (slower). |
 

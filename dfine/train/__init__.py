@@ -17,7 +17,7 @@ from .distributed import (
 )
 from .ema import ModelEMA
 from .evaluator import COCO_STAT_NAMES, coco_val_fn, evaluate
-from .logger import MetricLogger, SmoothedValue
+from .logger import MetricLogger, ProgressBar, SmoothedValue
 from .scheduler import LinearWarmup, build_lr_scheduler
 from .trainer import Trainer, build_param_groups, train_one_epoch
 from .visualizer import TrainingVisualizer
@@ -28,6 +28,7 @@ __all__ = [
     "build_param_groups",
     "ModelEMA",
     "MetricLogger",
+    "ProgressBar",
     "SmoothedValue",
     "LinearWarmup",
     "build_lr_scheduler",

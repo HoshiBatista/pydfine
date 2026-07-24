@@ -127,7 +127,7 @@ class DFINEConfig:
     no_aug_epoch: int = 2
     seed: int = 0
     workers: int = 4
-    checkpoint_freq: int = 1
+    checkpoint_freq: int = -1  # save weights/epoch{N}.pth every N epochs; <=0 disables
     sync_bn: bool = True
     find_unused_parameters: bool = False
 

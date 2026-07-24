@@ -335,9 +335,15 @@ class DFINE:
 
         Optimizer groups, LR schedule, EMA, AMP and grad-clip all come from this
         model's :class:`~dfine.config.DFINEConfig`. Progress is visualized like upstream
-        D-FINE: a live console readout plus TensorBoard scalars and a ``loss_curve.png``
+        D-FINE: a live ``tqdm`` progress bar (total loss + lr; the full per-term loss
+        breakdown streams to TensorBoard) plus TensorBoard scalars and a ``loss_curve.png``
         under ``output_dir`` (and W&B if ``use_wandb``); only rank 0 writes them. Returns
         ``self``; the trained (EMA) weights replace ``self.model``.
+
+        **Checkpoints** (rank 0): ``last.pth`` after every epoch, ``best.pth`` whenever the
+        primary validation metric improves (detection ``AP`` / mask ``mAP_50_95_mask`` /
+        ``mIoU``), and — when ``config.checkpoint_freq > 0`` — a resumable
+        ``weights/epoch{N}.pth`` snapshot every ``checkpoint_freq`` epochs.
 
         When a ``val_loader`` is available (passed, or auto-built from ``data``) and no
         ``val_fn`` is given, COCO metrics are computed each epoch via
