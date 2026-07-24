@@ -260,6 +260,19 @@ def test_val_from_data_path(tmp_path):
     assert all(isinstance(v, float) for v in metrics.values())
 
 
+def test_val_plots_writes_analytics(tmp_path):
+    pytest.importorskip("faster_coco_eval")
+    pytest.importorskip("matplotlib")
+    from tests.test_dataset import _write_split
+
+    _write_split(tmp_path / "val", tmp_path / "annotations" / "instances_val.json", ((200, 150),))
+    m = DFINE(size="n", imgsz=IMGSZ, backbone_pretrained=False)
+    out = tmp_path / "valrun"
+    m.val(data=str(tmp_path), batch_size=1, num_workers=0, plots=True, output_dir=str(out))
+    assert (out / "confusion_matrix.png").exists()
+    assert (out / "pr_curve.png").exists()
+
+
 def test_train_requires_data_or_loader():
     m = _model()
     with pytest.raises(ValueError, match="data=|train_loader="):

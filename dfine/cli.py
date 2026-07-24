@@ -86,7 +86,7 @@ def _cmd_predict(args: argparse.Namespace) -> int:
 
 def _cmd_val(args: argparse.Namespace) -> int:
     model = _build_model(args.model, args.weights, remap_mscoco_category=args.remap)
-    metrics = model.val(data=args.data)
+    metrics = model.val(data=args.data, plots=args.plots, output_dir=args.output_dir)
     for key, value in metrics.items():
         print(f"  {key:<10} {value:.4f}")
     return 0
@@ -166,6 +166,10 @@ def build_parser() -> argparse.ArgumentParser:
     val.add_argument(
         "--remap", action="store_true", help="remap to MS-COCO ids (for stock 80-class COCO GT)"
     )
+    val.add_argument(
+        "--plots", action="store_true", help="save confusion matrix + PR curves + per-class AP"
+    )
+    val.add_argument("--output-dir", default="runs/val", help="where --plots artifacts go")
 
     tr = sub.add_parser("train", help="fine-tune on a COCO dataset")
     _add_model_arg(tr)

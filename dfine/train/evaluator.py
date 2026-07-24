@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Callable
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -64,6 +65,9 @@ def evaluate(
     device: torch.device,
     *,
     iou_type: str = "bbox",
+    plots: bool = False,
+    output_dir: str | None = None,
+    names: dict[int, str] | None = None,
 ) -> dict[str, float]:
     """Evaluate ``model`` over ``data_loader`` and return COCO metrics.
 
@@ -71,10 +75,22 @@ def evaluate(
     ``postprocessor`` to original-scale ``xyxy`` boxes, then scored against the loader's
     ground truth. Returns a dict keyed by :data:`COCO_STAT_NAMES` (``AP`` is the primary
     mAP@[.50:.95]).
+
+    With ``plots=True`` also writes ``confusion_matrix.png`` + ``pr_curve.png`` under
+    ``output_dir`` (default ``runs/val``) and logs the per-class AP table — see
+    :mod:`dfine.train.metrics`. ``names`` maps class id → label for the plots. The
+    confusion matrix assumes contiguous labels (``remap_mscoco_category=False``).
     """
     from faster_coco_eval.utils.pytorch import FasterCocoEvaluator
 
     evaluator = FasterCocoEvaluator(_coco_gt(data_loader), [iou_type])
+    cm = None
+    if plots:
+        from .metrics import ConfusionMatrix
+
+        cat_ids = [int(c) for c in evaluator.coco_eval[iou_type].params.catIds]
+        nc = (max(names) + 1) if names else (max(cat_ids, default=-1) + 1)
+        cm = ConfusionMatrix(nc)
 
     was_training = model.training
     model.eval()
@@ -85,6 +101,8 @@ def evaluate(
             outputs = model(samples)
             results = postprocessor(outputs, orig_sizes)
             evaluator.update({int(t["image_id"].item()): r for t, r in zip(targets, results)})
+            if cm is not None:
+                _update_confusion(cm, results, targets)
     finally:
         if was_training:
             model.train()
@@ -96,7 +114,31 @@ def evaluate(
     stats = evaluator.coco_eval[iou_type].stats.tolist()
     metrics = {name: float(v) for name, v in zip(COCO_STAT_NAMES, stats)}
     LOGGER.info(f"{rule(f'eval · {iou_type}', 'cyan')}  {metrics_line(metrics)}")
+
+    if cm is not None:
+        from .metrics import save_val_analytics
+
+        save_val_analytics(evaluator.coco_eval[iou_type], cm, output_dir or "runs/val", names)
     return metrics
+
+
+def _update_confusion(cm, results, targets) -> None:
+    """Feed one batch's predictions + GT (converted to original-scale ``xyxy``) to ``cm``."""
+    for t, r in zip(targets, results):
+        w, h = (float(v) for v in t["orig_size"].tolist())
+        g = t["boxes"].cpu().numpy().reshape(-1, 4)  # cxcywh, normalized
+        if len(g):
+            cx, cy, bw, bh = g[:, 0] * w, g[:, 1] * h, g[:, 2] * w, g[:, 3] * h
+            gt_xyxy = np.stack([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2], axis=1)
+        else:
+            gt_xyxy = np.zeros((0, 4))
+        cm.process_batch(
+            r["boxes"].cpu().numpy(),
+            r["scores"].cpu().numpy(),
+            r["labels"].cpu().numpy(),
+            gt_xyxy,
+            t["labels"].cpu().numpy(),
+        )
 
 
 def coco_val_fn(

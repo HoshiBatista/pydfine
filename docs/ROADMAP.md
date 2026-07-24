@@ -206,6 +206,22 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-25 — Validation analytics: confusion matrix + PR curves + per-class AP.** New
+  `dfine/train/metrics.py`: `box_iou` (numpy), `ConfusionMatrix` (an `(nc+1)×(nc+1)`
+  predicted-vs-true grid matched by IoU — last row/col = background FN/FP; greedy
+  highest-IoU assignment; conf/class-range filtered; `.plot` = column-normalized Blues
+  heatmap), plus `per_class_ap` / `plot_pr_curve` that read the COCO evaluator's precision
+  tensor (`coco_eval.eval['precision']` `[T,R,K,A,M]`) — no second inference pass — and
+  `save_val_analytics`. `evaluate(..., plots=, output_dir=, names=)` builds the CM during its
+  existing loop (GT converted cxcywh-norm×orig_size → xyxy) and, after summarize, writes
+  `confusion_matrix.png` + `pr_curve.png` and logs the per-class AP table (plotting is
+  best-effort — numeric metrics never affected). `DFINE.val(plots=True, output_dir="runs/val")`
+  + `dfine val --plots --output-dir` expose it. CM assumes contiguous labels
+  (`remap_mscoco_category=False`); out-of-range preds ignored. matplotlib added to `[dev]`
+  (was `[train]`-only) so the plot tests run in CI. Exposed `ConfusionMatrix`/`per_class_ap`
+  from `dfine.train`. Tests: box_iou (identical/disjoint/half/empty), CM TP/FP/FN/misclass/
+  conf-filter + PNG, and `val(plots=True)` writes both PNGs (`test_metrics.py`,
+  `test_model.py`). Base import torch-free; suite 353 passed / 12 skipped.
 - **2026-07-25 — TorchScript export (`format="torchscript"`).** A second deploy format beside
   ONNX, needing **only torch** (no `[export]` toolchain). New `dfine/export/torchscript.py::
   export_torchscript` reuses `onnx._build_deploy` (same deploy-mode `model→postprocessor`

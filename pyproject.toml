@@ -100,6 +100,7 @@ dev = [
     "supervision>=0.18",  # Results.to_supervision() interop test
     "huggingface_hub>=0.20",  # dfine-seg-* weight resolution/download tests
     "tqdm>=4.64",  # training progress bar — so the tqdm-path trainer tests run in CI
+    "matplotlib>=3.6",  # val analytics (confusion matrix / PR curves) — so those tests run in CI
 ]
 
 [project.urls]

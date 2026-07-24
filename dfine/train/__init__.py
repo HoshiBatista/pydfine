@@ -18,6 +18,7 @@ from .distributed import (
 from .ema import ModelEMA
 from .evaluator import COCO_STAT_NAMES, coco_val_fn, evaluate
 from .logger import MetricLogger, ProgressBar, SmoothedValue
+from .metrics import ConfusionMatrix, per_class_ap
 from .scheduler import LinearWarmup, build_lr_scheduler
 from .trainer import Trainer, build_param_groups, train_one_epoch
 from .visualizer import TrainingVisualizer
@@ -36,6 +37,8 @@ __all__ = [
     "evaluate",
     "coco_val_fn",
     "COCO_STAT_NAMES",
+    "ConfusionMatrix",
+    "per_class_ap",
     "setup_distributed",
     "spawn",
     "get_rank",

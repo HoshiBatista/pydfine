@@ -744,6 +744,8 @@ class DFINE:
         batch_size: int = 4,
         num_workers: int = 4,
         remap_mscoco_category: bool = False,
+        plots: bool = False,
+        output_dir: str = "runs/val",
     ) -> dict[str, float]:
         """Evaluate the model on a COCO val set and return the metrics dict.
 
@@ -759,6 +761,10 @@ class DFINE:
         mAP@[.50:.95]); see :data:`~dfine.train.evaluator.COCO_STAT_NAMES`. For stock
         MS-COCO ground truth (sparse category ids), build the model with
         ``remap_mscoco_category=True`` so predicted labels match the annotations.
+
+        With ``plots=True`` also writes a confusion matrix + precision–recall curves and
+        logs the per-class AP table under ``output_dir`` (default ``runs/val``); needs
+        matplotlib (the ``[train]`` extra). The confusion matrix assumes contiguous labels.
         """
         if data is None and val_loader is None:
             raise ValueError("Provide validation data via `data=` or `val_loader=`.")
@@ -777,7 +783,15 @@ class DFINE:
 
         from .train.evaluator import evaluate
 
-        return evaluate(self.model, self.postprocessor, val_loader, self.device)
+        return evaluate(
+            self.model,
+            self.postprocessor,
+            val_loader,
+            self.device,
+            plots=plots,
+            output_dir=output_dir,
+            names=self.names,
+        )
 
     def export(
         self,
