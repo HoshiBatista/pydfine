@@ -99,6 +99,40 @@ def test_to_coco_empty():
     assert _results(0).to_coco() == []
 
 
+def test_to_coco_detection_has_no_segmentation():
+    for d in _results(2).to_coco():
+        assert "segmentation" not in d  # boxes-only stays exactly as before
+
+
+def test_to_coco_masks_emit_rle_segmentation():
+    r = _results(2, masks=True)
+    dets = r.to_coco(image_id=3)
+    assert len(dets) == 2
+    for i, d in enumerate(dets):
+        seg = d["segmentation"]
+        assert seg["size"] == [64, 96]  # [H, W], original scale
+        assert isinstance(seg["counts"], list) and sum(seg["counts"]) == 64 * 96
+        # RLE decodes back to the exact foreground pixel count (block is (18+i)^2).
+        fg = sum(seg["counts"][1::2])  # 1-runs are the odd-indexed counts
+        assert fg == int(r.masks.data[i].sum()) == (18 + i) ** 2
+
+
+def test_to_coco_rle_roundtrips_through_coco():
+    """The uncompressed RLE is accepted by faster-coco-eval and decodes to our mask.
+
+    Uncompressed (list-``counts``) RLE is normalized to compressed RLE via the standard
+    COCO ``frPyObjects`` call before ``decode`` — the same path COCO uses for list-form
+    segmentations in ground-truth JSON.
+    """
+    mask_utils = pytest.importorskip("faster_coco_eval.core.mask")
+    r = _results(2, masks=True)
+    for i, d in enumerate(r.to_coco()):
+        seg = d["segmentation"]
+        compressed = mask_utils.frPyObjects(seg, seg["size"][0], seg["size"][1])
+        decoded = mask_utils.decode(compressed)  # [H, W] uint8
+        assert np.array_equal(decoded.astype(bool), r.masks.data[i].cpu().numpy())
+
+
 def test_to_pandas():
     pytest.importorskip("pandas")
     df = _results(2).to_pandas()

@@ -32,6 +32,27 @@ _PALETTE = [
 ]
 
 
+def _mask_to_coco_rle(mask: np.ndarray) -> dict:
+    """COCO **uncompressed** RLE for a binary ``[H, W]`` mask (dependency-free).
+
+    Run-length encodes in **column-major** (Fortran) order starting from background,
+    matching COCO's uncompressed-RLE convention: ``{"size": [h, w], "counts": [...]}``
+    where ``counts`` alternates 0-run, 1-run, 0-run, … A mask that starts with a
+    foreground pixel gets a leading ``0`` count. Accepted by pycocotools/faster-coco-eval
+    ``frPyObjects``/``loadRes``, so it round-trips through COCO mask evaluation.
+    """
+    h, w = int(mask.shape[0]), int(mask.shape[1])
+    flat = np.asfortranarray(mask.astype(np.uint8)).ravel(order="F")
+    if flat.size == 0:
+        return {"size": [h, w], "counts": []}
+    bounds = np.flatnonzero(flat[1:] != flat[:-1]) + 1
+    starts = np.concatenate(([0], bounds))
+    lengths = np.diff(np.concatenate((starts, [flat.size])))
+    counts = [] if flat[0] == 0 else [0]  # leading 0-run when the mask opens on foreground
+    counts.extend(int(x) for x in lengths)
+    return {"size": [h, w], "counts": counts}
+
+
 class Boxes:
     """Detected boxes for one image: ``xyxy`` (pixels), ``conf``, ``cls``.
 
@@ -239,20 +260,28 @@ class Results:
         Each box becomes ``{"image_id", "category_id", "bbox": [x, y, w, h],
         "score"}`` with the bbox in COCO ``xywh`` (top-left + size, original-image
         pixels). ``category_id`` is the contiguous class id this library predicts;
-        pass ``image_id`` to tag the detections with a dataset image id. Pure
+        pass ``image_id`` to tag the detections with a dataset image id. When instance
+        masks are present (``task="segment"``) each dict also carries a ``segmentation``
+        in COCO **uncompressed** RLE (``{"size": [h, w], "counts": [...]}``, original
+        scale, aligned 1:1 with the box) — normalize to compressed RLE with the standard
+        ``pycocotools``/``faster_coco_eval`` ``frPyObjects`` when a tool needs it. Pure
         Python — no extra dependency.
         """
+        masks = None
+        if self.masks is not None and len(self.masks):
+            masks = self.masks.data.cpu().numpy().astype(np.uint8)
         out = []
-        for xyxy, conf, cls in self.boxes:
+        for i, (xyxy, conf, cls) in enumerate(self.boxes):
             x1, y1, x2, y2 = (float(v) for v in xyxy)
-            out.append(
-                {
-                    "image_id": image_id,
-                    "category_id": int(cls),
-                    "bbox": [x1, y1, x2 - x1, y2 - y1],
-                    "score": float(conf),
-                }
-            )
+            d = {
+                "image_id": image_id,
+                "category_id": int(cls),
+                "bbox": [x1, y1, x2 - x1, y2 - y1],
+                "score": float(conf),
+            }
+            if masks is not None:
+                d["segmentation"] = _mask_to_coco_rle(masks[i])
+            out.append(d)
         return out
 
     def to_supervision(self):

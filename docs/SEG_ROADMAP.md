@@ -160,7 +160,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       (`test_results.py`), and `predict(task="segment")` → N masks aligned with N boxes at
       original scale + detection-has-no-masks (`test_seg_model.py`). Base import torch-free.
       Suite 230 passed / 12 skipped. *(COCO-RLE `to_coco` deferred — needs an RLE encoder;
-      not on the critical path.)*
+      not on the critical path.)* **→ done 2026-07-24, see §7.**
 - [x] **S7 Instance-seg parity test** *(2026-07-21)*. `scripts/gen_seg_parity_fixture.py`
       (dev-only) runs genuine **D-FINE-seg** (`build_model`, strict-load) on a seeded input and
       saves raw `pred_logits`/`pred_boxes` (all queries) + an 8-query slice of instance-mask maps
@@ -375,4 +375,21 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
 3. **Add `huggingface_hub`** (new optional dep, e.g. `[hf]` extra) to auto-download
    `dfine_seg_<size>_coco.pt` from `ArgoSA/D-FINE-seg` on first use.
 
-Active task: **S1 — weight-compat probe**.
+## 7. Status (2026-07-24)
+
+All planned phases are **complete**: Phase S (instance-seg inference), SS (semantic-seg
+inference), TS (segmentation training), and XS (export/docs/attribution). **Per-size
+instance-seg parity is closed for all five sizes** (`n/s/m/l/x` bit-exact vs genuine
+D-FINE-seg — see S7; all five `tests/data/seg_parity_*.pt` committed).
+
+Follow-up items (not blocking):
+- [x] **COCO-RLE `to_coco` for masks** *(2026-07-24)* — `Results.to_coco()` now emits a COCO
+      **uncompressed**-RLE `segmentation` (`{"size":[h,w],"counts":[…]}`, column-major, original
+      scale, 1:1 with the box) per instance for `task="segment"` (deferred in S6). Pure-Python
+      `_mask_to_coco_rle` (no new dep, `to_coco` stays dependency-free); detection output is
+      byte-identical (no `segmentation` key). Tested: RLE run-sum = H·W, foreground pixel count
+      matches the mask, and a `frPyObjects`→`decode` round-trip through `faster-coco-eval`
+      reproduces the exact mask (`test_results.py`). Suite 310 passed / 12 skipped.
+- [ ] There are no released *trained* sem_seg weights (HF ships instance-seg only), so
+      sem_seg parity stays "same weights → same output" (SS4); revisit if ArgoHA publishes
+      trained sem_seg checkpoints.
