@@ -25,6 +25,7 @@ import torchvision.transforms as T
 from PIL import Image
 
 from .config import DFINEConfig
+from .log import LOGGER, colorstr
 from .results import Boxes, Masks, Results, SemSeg
 
 __all__ = ["DFINE"]
@@ -82,6 +83,26 @@ def _load_images(source) -> list[Image.Image]:
     if isinstance(source, (list, tuple)):
         return [_to_pil(s) for s in source]
     return [_to_pil(source)]
+
+
+def _source_stems(source) -> list[str]:
+    """Per-image filename stems for saving: a path's stem, else ``image{i}``."""
+    items = list(source) if isinstance(source, (list, tuple)) else [source]
+    return [
+        Path(s).stem if isinstance(s, (str, os.PathLike)) else f"image{i}"
+        for i, s in enumerate(items)
+    ]
+
+
+def _increment_path(path: Path) -> Path:
+    """A non-colliding run dir: ``path``, else ``path2``, ``path3``, … (ultralytics-style)."""
+    if not path.exists():
+        return path
+    for n in range(2, 100000):
+        candidate = path.with_name(f"{path.name}{n}")
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"could not find a free run directory next to {path}")  # pragma: no cover
 
 
 def _require_cv2():
@@ -206,6 +227,13 @@ class DFINE:
         conf: float = 0.25,
         imgsz: int | None = None,
         mask_thresh: float = 0.5,
+        *,
+        save: bool = False,
+        save_txt: bool = False,
+        save_crop: bool = False,
+        save_conf: bool = False,
+        project: str = "runs/detect",
+        name: str = "predict",
     ) -> list[Results]:
         """Detect objects in ``source`` (path / PIL / array, or a list of them).
 
@@ -215,6 +243,12 @@ class DFINE:
         :class:`~dfine.results.Masks` (original scale), thresholded at ``mask_thresh``.
         For a ``task="sem_seg"`` model each result instead carries a
         :class:`~dfine.results.SemSeg` label map (uint8, original scale) and no boxes.
+
+        Set any of ``save`` (annotated image), ``save_txt`` (YOLO-format labels under
+        ``labels/``; ``save_conf`` appends the score) or ``save_crop`` (per-detection
+        crops under ``crops/``) to write results to a fresh run directory
+        ``project/name`` (auto-incremented to ``predict2``, ``predict3``, … so runs never
+        clobber). Filenames come from each source path's stem, else ``image{i}``.
         """
         images = _load_images(source)
         size = imgsz or self.config.imgsz
@@ -232,18 +266,43 @@ class DFINE:
         outputs = self.model(batch)
         if self.config.task == "sem_seg":
             label_maps = self.postprocessor(outputs, orig_sizes)
-            return [self._to_semseg_results(im, m) for im, m in zip(images, label_maps)]
+            results = [self._to_semseg_results(im, m) for im, m in zip(images, label_maps)]
+        else:
+            detections = self.postprocessor(outputs, orig_sizes)
+            pred_masks = outputs.get("pred_masks")
+            results = [
+                self._to_results(
+                    im, det, conf, None if pred_masks is None else pred_masks[b], mask_thresh
+                )
+                for b, (im, det) in enumerate(zip(images, detections))
+            ]
 
-        detections = self.postprocessor(outputs, orig_sizes)
-        pred_masks = outputs.get("pred_masks")
-        return [
-            self._to_results(
-                im, det, conf, None if pred_masks is None else pred_masks[b], mask_thresh
+        if save or save_txt or save_crop:
+            self._save_predictions(
+                results, source, project, name, save, save_txt, save_crop, save_conf
             )
-            for b, (im, det) in enumerate(zip(images, detections))
-        ]
+        return results
 
     __call__ = predict
+
+    def _save_predictions(
+        self, results, source, project, name, save, save_txt, save_crop, save_conf
+    ) -> Path:
+        """Write predictions to a fresh ``project/name`` run dir; return the directory."""
+        save_dir = _increment_path(Path(project) / name)
+        stems = _source_stems(source)
+        if len(stems) != len(results):  # defensive: fall back to positional names
+            stems = [f"image{i}" for i in range(len(results))]
+        save_dir.mkdir(parents=True, exist_ok=True)
+        for r, stem in zip(results, stems):
+            if save:
+                r.save(save_dir / f"{stem}.jpg")
+            if save_txt:
+                r.save_txt(save_dir / "labels" / f"{stem}.txt", save_conf=save_conf)
+            if save_crop:
+                r.save_crop(save_dir / "crops", file_name=f"{stem}.jpg")
+        LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
+        return save_dir
 
     def _to_results(
         self,

@@ -84,6 +84,45 @@ def test_predict_accepts_ndarray():
     assert r.orig_shape == (200, 300)
 
 
+def test_predict_save_writes_run_dir(tmp_path):
+    m = _model()
+    img_path = tmp_path / "street.jpg"
+    _image(320, 320).save(img_path)
+    project = str(tmp_path / "runs")
+    m.predict(
+        str(img_path),
+        conf=0.0,
+        imgsz=IMGSZ,
+        save=True,
+        save_txt=True,
+        save_conf=True,
+        project=project,
+        name="predict",
+    )
+    run = tmp_path / "runs" / "predict"
+    assert (run / "street.jpg").exists()  # annotated image, named by the source stem
+    txt = run / "labels" / "street.txt"
+    assert txt.exists() and len(txt.read_text().split()[1:]) >= 5  # class + coords (+conf)
+
+
+def test_predict_save_increments_run_dir(tmp_path):
+    m = _model()
+    project = str(tmp_path / "runs")
+    for _ in range(2):
+        m.predict(_image(320, 320), conf=0.0, imgsz=IMGSZ, save=True, project=project)
+    # second run must not clobber the first — auto-incremented to predict2
+    assert (tmp_path / "runs" / "predict").is_dir()
+    assert (tmp_path / "runs" / "predict2").is_dir()
+    # non-path source falls back to image{i} filenames
+    assert (tmp_path / "runs" / "predict" / "image0.jpg").exists()
+
+
+def test_predict_no_save_writes_nothing(tmp_path):
+    m = _model()
+    m.predict(_image(320, 320), conf=0.0, imgsz=IMGSZ, project=str(tmp_path / "runs"))
+    assert not (tmp_path / "runs").exists()
+
+
 def test_names_default_to_coco_for_80_classes():
     m = _model()
     assert m.names[0] == "person"

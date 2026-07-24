@@ -206,6 +206,18 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — `DFINE.predict(save=/save_txt=/save_crop=…)` run-dir plumbing.** Lifts the
+  `Results` save methods to the predict call (ultralytics `model.predict(save=True)`): any of
+  `save` (annotated image), `save_txt` (YOLO labels under `labels/`, `save_conf` appends score),
+  `save_crop` (per-detection crops under `crops/`) writes to a fresh `project/name` run dir
+  (`project="runs/detect"`, `name="predict"`), auto-incremented `predict`→`predict2`→… so runs
+  never clobber. Per-image filenames come from each source path's stem, else `image{i}`. New
+  module helpers `_source_stems`/`_increment_path`; `predict` now builds `results` once (detect/
+  segment/sem_seg) then calls `_save_predictions`. `model.py` gained a `.log` import (it already
+  pulls torch, so the torch-free base path is unaffected — verified). Sane no-ops for sem_seg
+  (boxless → save_txt/crop write nothing). Tests: run-dir with image+labels(+conf), increment on
+  re-run + `image{i}` fallback, and no-flags-writes-nothing (`test_model.py`). Suite 327 passed
+  / 12 skipped. Completes the predict→save inference UX on top of the ultralytics `Results` set.
 - **2026-07-24 — `Results.save_crop()` (per-detection crop export).** Ultralytics-parity:
   crops the original image to each box (clipped to the frame) and writes it under
   `save_dir/<class_name>/<file_name>`, appending a numeric suffix (`_2`, `_3`, …) when
