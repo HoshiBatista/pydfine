@@ -143,6 +143,21 @@ ported modules into one model behind the public API.
       Tested: box/category conversion, background, name resolution (explicit/yaml/
       inferred), polygon, symlink, dataloader + eval round-trip (proves `category_id` 0
       survives COCO eval, AP==1.0), CLI (`test_convert.py`).
+- [x] **Training UX (2026-07-24):** periodic checkpoints + tqdm progress bar + trimmed loss
+      logs. `Trainer._save_periodic` writes a resumable `weights/epoch{N}.pth` every
+      `cfg.checkpoint_freq` epochs (wired the previously-dead field; default `-1`=off);
+      `last.pth`/`best.pth` unchanged at `output_dir` root. New `ProgressBar` (tqdm when
+      installed, graceful compact-line fallback) shows only total loss + lr per step — the
+      full per-term breakdown still streams to TensorBoard + the returned `stats`. `tqdm`
+      added to `[train]`/`[dev]`. See the 2026-07-24 note. Committed `456b32d`.
+- [x] **Resume training (2026-07-24):** `DFINE.train(resume=…)` continues an interrupted run
+      from a checkpoint path (or `True` → `output_dir/last.pth`). `Trainer.resume_from`
+      restores model + optimizer + LR scheduler + EMA + best-metric and `fit` picks up at the
+      saved epoch + 1 (warmup skipped — its per-iter counter isn't checkpointed and it
+      finishes early in epoch 0). `save_checkpoint` now also stores `best_metric` so `best.pth`
+      doesn't regress across a resume. Threaded through single- and multi-GPU (`_fit`/
+      `_train_worker`). Tested: split 2+2 run finishes at the right epoch with the scheduler
+      fully advanced, and missing-file raises (`test_trainer.py`). Suite 303 passed / 16 skipped.
 
 ## Phase 5 — Native backend (Path A) — **primary path** (decision 2026-07-11)
 - [x] Port `HGNetv2` into `dfine/backends/native/hgnetv2.py` (strip registry; +
@@ -191,6 +206,18 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — Resume training (`DFINE.train(resume=…)`).** Natural follow-up to the
+  checkpoint work: the snapshots already stored a full resumable state (model + optimizer +
+  lr_scheduler + ema + epoch) but nothing loaded it. New `Trainer.resume_from(path)` restores
+  all of it and returns `saved_epoch + 1`; `fit(resume=path|True)` loops from there (`True` →
+  `output_dir/last.pth`). Two correctness details: (1) **warmup is skipped on resume** — it
+  ramps LR over the first `cfg.warmup_iters` *iterations* (done early in epoch 0) and its
+  per-iter counter isn't checkpointed, so re-running it would wrongly re-ramp; guarded by
+  `start_epoch == 0`. (2) `save_checkpoint` now also writes `best_metric`, and `fit` tracks
+  best on `self._best_metric`, so `best.pth` survives a resume instead of being re-baselined
+  to −∞. Threaded through single-GPU (`_fit`) and multi-GPU (`_train_worker` via `worker_kwargs`).
+  Tested: a split 2+2 run ends at the right epoch with the scheduler fully advanced + missing-
+  file raises. Suite 303 passed / 16 skipped.
 - **2026-07-24 — Phase-4 training UX: periodic checkpoints + tqdm progress bar + trimmed
   loss logs.** Prompted by a v0.0.1 run that had only `last.pth` (no `best.pth`/snapshots).
   (1) **Checkpoints:** wired the previously-dead `DFINEConfig.checkpoint_freq` field (default
