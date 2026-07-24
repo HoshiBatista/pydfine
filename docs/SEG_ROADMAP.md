@@ -166,12 +166,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done. Work the lowest unchecked
       saves raw `pred_logits`/`pred_boxes` (all queries) + an 8-query slice of instance-mask maps
       (fp16, ~0.5 MB) to `tests/data/seg_parity_<size>.pt`. `tests/test_seg_parity.py` builds our
       port from the *same* seg checkpoint, feeds the *same* input, and asserts it reproduces those
-      numbers (gated on the seg `.pt` being in the HF cache; D-FINE-seg not imported). **Result on
-      nano: bit-exact** — `pred_logits`/`pred_boxes` max-abs diff `0.0`; masks max-abs `2.4e-4`,
-      i.e. only the fixture's fp16 storage rounding (< fp16 eps `9.8e-4`), so the port is byte-for-
-      byte faithful up to storage. Fixtures for `s/m/l/x` regenerate the same way (test skips until
-      present). **Phase S (instance segmentation, inference) complete.** Suite 231 passed / 16
-      skipped.
+      numbers (gated on the seg `.pt` being in the HF cache; D-FINE-seg not imported). **Result:
+      bit-exact across all five sizes** — for every one of `n/s/m/l/x`, `pred_logits`/`pred_boxes`
+      max-abs diff `0.0` and masks max-abs `2.44e-4`, i.e. only the fixture's fp16 storage rounding
+      (< fp16 eps `9.8e-4`), so the port is byte-for-byte faithful up to storage. **Phase S
+      (instance segmentation, inference) complete.** Suite 231 passed / 16 skipped.
+      *(2026-07-24 — s/m/l/x fixtures committed.)* Downloaded the four remaining seg checkpoints
+      (`dfine_seg_{s,m,l,x}_coco.pt`, ArgoSA HF), generated their fixtures with the same dev
+      script, and committed all five `tests/data/seg_parity_*.pt` (~0.5 MB each, 2.5 MB total).
+      `test_seg_numeric_parity[{s,m,l,x}]` now pass locally (bit-exact, numbers above) instead of
+      skipping; they still skip in CI (checkpoints aren't cached there — parity stays a
+      cache-gated local/dev check). **Per-size instance-seg parity is now closed for all sizes**,
+      matching the detection path's n/s/m/l/x parity discipline.
 
 ### Phase SS — Semantic-seg inference
 - [x] **SS1 Port `SemSegDecoder`** *(2026-07-21)* → `dfine/backends/native/sem_seg_decoder.py`
