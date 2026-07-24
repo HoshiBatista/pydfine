@@ -84,13 +84,13 @@ def evaluate(
     from faster_coco_eval.utils.pytorch import FasterCocoEvaluator
 
     evaluator = FasterCocoEvaluator(_coco_gt(data_loader), [iou_type])
-    cm = prm = None
+    cm = prm = worst = None
     if plots:
-        from .metrics import ConfusionMatrix, PRCurveMetrics
+        from .metrics import ConfusionMatrix, PRCurveMetrics, WorstPredictions
 
         cat_ids = [int(c) for c in evaluator.coco_eval[iou_type].params.catIds]
         nc = (max(names) + 1) if names else (max(cat_ids, default=-1) + 1)
-        cm, prm = ConfusionMatrix(nc), PRCurveMetrics(nc)
+        cm, prm, worst = ConfusionMatrix(nc), PRCurveMetrics(nc), WorstPredictions()
 
     was_training = model.training
     model.eval()
@@ -102,7 +102,7 @@ def evaluate(
             results = postprocessor(outputs, orig_sizes)
             evaluator.update({int(t["image_id"].item()): r for t, r in zip(targets, results)})
             if cm is not None:
-                _update_analytics(cm, prm, results, targets)
+                _update_analytics(cm, prm, worst, results, targets)
     finally:
         if was_training:
             model.train()
@@ -119,13 +119,18 @@ def evaluate(
         from .metrics import save_val_analytics
 
         save_val_analytics(
-            evaluator.coco_eval[iou_type], cm, output_dir or "runs/val", names, prm=prm
+            evaluator.coco_eval[iou_type],
+            cm,
+            output_dir or "runs/val",
+            names,
+            prm=prm,
+            worst=worst,
         )
     return metrics
 
 
-def _update_analytics(cm, prm, results, targets) -> None:
-    """Feed one batch's predictions + GT (as original-scale ``xyxy``) to both accumulators."""
+def _update_analytics(cm, prm, worst, results, targets) -> None:
+    """Feed one batch's predictions + GT (as original-scale ``xyxy``) to the accumulators."""
     for t, r in zip(targets, results):
         w, h = (float(v) for v in t["orig_size"].tolist())
         g = t["boxes"].cpu().numpy().reshape(-1, 4)  # cxcywh, normalized
@@ -140,6 +145,7 @@ def _update_analytics(cm, prm, results, targets) -> None:
         gl = t["labels"].cpu().numpy()
         cm.process_batch(db, ds, dl, gt_xyxy, gl)
         prm.process_batch(db, ds, dl, gt_xyxy, gl)
+        worst.add(t.get("image_path"), db, ds, dl, gt_xyxy, gl)
 
 
 def coco_val_fn(

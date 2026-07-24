@@ -271,6 +271,8 @@ def test_val_plots_writes_analytics(tmp_path):
     m.val(data=str(tmp_path), batch_size=1, num_workers=0, plots=True, output_dir=str(out))
     for artifact in ("confusion_matrix", "pr_curve", "f1_curve", "p_curve", "r_curve"):
         assert (out / f"{artifact}.png").exists()
+    # a random-init model misses the GT → the frame lands in the worst-predictions gallery
+    assert (out / "worst").is_dir() and any((out / "worst").glob("*.jpg"))
 
 
 def test_train_requires_data_or_loader():

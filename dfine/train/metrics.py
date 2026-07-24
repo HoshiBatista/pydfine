@@ -27,6 +27,7 @@ from ..log import LOGGER, colorstr, metrics_line, rule
 __all__ = [
     "ConfusionMatrix",
     "PRCurveMetrics",
+    "WorstPredictions",
     "box_iou",
     "per_class_ap",
     "plot_pr_curve",
@@ -240,6 +241,103 @@ class PRCurveMetrics:
         return float(x[i]), float(mean_f1[i])
 
 
+class WorstPredictions:
+    """Keep the ``top_k`` images with the most errors (FP + FN) for visual review.
+
+    ``add`` counts a frame's mistakes (class-aware IoU matching at ``iou_thresh``, detections
+    filtered at ``conf``): unmatched GT = false negatives, unmatched detections = false
+    positives, a wrong-class match counts as both. Only a bounded top-``k`` heap is kept, so
+    memory stays flat over the val set. ``save`` renders each keeper — **green = ground truth,
+    red = prediction** — to ``output_dir/worst/`` for spotting label errors and failure modes.
+    """
+
+    def __init__(self, conf: float = 0.25, iou_thresh: float = 0.5, top_k: int = 16):
+        self.conf = conf
+        self.iou_thresh = iou_thresh
+        self.top_k = top_k
+        self._heap: list = []  # min-heap of (n_errors, seq, record)
+        self._seq = 0
+
+    def _error_count(self, db, dc, gb, gc) -> tuple[int, int]:
+        """``(false_positives, false_negatives)`` from class-aware greedy IoU matching."""
+        if len(gb) == 0:
+            return len(db), 0
+        if len(db) == 0:
+            return 0, len(gb)
+        iou = box_iou(db, gb)
+        pairs = [
+            (iou[i, j], i, j)
+            for i in range(len(db))
+            for j in range(len(gb))
+            if dc[i] == gc[j] and iou[i, j] >= self.iou_thresh
+        ]
+        md: set[int] = set()
+        mg: set[int] = set()
+        for _, i, j in sorted(pairs, key=lambda x: x[0], reverse=True):
+            if i in md or j in mg:
+                continue
+            md.add(i)
+            mg.add(j)
+        return len(db) - len(md), len(gb) - len(mg)
+
+    def add(self, image_path, det_boxes, det_scores, det_classes, gt_boxes, gt_classes) -> None:
+        """Consider one image; keep it only if it is among the ``top_k`` worst so far."""
+        import heapq
+
+        if not image_path:
+            return
+        db = np.asarray(det_boxes, dtype=np.float64).reshape(-1, 4)
+        ds = np.asarray(det_scores, dtype=np.float64).reshape(-1)
+        dc = np.asarray(det_classes).reshape(-1).astype(int)
+        keep = ds >= self.conf
+        db, ds, dc = db[keep], ds[keep], dc[keep]
+        gb = np.asarray(gt_boxes, dtype=np.float64).reshape(-1, 4)
+        gc = np.asarray(gt_classes).reshape(-1).astype(int)
+
+        fp, fn = self._error_count(db, dc, gb, gc)
+        n_err = fp + fn
+        if n_err == 0:
+            return
+        self._seq += 1
+        record = (str(image_path), n_err, fp, fn, db, ds, dc, gb)
+        item = (n_err, self._seq, record)
+        if len(self._heap) < self.top_k:
+            heapq.heappush(self._heap, item)
+        elif n_err > self._heap[0][0]:
+            heapq.heapreplace(self._heap, item)
+
+    def save(self, output_dir, names=None) -> list[str]:
+        """Render the kept worst frames (GT green, prediction red) to ``output_dir/worst/``."""
+        from PIL import Image, ImageDraw
+
+        worst_dir = Path(output_dir) / "worst"
+        records = [rec for _, _, rec in sorted(self._heap, key=lambda x: x[0], reverse=True)]
+        if not records:
+            return []
+        worst_dir.mkdir(parents=True, exist_ok=True)
+
+        out: list[str] = []
+        for rank, (path, n_err, fp, fn, db, ds, dc, gb) in enumerate(records):
+            try:
+                img = Image.open(path).convert("RGB")
+            except Exception:  # pragma: no cover - unreadable source is skipped
+                continue
+            draw = ImageDraw.Draw(img)
+            for box in gb:
+                draw.rectangle([float(v) for v in box], outline=(0, 200, 0), width=2)
+            for box, s, c in zip(db, ds, dc):
+                name = names.get(int(c), str(int(c))) if names else str(int(c))
+                draw.rectangle([float(v) for v in box], outline=(255, 40, 40), width=2)
+                draw.text(
+                    (float(box[0]) + 2, float(box[1]) + 2), f"{name} {s:.2f}", fill=(255, 40, 40)
+                )
+            draw.text((4, 4), f"FP={fp}  FN={fn}   GT=green pred=red", fill=(255, 255, 0))
+            dst = worst_dir / f"{rank:02d}_err{n_err}_{Path(path).stem}.jpg"
+            img.save(dst)
+            out.append(str(dst))
+        return out
+
+
 def _plot_conf_curve(x, ys, classes, save_path, ylabel, names=None):
     """Plot per-class ``ys`` (``[K, n]``) + their mean against the confidence axis ``x``."""
     import matplotlib
@@ -322,13 +420,15 @@ def save_val_analytics(
     output_dir,
     names=None,
     prm: PRCurveMetrics | None = None,
+    worst: WorstPredictions | None = None,
 ) -> dict[str, str]:
     """Write the analytics artifacts and log the per-class AP table + best confidence.
 
-    Produces ``confusion_matrix.png`` + ``pr_curve.png``, and — when ``prm`` is given —
-    ``f1_curve.png`` / ``p_curve.png`` / ``r_curve.png`` plus a logged "best confidence"
-    (the threshold maximizing mean F1). Returns the written paths keyed by artifact name;
-    matplotlib failures degrade to a warning (numeric metrics are unaffected).
+    Produces ``confusion_matrix.png`` + ``pr_curve.png``, and — when given — the
+    ``f1_curve.png``/``p_curve.png``/``r_curve.png`` conf sweep (from ``prm``, plus a logged
+    "best confidence") and a ``worst/`` gallery of the highest-error frames (from ``worst``).
+    Returns the written paths keyed by artifact name; matplotlib failures degrade to a
+    warning (numeric metrics are unaffected).
     """
     output_dir = Path(output_dir)
     artifacts: dict[str, str] = {}
@@ -338,6 +438,11 @@ def save_val_analytics(
     if prm is not None:
         conf, f1 = prm.best_confidence()
         LOGGER.info(colorstr("cyan", "bold", f"Best confidence: {conf:.3f}  (mean F1 {f1:.3f})"))
+    if worst is not None:
+        saved = worst.save(output_dir, names)
+        if saved:
+            artifacts["worst"] = str(Path(output_dir) / "worst")
+            LOGGER.info(colorstr("cyan", "bold", f"Worst {len(saved)} frames → {output_dir}/worst"))
 
     try:
         artifacts["confusion_matrix"] = str(cm.plot(output_dir / "confusion_matrix.png", names))

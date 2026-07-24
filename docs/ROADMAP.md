@@ -206,6 +206,17 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-25 — Val analytics III: worst-predictions gallery.** New `WorstPredictions`
+  (metrics.py): during `evaluate(plots=True)` it counts each frame's mistakes (class-aware IoU
+  matching at 0.5, conf-filtered → FP = spurious detections, FN = missed GT, misclass counts as
+  both) and keeps only the **top-k worst in a bounded heap** (flat memory). `save` reloads each
+  keeper from its `image_path` and renders **GT green / prediction red** with a `FP=/FN=` banner
+  to `output_dir/worst/NN_err{n}_<stem>.jpg` — for spotting label errors and failure modes.
+  Wired into `_update_analytics`/`save_val_analytics` (the loader target already carries
+  `image_path`, kept through the collate). Exposed `WorstPredictions` from `dfine.train`; the
+  `val(plots=True)` integration now also asserts the `worst/` gallery. Tests: error counting +
+  rank/filename, top-k heap bound (`test_metrics.py`). Base import torch-free; suite 357 passed
+  / 12 skipped.
 - **2026-07-25 — Val analytics II: P/R/F1-vs-confidence curves + best-conf recommendation.**
   New `PRCurveMetrics` (metrics.py): accumulates `(score, is_TP)` per class (per-class,
   highest-score-first IoU matching at 0.5), then `.curves(n=1000)` sweeps the confidence axis

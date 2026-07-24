@@ -6,7 +6,12 @@ import pytest
 
 np = pytest.importorskip("numpy")
 
-from dfine.train.metrics import ConfusionMatrix, PRCurveMetrics, box_iou  # noqa: E402
+from dfine.train.metrics import (  # noqa: E402
+    ConfusionMatrix,
+    PRCurveMetrics,
+    WorstPredictions,
+    box_iou,
+)
 
 
 def test_box_iou_identical_and_disjoint():
@@ -105,6 +110,57 @@ def test_prcurve_false_positives_lower_precision():
     _x, p, _r, _f1, _classes = prm.curves()
     # at low confidence both dets are kept → precision ≈ 0.5 (1 TP / 2 dets)
     assert p[0, 0] == pytest.approx(0.5, abs=0.05)
+
+
+def test_worst_predictions_counts_errors_and_ranks(tmp_path):
+    from PIL import Image
+
+    # two images on disk: "bad" has 2 FN + 1 FP, "good" has 0 errors.
+    (tmp_path / "bad.jpg").write_bytes(b"")  # overwritten below
+    Image.new("RGB", (40, 40)).save(tmp_path / "bad.jpg")
+    Image.new("RGB", (40, 40)).save(tmp_path / "good.jpg")
+    box = [0, 0, 10, 10]
+
+    wp = WorstPredictions(conf=0.25, iou_thresh=0.5, top_k=5)
+    # good: one TP, no errors → not kept
+    wp.add(
+        str(tmp_path / "good.jpg"),
+        np.array([box], float),
+        np.array([0.9]),
+        np.array([0]),
+        np.array([box], float),
+        np.array([0]),
+    )
+    # bad: 1 spurious det (FP) + 2 GT missed (FN)
+    wp.add(
+        str(tmp_path / "bad.jpg"),
+        np.array([[30, 30, 38, 38]], float),
+        np.array([0.9]),
+        np.array([0]),
+        np.array([box, box], float),
+        np.array([0, 1]),
+    )
+    saved = wp.save(tmp_path / "out")
+    assert len(saved) == 1  # only the bad frame kept
+    assert "bad" in saved[0] and "err3" in saved[0]  # 1 FP + 2 FN = 3 errors
+    from pathlib import Path
+
+    assert Path(saved[0]).exists()
+
+
+def test_worst_predictions_top_k_bound():
+    wp = WorstPredictions(conf=0.0, top_k=2)
+    for k in range(5):  # 5 frames with increasing error counts (all FP, no GT)
+        wp.add(
+            f"/nonexistent/img{k}.jpg",
+            np.zeros((k + 1, 4)) + [0, 0, 5, 5],
+            np.ones(k + 1),
+            np.zeros(k + 1, int),
+            np.zeros((0, 4)),
+            np.array([]),
+        )
+    assert len(wp._heap) == 2  # only the two worst retained
+    assert sorted(n for n, _, _ in wp._heap) == [4, 5]  # error counts 4 and 5 (frames 3,4)
 
 
 def test_confusion_matrix_plot_writes_png(tmp_path):
