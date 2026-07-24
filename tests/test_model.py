@@ -84,6 +84,22 @@ def test_predict_accepts_ndarray():
     assert r.orig_shape == (200, 300)
 
 
+def test_benchmark_returns_speed_dict():
+    m = _model()
+    stats = m.benchmark(imgsz=IMGSZ, runs=3, warmup=1)
+    assert set(stats) == {"imgsz", "batch", "runs", "device", "ms_per_image", "fps"}
+    assert stats["imgsz"] == IMGSZ and stats["runs"] == 3 and stats["batch"] == 1
+    assert stats["ms_per_image"] > 0 and stats["fps"] > 0
+
+
+def test_benchmark_batch_and_imgsz_guard():
+    m = _model()
+    stats = m.benchmark(imgsz=IMGSZ, runs=2, warmup=0, batch=2)
+    assert stats["batch"] == 2 and stats["fps"] > 0
+    with pytest.raises(ValueError, match="must equal the model's imgsz"):
+        m.benchmark(imgsz=IMGSZ // 2)
+
+
 def test_predict_directory_source_expands_to_images(tmp_path):
     m = _model()
     d = tmp_path / "imgs"

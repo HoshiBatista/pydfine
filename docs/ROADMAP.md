@@ -206,6 +206,15 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — `DFINE.benchmark()` + `dfine benchmark` CLI (inference speed).** Measures
+  forward-pass latency/throughput on random input at the model's resolution: `warmup` untimed
+  then `runs` timed passes, CUDA-synchronized around the timed region (postprocessor excluded —
+  compute-bound model latency). Returns `{imgsz, batch, runs, device, ms_per_image, fps}` and
+  logs a `Speed  X ms/image (Y FPS)` line. `imgsz` must equal the model's (positional-embedding
+  guard, like predict/export). New `dfine benchmark <model> [--imgsz --runs --warmup --batch]`
+  subcommand. Helps pick a size for a latency budget. Tests: speed-dict shape + positive
+  ms/FPS, batch>1, imgsz guard (`test_model.py`), CLI smoke (`test_cli.py`). Suite 338 passed /
+  12 skipped.
 - **2026-07-24 — `predict` over a directory / glob.** A `source` string that is a folder now
   runs over all images in it (sorted, by extension `_IMAGE_EXTS`), and one with glob magic
   (`imgs/*.jpg`) over the matches; a list may mix folders/globs/explicit images. New

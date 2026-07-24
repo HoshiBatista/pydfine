@@ -82,3 +82,19 @@ def test_cli_predict_runs_and_saves(tmp_path, monkeypatch):
     assert txt.exists()
     for line in txt.read_text().strip().splitlines():
         assert len(line.split()) == 6  # class cx cy w h conf
+
+
+def test_cli_benchmark_runs(capsys, monkeypatch):
+    pytest.importorskip("torch")
+
+    import dfine.cli as cli
+    from dfine.model import DFINE
+
+    monkeypatch.setattr(
+        cli,
+        "_build_model",
+        lambda *a, **k: DFINE(size="n", backbone_pretrained=False, num_classes=80, imgsz=320),
+    )
+    rc = main(["benchmark", "n", "--imgsz", "320", "--runs", "2", "--warmup", "1"])
+    assert rc == 0
+    assert "ms/image" in capsys.readouterr().out

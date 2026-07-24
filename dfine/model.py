@@ -18,6 +18,7 @@ backend details through its kwargs.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import torch
@@ -340,6 +341,55 @@ class DFINE:
                 r.save_crop(save_dir / "crops", file_name=f"{stem}.jpg")
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
         return save_dir
+
+    @torch.no_grad()
+    def benchmark(
+        self, imgsz: int | None = None, runs: int = 50, warmup: int = 10, batch: int = 1
+    ) -> dict:
+        """Measure forward-pass inference speed on random input at the model's resolution.
+
+        Runs ``warmup`` untimed then ``runs`` timed forward passes (the postprocessor is not
+        included — this is the compute-bound model latency), synchronizing CUDA around the
+        timed region. Returns ``{"imgsz", "batch", "runs", "device", "ms_per_image", "fps"}``
+        and logs a one-line summary. ``imgsz`` must equal the model's ``imgsz`` (the encoder's
+        positional embeddings are precomputed for it).
+        """
+        size = imgsz or self.config.imgsz
+        if size != self.config.imgsz:
+            raise ValueError(
+                f"benchmark(imgsz={size}) must equal the model's imgsz ({self.config.imgsz})."
+            )
+        self.model.eval()
+        x = torch.rand(batch, 3, size, size, device=self.device)
+        cuda = self.device.type == "cuda"
+
+        for _ in range(max(0, warmup)):
+            self.model(x)
+        if cuda:
+            torch.cuda.synchronize()
+        start = time.perf_counter()
+        for _ in range(runs):
+            self.model(x)
+        if cuda:
+            torch.cuda.synchronize()
+        elapsed = time.perf_counter() - start
+
+        ms_per_image = elapsed / (runs * batch) * 1000.0
+        fps = (runs * batch) / elapsed
+        result = {
+            "imgsz": size,
+            "batch": batch,
+            "runs": runs,
+            "device": str(self.device),
+            "ms_per_image": ms_per_image,
+            "fps": fps,
+        }
+        LOGGER.info(
+            f"{colorstr('cyan', 'bold', 'Speed')}  "
+            f"{ms_per_image:.2f} ms/image  ({fps:.1f} FPS)  "
+            f"batch={batch}  imgsz={size}  {self.device}"
+        )
+        return result
 
     def _to_results(
         self,

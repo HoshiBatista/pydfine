@@ -183,7 +183,21 @@ def build_parser() -> argparse.ArgumentParser:
     exp.add_argument("--no-dynamic", action="store_true", help="fix the batch dim (no dynamic N)")
     exp.add_argument("--simplify", action="store_true", help="run onnxsim on the graph")
     exp.add_argument("--opset", type=int, default=16, help="ONNX opset version")
+
+    bench = sub.add_parser("benchmark", help="measure forward-pass inference speed (ms/FPS)")
+    _add_model_arg(bench)
+    bench.add_argument("--imgsz", type=int, default=None, help="resolution (default cfg.imgsz)")
+    bench.add_argument("--runs", type=int, default=50, help="timed forward passes")
+    bench.add_argument("--warmup", type=int, default=10, help="untimed warmup passes")
+    bench.add_argument("--batch", type=int, default=1, help="batch size")
     return parser
+
+
+def _cmd_benchmark(args: argparse.Namespace) -> int:
+    model = _build_model(args.model, args.weights, **({"imgsz": args.imgsz} if args.imgsz else {}))
+    stats = model.benchmark(imgsz=args.imgsz, runs=args.runs, warmup=args.warmup, batch=args.batch)
+    print(f"  {stats['ms_per_image']:.2f} ms/image  ({stats['fps']:.1f} FPS)")
+    return 0
 
 
 _COMMANDS = {
@@ -193,6 +207,7 @@ _COMMANDS = {
     "val": _cmd_val,
     "train": _cmd_train,
     "export": _cmd_export,
+    "benchmark": _cmd_benchmark,
 }
 
 
