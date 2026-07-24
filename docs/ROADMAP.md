@@ -206,6 +206,16 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-25 — TorchScript export (`format="torchscript"`).** A second deploy format beside
+  ONNX, needing **only torch** (no `[export]` toolchain). New `dfine/export/torchscript.py::
+  export_torchscript` reuses `onnx._build_deploy` (same deploy-mode `model→postprocessor`
+  wrapper and per-task I/O contract), `torch.jit.trace`s it at a **fixed** batch/imgsz, and
+  `.save()`s a `.torchscript`. `DFINE.export` now dispatches on `format` (`onnx`|`torchscript`;
+  ONNX-only knobs ignored for TS; default file `dfine-<size>.torchscript`); `dfine export`
+  gained `--format {onnx,torchscript}`. detect → `(labels,boxes,scores)`, segment adds `masks`,
+  sem_seg → uint8 label map — same as ONNX. Tests (torch-only, no onnx gate:
+  `test_export_torchscript.py`): jit-load round-trip matches shapes, default filename, live model
+  not mutated, segment 4-output. Base import torch-free; suite 345 passed / 12 skipped.
 - **2026-07-24 — `DFINE.info()` + `dfine info` CLI (model summary).** Ultralytics-style
   summary card: `info(verbose=False)` returns `{layers, parameters, gradients, gflops}` and logs
   `DFINE <size> summary: N layers, P parameters, G gradients [, F GFLOPs]`; `verbose=True` also

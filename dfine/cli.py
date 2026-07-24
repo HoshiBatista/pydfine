@@ -116,7 +116,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
         if args.weights:
             model.load(args.weights)
     path = model.export(
-        format="onnx",
+        format=args.format,
         file=args.file,
         imgsz=args.imgsz,
         batch=args.batch,
@@ -124,7 +124,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
         simplify=args.simplify,
         opset=args.opset,
     )
-    print(f"exported ONNX -> {path}")
+    print(f"exported {args.format} -> {path}")
     return 0
 
 
@@ -175,9 +175,12 @@ def build_parser() -> argparse.ArgumentParser:
     tr.add_argument("--output-dir", default="runs/train", help="checkpoints/logs directory")
     tr.add_argument("--devices", type=int, default=None, help="number of GPUs (multi-GPU DDP)")
 
-    exp = sub.add_parser("export", help="export a model to ONNX")
+    exp = sub.add_parser("export", help="export a model to ONNX or TorchScript")
     _add_model_arg(exp)
-    exp.add_argument("--file", default=None, help="output .onnx path (default dfine-<size>.onnx)")
+    exp.add_argument(
+        "--format", default="onnx", choices=["onnx", "torchscript"], help="export format"
+    )
+    exp.add_argument("--file", default=None, help="output path (default dfine-<size>.<ext>)")
     exp.add_argument("--imgsz", type=int, default=None, help="input resolution (default cfg.imgsz)")
     exp.add_argument("--batch", type=int, default=1, help="dummy trace batch size")
     exp.add_argument("--no-dynamic", action="store_true", help="fix the batch dim (no dynamic N)")

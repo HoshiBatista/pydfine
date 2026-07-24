@@ -112,7 +112,7 @@ def test_facade_default_filename_and_path(tmp_path, monkeypatch):
 
 def test_facade_rejects_unknown_format():
     m = _model()
-    with pytest.raises(ValueError, match="only 'onnx'"):
+    with pytest.raises(ValueError, match="Unsupported export format"):
         m.export(format="tensorrt")
 
 
