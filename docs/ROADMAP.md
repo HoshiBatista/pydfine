@@ -206,6 +206,16 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — `Results.summary()` + `Results.tojson()` (structured/JSON output).**
+  Ultralytics-parity: `summary(normalize=False, decimals=5)` returns one plain dict per
+  detection — `{"name","class","confidence","box":{x1,y1,x2,y2}}`, adding `"track_id"` when
+  boxes carry ids and `"segments":{"x":[…],"y":[…]}` (largest mask polygon) for segment
+  results; coords are pixels or image-fractions (`normalize=True`), floats rounded to
+  `decimals`. `tojson(...)` is `json.dumps(summary(...), indent=2)`. Pure Python (JSON-
+  serializable); polygons reuse the shared `_mask_largest_polygon` helper (refactored out of
+  `save_txt`, now pixel-space `[K,2]`; `cv2` only when masks are present). Tests: det layout +
+  exact box, normalize range, track_id, seg segments, valid-JSON round-trip (`test_results.py`).
+  Base import torch-free; suite 320 passed / 12 skipped.
 - **2026-07-24 — `Results.save_txt()` (YOLO-format label export).** Ultralytics-style export
   closing the loop with the existing `yolo_to_coco` converter (predict → auto-label → train).
   One line per detection, coords **normalized** to the original image: detection writes

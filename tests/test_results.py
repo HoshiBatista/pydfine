@@ -117,6 +117,49 @@ def test_to_coco_masks_emit_rle_segmentation():
         assert fg == int(r.masks.data[i].sum()) == (18 + i) ** 2
 
 
+def test_summary_detection_layout():
+    rows = _results(2).summary()
+    assert [r["class"] for r in rows] == [0, 2]
+    assert [r["name"] for r in rows] == ["person", "car"]
+    assert rows[0]["confidence"] == pytest.approx(0.9)
+    # pixel-space box corners by default; xyxy [1,1,20,20]
+    assert rows[0]["box"] == {"x1": 1.0, "y1": 1.0, "x2": 20.0, "y2": 20.0}
+    assert "track_id" not in rows[0] and "segments" not in rows[0]
+
+
+def test_summary_normalize_puts_box_in_unit_range():
+    rows = _results(2).summary(normalize=True)
+    for r in rows:
+        assert all(0.0 <= v <= 1.0 for v in r["box"].values())
+    # x1=1/96, y1=1/64 on a 96x64 image
+    assert rows[0]["box"]["x1"] == pytest.approx(1 / 96, abs=1e-5)
+    assert rows[0]["box"]["y1"] == pytest.approx(1 / 64, abs=1e-5)
+
+
+def test_summary_includes_track_id_when_present():
+    r = _results(2)
+    r.boxes.id = torch.tensor([7, 9])
+    rows = r.summary()
+    assert [row["track_id"] for row in rows] == [7, 9]
+
+
+def test_summary_includes_segments_for_masks():
+    pytest.importorskip("cv2")
+    rows = _results(2, masks=True).summary(normalize=True)
+    for row in rows:
+        seg = row["segments"]
+        assert len(seg["x"]) == len(seg["y"]) >= 3
+        assert all(0.0 <= v <= 1.0 for v in seg["x"] + seg["y"])
+
+
+def test_tojson_is_valid_json():
+    import json
+
+    parsed = json.loads(_results(2).tojson())
+    assert isinstance(parsed, list) and len(parsed) == 2
+    assert parsed[0]["name"] == "person" and parsed[0]["class"] == 0
+
+
 def test_save_txt_detection_yolo_format(tmp_path):
     out = _results(2).save_txt(tmp_path / "labels" / "img.txt")
     assert out is not None and out.exists()

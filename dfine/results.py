@@ -53,17 +53,17 @@ def _mask_to_coco_rle(mask: np.ndarray) -> dict:
     return {"size": [h, w], "counts": counts}
 
 
-def _mask_to_polygon(mask: np.ndarray, w: int, h: int) -> list[float] | None:
-    """Largest external contour of a binary ``[H, W]`` mask as flat normalized ``xy…``.
+def _mask_largest_polygon(mask: np.ndarray) -> np.ndarray | None:
+    """Largest external contour of a binary ``[H, W]`` mask as a pixel-space ``[K, 2]``.
 
-    Returns ``[x1, y1, x2, y2, …]`` normalized to ``w``/``h`` (YOLO-seg polygon), or
-    ``None`` when the mask has no usable contour (< 3 points). OpenCV is imported lazily.
+    Returns the ``(x, y)`` vertices of the biggest contour, or ``None`` when the mask has
+    no usable contour (< 3 points). Callers normalize as needed. OpenCV is imported lazily.
     """
     try:
         import cv2
     except ImportError as e:  # pragma: no cover - trivial guard
         raise ImportError(
-            "Results.save_txt() polygon export needs OpenCV — install it with "
+            "Polygon export from masks needs OpenCV — install it with "
             "`pip install opencv-python` or `pip install pydfine[video]`."
         ) from e
 
@@ -71,12 +71,7 @@ def _mask_to_polygon(mask: np.ndarray, w: int, h: int) -> list[float] | None:
     if not contours:
         return None
     poly = max(contours, key=cv2.contourArea).reshape(-1, 2)
-    if len(poly) < 3:
-        return None
-    out: list[float] = []
-    for x, y in poly:
-        out.extend((float(x) / w, float(y) / h))
-    return out
+    return poly.astype(np.float32) if len(poly) >= 3 else None
 
 
 class Boxes:
@@ -358,7 +353,9 @@ class Results:
         for i, (xyxy, conf, cls) in enumerate(self.boxes):
             coords: list[float] | None = None
             if masks is not None:
-                coords = _mask_to_polygon(masks[i], w, h)
+                poly = _mask_largest_polygon(masks[i])
+                if poly is not None:
+                    coords = [float(v) for xy in poly for v in (xy[0] / w, xy[1] / h)]
             if coords is None:
                 x1, y1, x2, y2 = (float(v) for v in xyxy)
                 cx, cy = (x1 + x2) / 2 / w, (y1 + y2) / 2 / h
@@ -374,3 +371,51 @@ class Results:
         with path.open("a") as f:
             f.write("\n".join(lines) + "\n")
         return path
+
+    def summary(self, normalize: bool = False, decimals: int = 5) -> list[dict]:
+        """Detections as a list of plain dicts (ultralytics ``Results.summary()`` layout).
+
+        One dict per detection: ``{"name", "class", "confidence", "box": {x1,y1,x2,y2}}``.
+        A track id (from :meth:`DFINE.predict_video` with ``track=True``) adds
+        ``"track_id"``; an instance mask adds ``"segments": {"x": [...], "y": [...]}`` (the
+        largest polygon). Coordinates are original-image pixels, or fractions of the image
+        when ``normalize=True``; floats are rounded to ``decimals``. Pure Python — the
+        result is JSON-serializable (see :meth:`tojson`).
+        """
+        h, w = self.orig_shape
+        ids = self.boxes.id
+        masks = self.masks.data.cpu().numpy().astype(np.uint8) if self.masks is not None else None
+        sx, sy = (w, h) if normalize else (1.0, 1.0)
+
+        out = []
+        for i, (xyxy, conf, cls) in enumerate(self.boxes):
+            cls = int(cls)
+            x1, y1, x2, y2 = (float(v) for v in xyxy)
+            row = {
+                "name": self.names.get(cls, str(cls)) if self.names else str(cls),
+                "class": cls,
+                "confidence": round(float(conf), decimals),
+                "box": {
+                    "x1": round(x1 / sx, decimals),
+                    "y1": round(y1 / sy, decimals),
+                    "x2": round(x2 / sx, decimals),
+                    "y2": round(y2 / sy, decimals),
+                },
+            }
+            if ids is not None:
+                row["track_id"] = int(ids[i])
+            if masks is not None:
+                poly = _mask_largest_polygon(masks[i])
+                if poly is not None:
+                    row["segments"] = {
+                        "x": [round(float(x) / sx, decimals) for x in poly[:, 0]],
+                        "y": [round(float(y) / sy, decimals) for y in poly[:, 1]],
+                    }
+            out.append(row)
+        return out
+
+    def tojson(self, normalize: bool = False, decimals: int = 5) -> str:
+        """:meth:`summary` serialized to a JSON string (ultralytics ``Results.tojson``)."""
+        import json
+
+        return json.dumps(self.summary(normalize=normalize, decimals=decimals), indent=2)
