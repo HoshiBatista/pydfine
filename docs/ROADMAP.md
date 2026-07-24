@@ -206,6 +206,16 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — `predict` over a directory / glob.** A `source` string that is a folder now
+  runs over all images in it (sorted, by extension `_IMAGE_EXTS`), and one with glob magic
+  (`imgs/*.jpg`) over the matches; a list may mix folders/globs/explicit images. New
+  `_resolve_sources` expands the source once (dirs/globs → sorted paths; PIL/ndarray pass
+  through); `predict` builds images + save-stems from it, and an empty dir/glob raises
+  `FileNotFoundError`. The `dfine predict` CLI resolves the same way so per-image console names
+  line up even when a dir expands (fixes the `zip(args.source, results)` truncation). Tests:
+  directory expansion (+ non-image skipped), glob subset, empty→raises, dir save-by-stem
+  (`test_model.py`). Base import torch-free; suite 335 passed / 12 skipped. Pairs with the save
+  plumbing — `dfine predict n imgs/ --save-txt` now labels a whole folder in one call.
 - **2026-07-24 — `Results.verbose()` (per-class summary string) + CLI wiring.** Ultralytics-
   style `"2 persons, 1 car"`: counts detections per class (naive plural `s`, ordered by class
   id); a `sem_seg` result instead lists the classes present in the label map (`255` void

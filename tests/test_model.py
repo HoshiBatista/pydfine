@@ -84,6 +84,45 @@ def test_predict_accepts_ndarray():
     assert r.orig_shape == (200, 300)
 
 
+def test_predict_directory_source_expands_to_images(tmp_path):
+    m = _model()
+    d = tmp_path / "imgs"
+    d.mkdir()
+    for i in range(3):
+        _image(320, 320).save(d / f"f{i}.jpg")
+    (d / "notes.txt").write_text("ignore me")  # non-image is skipped
+    out = m.predict(str(d), conf=0.0, imgsz=IMGSZ)
+    assert len(out) == 3  # three images, sorted; the .txt ignored
+
+
+def test_predict_glob_source(tmp_path):
+    m = _model()
+    for i in range(2):
+        _image(320, 320).save(tmp_path / f"cat{i}.jpg")
+    _image(320, 320).save(tmp_path / "dog.jpg")
+    out = m.predict(str(tmp_path / "cat*.jpg"), conf=0.0, imgsz=IMGSZ)
+    assert len(out) == 2  # only the two cat*.jpg matched
+
+
+def test_predict_empty_directory_raises(tmp_path):
+    m = _model()
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(FileNotFoundError, match="no images found"):
+        m.predict(str(empty), imgsz=IMGSZ)
+
+
+def test_predict_directory_source_saves_by_stem(tmp_path):
+    m = _model()
+    d = tmp_path / "imgs"
+    d.mkdir()
+    _image(320, 320).save(d / "street.jpg")
+    _image(320, 320).save(d / "field.jpg")
+    m.predict(str(d), conf=0.0, imgsz=IMGSZ, save=True, project=str(tmp_path / "runs"))
+    run = tmp_path / "runs" / "predict"
+    assert (run / "street.jpg").exists() and (run / "field.jpg").exists()
+
+
 def test_predict_save_writes_run_dir(tmp_path):
     m = _model()
     img_path = tmp_path / "street.jpg"

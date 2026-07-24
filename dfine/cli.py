@@ -61,6 +61,8 @@ def _cmd_convert(args: argparse.Namespace) -> int:
 
 
 def _cmd_predict(args: argparse.Namespace) -> int:
+    from .model import _resolve_sources
+
     model = _build_model(args.model, args.weights)
     results = model.predict(
         args.source,
@@ -73,8 +75,12 @@ def _cmd_predict(args: argparse.Namespace) -> int:
         project=args.project,
         name=args.name,
     )
-    for src, res in zip(args.source, results):
-        print(f"  {Path(src).name}: {res.verbose()}")
+    # Resolve dirs/globs the same way predict did, so console names line up per image.
+    sources = _resolve_sources(args.source)
+    for i, res in enumerate(results):
+        s = sources[i] if i < len(sources) else None
+        label = Path(s).name if isinstance(s, str) else f"image{i}"
+        print(f"  {label}: {res.verbose()}")
     return 0
 
 

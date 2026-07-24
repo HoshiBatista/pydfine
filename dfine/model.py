@@ -79,18 +79,48 @@ def _to_pil(item) -> Image.Image:
     raise TypeError(f"Unsupported image source: {type(item).__name__}")
 
 
-def _load_images(source) -> list[Image.Image]:
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
+
+
+def _resolve_sources(source) -> list:
+    """Expand a directory / glob string into a sorted list of concrete image sources.
+
+    A ``str``/``PathLike`` that is a **directory** becomes its image files (sorted, by
+    extension); one containing glob magic (``*?[``) is expanded via :mod:`glob`; any other
+    string/path is returned as-is. A list/tuple has each element resolved (so a folder mixed
+    with explicit images works). PIL images and arrays pass straight through.
+    """
     if isinstance(source, (list, tuple)):
-        return [_to_pil(s) for s in source]
-    return [_to_pil(source)]
+        out: list = []
+        for s in source:
+            out.extend(_resolve_sources(s))
+        return out
+    if isinstance(source, (str, os.PathLike)):
+        p = Path(source)
+        if p.is_dir():
+            return sorted(str(f) for f in p.iterdir() if f.suffix.lower() in _IMAGE_EXTS)
+        s = os.fspath(source)
+        if any(ch in s for ch in "*?["):
+            import glob
+
+            return sorted(glob.glob(s))
+        return [source]
+    return [source]  # PIL.Image / ndarray
 
 
-def _source_stems(source) -> list[str]:
-    """Per-image filename stems for saving: a path's stem, else ``image{i}``."""
-    items = list(source) if isinstance(source, (list, tuple)) else [source]
+def _load_images(source) -> list[Image.Image]:
+    return [_to_pil(s) for s in _resolve_sources(source)]
+
+
+def _source_stems(sources) -> list[str]:
+    """Per-image filename stems for saving: a path's stem, else ``image{i}``.
+
+    Expects the already-:func:`_resolve_sources`-expanded list so stems line up with the
+    concrete images. Falls back to ``image{i}`` for in-memory (PIL/ndarray) sources.
+    """
     return [
         Path(s).stem if isinstance(s, (str, os.PathLike)) else f"image{i}"
-        for i, s in enumerate(items)
+        for i, s in enumerate(sources)
     ]
 
 
@@ -237,6 +267,10 @@ class DFINE:
     ) -> list[Results]:
         """Detect objects in ``source`` (path / PIL / array, or a list of them).
 
+        A ``source`` string that is a **directory** runs over all images in it (sorted), and
+        one with glob magic (e.g. ``"imgs/*.jpg"``) over the matches; a list may mix folders,
+        globs and explicit images. An empty directory/glob raises ``FileNotFoundError``.
+
         Returns one :class:`~dfine.results.Results` per image; boxes are in the
         original pixel scale. ``conf`` drops low-scoring detections. For a
         ``task="segment"`` model, each result also carries per-instance
@@ -250,7 +284,10 @@ class DFINE:
         ``project/name`` (auto-incremented to ``predict2``, ``predict3``, … so runs never
         clobber). Filenames come from each source path's stem, else ``image{i}``.
         """
-        images = _load_images(source)
+        sources = _resolve_sources(source)
+        if not sources:
+            raise FileNotFoundError(f"no images found for source {source!r}")
+        images = [_to_pil(s) for s in sources]
         size = imgsz or self.config.imgsz
         if size != self.config.imgsz:
             raise ValueError(
@@ -279,18 +316,18 @@ class DFINE:
 
         if save or save_txt or save_crop:
             self._save_predictions(
-                results, source, project, name, save, save_txt, save_crop, save_conf
+                results, sources, project, name, save, save_txt, save_crop, save_conf
             )
         return results
 
     __call__ = predict
 
     def _save_predictions(
-        self, results, source, project, name, save, save_txt, save_crop, save_conf
+        self, results, sources, project, name, save, save_txt, save_crop, save_conf
     ) -> Path:
         """Write predictions to a fresh ``project/name`` run dir; return the directory."""
         save_dir = _increment_path(Path(project) / name)
-        stems = _source_stems(source)
+        stems = _source_stems(sources)
         if len(stems) != len(results):  # defensive: fall back to positional names
             stems = [f"image{i}" for i in range(len(results))]
         save_dir.mkdir(parents=True, exist_ok=True)
