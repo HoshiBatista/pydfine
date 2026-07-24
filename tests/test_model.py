@@ -269,8 +269,8 @@ def test_val_plots_writes_analytics(tmp_path):
     m = DFINE(size="n", imgsz=IMGSZ, backbone_pretrained=False)
     out = tmp_path / "valrun"
     m.val(data=str(tmp_path), batch_size=1, num_workers=0, plots=True, output_dir=str(out))
-    assert (out / "confusion_matrix.png").exists()
-    assert (out / "pr_curve.png").exists()
+    for artifact in ("confusion_matrix", "pr_curve", "f1_curve", "p_curve", "r_curve"):
+        assert (out / f"{artifact}.png").exists()
 
 
 def test_train_requires_data_or_loader():

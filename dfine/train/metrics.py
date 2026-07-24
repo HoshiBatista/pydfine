@@ -24,7 +24,14 @@ import numpy as np
 
 from ..log import LOGGER, colorstr, metrics_line, rule
 
-__all__ = ["ConfusionMatrix", "box_iou", "per_class_ap", "plot_pr_curve", "save_val_analytics"]
+__all__ = [
+    "ConfusionMatrix",
+    "PRCurveMetrics",
+    "box_iou",
+    "per_class_ap",
+    "plot_pr_curve",
+    "save_val_analytics",
+]
 
 
 def box_iou(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -140,6 +147,128 @@ class ConfusionMatrix:
         return save_path
 
 
+class PRCurveMetrics:
+    """Accumulate ``(score, is_TP)`` per class to build P/R/F1-vs-confidence curves.
+
+    Each detection is matched (per class, highest-score-first) to a same-class GT box at
+    ``iou_thresh`` — matched → true positive, else false positive. After the val pass,
+    :meth:`curves` sweeps the confidence axis to give per-class + mean precision, recall and
+    F1, and :meth:`best_confidence` returns the threshold that maximizes mean F1 — the
+    practical "what ``conf`` should I use?" answer.
+    """
+
+    def __init__(self, num_classes: int, iou_thresh: float = 0.5):
+        self.nc = int(num_classes)
+        self.iou_thresh = iou_thresh
+        self._tp: list[bool] = []
+        self._conf: list[float] = []
+        self._cls: list[int] = []
+        self.n_gt = np.zeros(self.nc, dtype=np.int64)
+
+    def process_batch(self, det_boxes, det_scores, det_classes, gt_boxes, gt_classes) -> None:
+        """Match one image's detections to its GT (per class) and record ``(score, TP)``."""
+        dc = np.asarray(det_classes).reshape(-1).astype(int)
+        ds = np.asarray(det_scores, dtype=np.float64).reshape(-1)
+        db = np.asarray(det_boxes, dtype=np.float64).reshape(-1, 4)
+        gc = np.asarray(gt_classes).reshape(-1).astype(int)
+        gb = np.asarray(gt_boxes, dtype=np.float64).reshape(-1, 4)
+
+        for c in gc:
+            if 0 <= c < self.nc:
+                self.n_gt[c] += 1
+        if len(db) == 0:
+            return
+
+        valid = (dc >= 0) & (dc < self.nc)
+        db, ds, dc = db[valid], ds[valid], dc[valid]
+        iou = box_iou(db, gb) if len(gb) else np.zeros((len(db), 0))
+        matched: set[int] = set()
+        for idx in np.argsort(-ds):
+            c = int(dc[idx])
+            tp = False
+            if len(gb):
+                cand = [
+                    j
+                    for j in range(len(gb))
+                    if gc[j] == c and j not in matched and iou[idx, j] >= self.iou_thresh
+                ]
+                if cand:
+                    matched.add(max(cand, key=lambda j: iou[idx, j]))
+                    tp = True
+            self._tp.append(tp)
+            self._conf.append(float(ds[idx]))
+            self._cls.append(c)
+
+    def curves(self, n: int = 1000):
+        """Return ``(x, precision, recall, f1, classes)`` over an ``n``-point confidence grid.
+
+        ``x`` is the confidence axis ``[n]``; ``precision``/``recall``/``f1`` are
+        ``[len(classes), n]`` for the classes that have any GT.
+        """
+        eps = 1e-16
+        x = np.linspace(0, 1, n)
+        tp = np.asarray(self._tp, dtype=bool)
+        conf = np.asarray(self._conf, dtype=np.float64)
+        cls = np.asarray(self._cls, dtype=int)
+        classes = [c for c in range(self.nc) if self.n_gt[c] > 0]
+
+        p = np.ones((len(classes), n))
+        r = np.zeros((len(classes), n))
+        for ci, c in enumerate(classes):
+            m = cls == c
+            if not m.any():
+                continue
+            order = np.argsort(-conf[m])
+            csorted = conf[m][order]
+            tpc = tp[m][order].cumsum()
+            fpc = (~tp[m][order]).cumsum()
+            recall = tpc / (self.n_gt[c] + eps)
+            precision = tpc / (tpc + fpc + eps)
+            # curves are functions of the confidence threshold (conf sorted descending)
+            r[ci] = np.interp(-x, -csorted, recall, left=0)
+            p[ci] = np.interp(-x, -csorted, precision, left=1)
+        f1 = 2 * p * r / (p + r + eps)
+        return x, p, r, f1, classes
+
+    def best_confidence(self) -> tuple[float, float]:
+        """``(conf, mean_F1)`` at the confidence maximizing mean F1 (``(0.0, 0.0)`` if empty)."""
+        x, _p, _r, f1, classes = self.curves()
+        if not classes:
+            return 0.0, 0.0
+        mean_f1 = f1.mean(axis=0)
+        i = int(mean_f1.argmax())
+        return float(x[i]), float(mean_f1[i])
+
+
+def _plot_conf_curve(x, ys, classes, save_path, ylabel, names=None):
+    """Plot per-class ``ys`` (``[K, n]``) + their mean against the confidence axis ``x``."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    for row, c in zip(ys, classes):
+        label = names.get(c, str(c)) if names else str(c)
+        ax.plot(x, row, linewidth=1, label=label)
+    mean = ys.mean(axis=0) if len(ys) else np.zeros_like(x)
+    peak = f"  (max {mean.max():.2f} @ {x[mean.argmax()]:.3f})" if len(ys) else ""
+    ax.plot(x, mean, color="black", linewidth=3, label=f"mean{peak}")
+    ax.set_xlabel("Confidence")
+    ax.set_ylabel(ylabel)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_title(f"{ylabel}–Confidence")
+    if len(classes) <= 20:
+        ax.legend(fontsize=7, loc="lower center")
+    fig.tight_layout()
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+    return save_path
+
+
 def per_class_ap(coco_eval, names: dict[int, str] | None = None) -> dict[str, float]:
     """Per-class AP@[.50:.95] from a COCO evaluator's precision tensor (area=all, maxDet=100)."""
     precision = coco_eval.eval["precision"]  # [T, R, K, A, M]
@@ -187,21 +316,43 @@ def plot_pr_curve(coco_eval, save_path: str | Path, names: dict[int, str] | None
     return save_path
 
 
-def save_val_analytics(coco_eval, cm: ConfusionMatrix, output_dir, names=None) -> dict[str, str]:
-    """Write ``confusion_matrix.png`` + ``pr_curve.png`` and log the per-class AP table.
+def save_val_analytics(
+    coco_eval,
+    cm: ConfusionMatrix,
+    output_dir,
+    names=None,
+    prm: PRCurveMetrics | None = None,
+) -> dict[str, str]:
+    """Write the analytics artifacts and log the per-class AP table + best confidence.
 
-    Returns the written paths keyed by artifact name. matplotlib failures degrade to a
-    warning (the numeric metrics from :func:`evaluate` are unaffected).
+    Produces ``confusion_matrix.png`` + ``pr_curve.png``, and — when ``prm`` is given —
+    ``f1_curve.png`` / ``p_curve.png`` / ``r_curve.png`` plus a logged "best confidence"
+    (the threshold maximizing mean F1). Returns the written paths keyed by artifact name;
+    matplotlib failures degrade to a warning (numeric metrics are unaffected).
     """
     output_dir = Path(output_dir)
     artifacts: dict[str, str] = {}
 
     aps = per_class_ap(coco_eval, names)
     LOGGER.info(f"{rule('per-class AP', 'cyan')}  {metrics_line(aps)}")
+    if prm is not None:
+        conf, f1 = prm.best_confidence()
+        LOGGER.info(colorstr("cyan", "bold", f"Best confidence: {conf:.3f}  (mean F1 {f1:.3f})"))
 
     try:
         artifacts["confusion_matrix"] = str(cm.plot(output_dir / "confusion_matrix.png", names))
         artifacts["pr_curve"] = str(plot_pr_curve(coco_eval, output_dir / "pr_curve.png", names))
+        if prm is not None:
+            x, p, r, f1, classes = prm.curves()
+            artifacts["f1_curve"] = str(
+                _plot_conf_curve(x, f1, classes, output_dir / "f1_curve.png", "F1", names)
+            )
+            artifacts["p_curve"] = str(
+                _plot_conf_curve(x, p, classes, output_dir / "p_curve.png", "Precision", names)
+            )
+            artifacts["r_curve"] = str(
+                _plot_conf_curve(x, r, classes, output_dir / "r_curve.png", "Recall", names)
+            )
         LOGGER.info(colorstr("green", "bold", f"Analytics saved to {output_dir}"))
     except Exception as exc:  # pragma: no cover - plotting is best-effort
         LOGGER.warning(f"could not render val plots: {exc}")

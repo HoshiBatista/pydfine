@@ -206,6 +206,17 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-25 — Val analytics II: P/R/F1-vs-confidence curves + best-conf recommendation.**
+  New `PRCurveMetrics` (metrics.py): accumulates `(score, is_TP)` per class (per-class,
+  highest-score-first IoU matching at 0.5), then `.curves(n=1000)` sweeps the confidence axis
+  → per-class + mean precision/recall/F1; `.best_confidence()` returns the threshold that
+  maximizes mean F1 — the practical "what `conf` do I use?" answer. `evaluate(plots=True)` now
+  builds it alongside the confusion matrix in the same loop (`_update_analytics`), and
+  `save_val_analytics` writes `f1_curve.png`/`p_curve.png`/`r_curve.png` (shared
+  `_plot_conf_curve`) and logs `Best confidence: X (mean F1 Y)`. Exposed `PRCurveMetrics` from
+  `dfine.train`. Tests: perfect-detector best-F1≈1, FP-lowers-precision, curve shapes; the
+  `val(plots=True)` integration now asserts all five PNGs (`test_metrics.py`, `test_model.py`).
+  Base import torch-free; suite 355 passed / 12 skipped.
 - **2026-07-25 — Validation analytics: confusion matrix + PR curves + per-class AP.** New
   `dfine/train/metrics.py`: `box_iou` (numpy), `ConfusionMatrix` (an `(nc+1)×(nc+1)`
   predicted-vs-true grid matched by IoU — last row/col = background FN/FP; greedy

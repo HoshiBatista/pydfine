@@ -84,13 +84,13 @@ def evaluate(
     from faster_coco_eval.utils.pytorch import FasterCocoEvaluator
 
     evaluator = FasterCocoEvaluator(_coco_gt(data_loader), [iou_type])
-    cm = None
+    cm = prm = None
     if plots:
-        from .metrics import ConfusionMatrix
+        from .metrics import ConfusionMatrix, PRCurveMetrics
 
         cat_ids = [int(c) for c in evaluator.coco_eval[iou_type].params.catIds]
         nc = (max(names) + 1) if names else (max(cat_ids, default=-1) + 1)
-        cm = ConfusionMatrix(nc)
+        cm, prm = ConfusionMatrix(nc), PRCurveMetrics(nc)
 
     was_training = model.training
     model.eval()
@@ -102,7 +102,7 @@ def evaluate(
             results = postprocessor(outputs, orig_sizes)
             evaluator.update({int(t["image_id"].item()): r for t, r in zip(targets, results)})
             if cm is not None:
-                _update_confusion(cm, results, targets)
+                _update_analytics(cm, prm, results, targets)
     finally:
         if was_training:
             model.train()
@@ -118,12 +118,14 @@ def evaluate(
     if cm is not None:
         from .metrics import save_val_analytics
 
-        save_val_analytics(evaluator.coco_eval[iou_type], cm, output_dir or "runs/val", names)
+        save_val_analytics(
+            evaluator.coco_eval[iou_type], cm, output_dir or "runs/val", names, prm=prm
+        )
     return metrics
 
 
-def _update_confusion(cm, results, targets) -> None:
-    """Feed one batch's predictions + GT (converted to original-scale ``xyxy``) to ``cm``."""
+def _update_analytics(cm, prm, results, targets) -> None:
+    """Feed one batch's predictions + GT (as original-scale ``xyxy``) to both accumulators."""
     for t, r in zip(targets, results):
         w, h = (float(v) for v in t["orig_size"].tolist())
         g = t["boxes"].cpu().numpy().reshape(-1, 4)  # cxcywh, normalized
@@ -132,13 +134,12 @@ def _update_confusion(cm, results, targets) -> None:
             gt_xyxy = np.stack([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2], axis=1)
         else:
             gt_xyxy = np.zeros((0, 4))
-        cm.process_batch(
-            r["boxes"].cpu().numpy(),
-            r["scores"].cpu().numpy(),
-            r["labels"].cpu().numpy(),
-            gt_xyxy,
-            t["labels"].cpu().numpy(),
-        )
+        db = r["boxes"].cpu().numpy()
+        ds = r["scores"].cpu().numpy()
+        dl = r["labels"].cpu().numpy()
+        gl = t["labels"].cpu().numpy()
+        cm.process_batch(db, ds, dl, gt_xyxy, gl)
+        prm.process_batch(db, ds, dl, gt_xyxy, gl)
 
 
 def coco_val_fn(

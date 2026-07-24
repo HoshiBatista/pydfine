@@ -6,7 +6,7 @@ import pytest
 
 np = pytest.importorskip("numpy")
 
-from dfine.train.metrics import ConfusionMatrix, box_iou  # noqa: E402
+from dfine.train.metrics import ConfusionMatrix, PRCurveMetrics, box_iou  # noqa: E402
 
 
 def test_box_iou_identical_and_disjoint():
@@ -67,6 +67,44 @@ def test_confusion_matrix_conf_filter_drops_low_score():
         gt_classes=np.array([]),
     )
     assert cm.matrix.sum() == 0
+
+
+def test_prcurve_perfect_detector_best_conf():
+    # A detector that always hits its GT with high score → P=R=F1≈1; best conf near the score.
+    prm = PRCurveMetrics(num_classes=2, iou_thresh=0.5)
+    box = [0, 0, 10, 10]
+    for _ in range(20):
+        prm.process_batch(
+            np.array([box, box], float),
+            np.array([0.9, 0.9]),
+            np.array([0, 1]),
+            np.array([box, box], float),
+            np.array([0, 1]),
+        )
+    assert prm.n_gt.tolist() == [20, 20]
+    x, p, r, f1, classes = prm.curves()
+    assert classes == [0, 1]
+    assert p.shape == r.shape == f1.shape == (2, 1000)
+    conf, best_f1 = prm.best_confidence()
+    assert best_f1 == pytest.approx(1.0, abs=1e-6)  # perfect matches
+    assert 0.0 <= conf <= 0.9  # any threshold at/below the score keeps the TPs
+
+
+def test_prcurve_false_positives_lower_precision():
+    prm = PRCurveMetrics(num_classes=1, iou_thresh=0.5)
+    box = [0, 0, 10, 10]
+    # 1 TP + 1 spurious FP (far away, no GT there) per image
+    for _ in range(10):
+        prm.process_batch(
+            np.array([box, [50, 50, 60, 60]], float),
+            np.array([0.9, 0.8]),
+            np.array([0, 0]),
+            np.array([box], float),
+            np.array([0]),
+        )
+    _x, p, _r, _f1, _classes = prm.curves()
+    # at low confidence both dets are kept → precision ≈ 0.5 (1 TP / 2 dets)
+    assert p[0, 0] == pytest.approx(0.5, abs=0.05)
 
 
 def test_confusion_matrix_plot_writes_png(tmp_path):
