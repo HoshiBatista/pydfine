@@ -117,6 +117,44 @@ def test_to_coco_masks_emit_rle_segmentation():
         assert fg == int(r.masks.data[i].sum()) == (18 + i) ** 2
 
 
+def test_save_crop_writes_per_class_crops(tmp_path):
+    paths = _results(2).save_crop(tmp_path, file_name="frame.png")
+    assert len(paths) == 2 and all(p.exists() for p in paths)
+    # one crop per class subfolder, named by the class
+    assert (tmp_path / "person" / "frame.png").exists()
+    assert (tmp_path / "car" / "frame.png").exists()
+    # crop size matches the box: xyxy [1,1,20,20] → 19x19
+    crop = Image.open(tmp_path / "person" / "frame.png")
+    assert crop.size == (19, 19)
+
+
+def test_save_crop_dedups_same_class(tmp_path):
+    img = Image.fromarray(np.zeros((64, 96, 3), "uint8"))
+    boxes = Boxes(
+        xyxy=torch.tensor([[1.0, 1.0, 20.0, 20.0], [5.0, 5.0, 30.0, 30.0]]),
+        conf=torch.tensor([0.9, 0.8]),
+        cls=torch.tensor([0, 0]),  # both "person"
+    )
+    paths = Results(img, boxes, names={0: "person"}).save_crop(tmp_path)
+    assert len(paths) == 2
+    assert {p.name for p in paths} == {"im.jpg", "im_2.jpg"}  # second avoided a clobber
+
+
+def test_save_crop_empty_returns_empty(tmp_path):
+    assert _results(0).save_crop(tmp_path) == []
+    assert not any(tmp_path.iterdir())  # nothing written
+
+
+def test_save_crop_clips_box_to_image(tmp_path):
+    img = Image.fromarray(np.zeros((64, 96, 3), "uint8"))
+    # box spills past the right/bottom edges → clipped to the 96x64 frame
+    boxes = Boxes(
+        torch.tensor([[90.0, 60.0, 200.0, 200.0]]), torch.tensor([0.9]), torch.tensor([0])
+    )
+    (path,) = Results(img, boxes, names={0: "person"}).save_crop(tmp_path)
+    assert Image.open(path).size == (6, 4)  # (96-90, 64-60)
+
+
 def test_summary_detection_layout():
     rows = _results(2).summary()
     assert [r["class"] for r in rows] == [0, 2]

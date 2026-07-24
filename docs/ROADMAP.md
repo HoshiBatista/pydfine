@@ -206,6 +206,16 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — `Results.save_crop()` (per-detection crop export).** Ultralytics-parity:
+  crops the original image to each box (clipped to the frame) and writes it under
+  `save_dir/<class_name>/<file_name>`, appending a numeric suffix (`_2`, `_3`, …) when
+  same-class detections would collide (no clobber). Returns the list of written paths
+  (empty when there are no detections; degenerate/out-of-frame boxes skipped). PIL only —
+  dependency-free. Handy for building classification datasets from detections. Tests:
+  per-class crops + exact crop size, same-class dedup, empty, box-clipped-to-frame
+  (`test_results.py`). Base import torch-free; suite 324 passed / 12 skipped. With this the
+  `Results` surface matches ultralytics: `plot`/`save`/`save_txt`/`save_crop`/`summary`/
+  `tojson`/`to_pandas`/`to_coco`/`to_supervision`.
 - **2026-07-24 — `Results.summary()` + `Results.tojson()` (structured/JSON output).**
   Ultralytics-parity: `summary(normalize=False, decimals=5)` returns one plain dict per
   detection — `{"name","class","confidence","box":{x1,y1,x2,y2}}`, adding `"track_id"` when

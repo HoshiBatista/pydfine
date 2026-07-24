@@ -419,3 +419,39 @@ class Results:
         import json
 
         return json.dumps(self.summary(normalize=normalize, decimals=decimals), indent=2)
+
+    def save_crop(self, save_dir: str | Path, file_name: str = "im.jpg") -> list[Path]:
+        """Save each detection's cropped image to ``save_dir/<class_name>/`` (ultralytics-style).
+
+        The original image is cropped to every box (clipped to the frame) and written under
+        a per-class subfolder as ``<file_name>`` — a numeric suffix (``_2``, ``_3``, …) is
+        appended when several detections of the same class would collide, so nothing is
+        overwritten. Returns the list of written paths (empty when there are no detections).
+        Uses PIL only (dependency-free).
+        """
+        if len(self) == 0:
+            return []
+        save_dir = Path(save_dir)
+        stem, suffix = Path(file_name).stem, (Path(file_name).suffix or ".jpg")
+        img = self.orig_img.convert("RGB")
+        img_w, img_h = img.width, img.height
+
+        saved: list[Path] = []
+        for xyxy, _conf, cls in self.boxes:
+            cls = int(cls)
+            name = self.names.get(cls, str(cls)) if self.names else str(cls)
+            x1, y1, x2, y2 = (int(round(float(v))) for v in xyxy)
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(img_w, x2), min(img_h, y2)
+            if x2 <= x1 or y2 <= y1:  # box fully outside / degenerate after clipping
+                continue
+            cls_dir = save_dir / name
+            cls_dir.mkdir(parents=True, exist_ok=True)
+            path = cls_dir / f"{stem}{suffix}"
+            k = 2
+            while path.exists():
+                path = cls_dir / f"{stem}_{k}{suffix}"
+                k += 1
+            img.crop((x1, y1, x2, y2)).save(path)
+            saved.append(path)
+        return saved
