@@ -190,7 +190,17 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--runs", type=int, default=50, help="timed forward passes")
     bench.add_argument("--warmup", type=int, default=10, help="untimed warmup passes")
     bench.add_argument("--batch", type=int, default=1, help="batch size")
+
+    info = sub.add_parser("info", help="print a model summary (layers/params/GFLOPs)")
+    _add_model_arg(info)
+    info.add_argument("--verbose", action="store_true", help="also print the per-module breakdown")
     return parser
+
+
+def _cmd_info(args: argparse.Namespace) -> int:
+    model = _build_model(args.model, args.weights)
+    model.info(verbose=args.verbose)
+    return 0
 
 
 def _cmd_benchmark(args: argparse.Namespace) -> int:
@@ -208,6 +218,7 @@ _COMMANDS = {
     "train": _cmd_train,
     "export": _cmd_export,
     "benchmark": _cmd_benchmark,
+    "info": _cmd_info,
 }
 
 

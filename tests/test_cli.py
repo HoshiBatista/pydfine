@@ -84,9 +84,7 @@ def test_cli_predict_runs_and_saves(tmp_path, monkeypatch):
         assert len(line.split()) == 6  # class cx cy w h conf
 
 
-def test_cli_benchmark_runs(capsys, monkeypatch):
-    pytest.importorskip("torch")
-
+def _stub_build_model(monkeypatch):
     import dfine.cli as cli
     from dfine.model import DFINE
 
@@ -95,6 +93,17 @@ def test_cli_benchmark_runs(capsys, monkeypatch):
         "_build_model",
         lambda *a, **k: DFINE(size="n", backbone_pretrained=False, num_classes=80, imgsz=320),
     )
+
+
+def test_cli_benchmark_runs(capsys, monkeypatch):
+    pytest.importorskip("torch")
+    _stub_build_model(monkeypatch)
     rc = main(["benchmark", "n", "--imgsz", "320", "--runs", "2", "--warmup", "1"])
     assert rc == 0
     assert "ms/image" in capsys.readouterr().out
+
+
+def test_cli_info_runs(monkeypatch):
+    pytest.importorskip("torch")
+    _stub_build_model(monkeypatch)
+    assert main(["info", "n", "--verbose"]) == 0  # summary content covered by test_model.py

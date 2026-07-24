@@ -391,6 +391,43 @@ class DFINE:
         )
         return result
 
+    def info(self, verbose: bool = False) -> dict:
+        """Model summary: layer/parameter/gradient counts (+ GFLOPs if ``thop`` is installed).
+
+        Returns ``{"layers", "parameters", "gradients", "gflops"}`` (``gflops`` is ``None``
+        when ``thop`` is unavailable) and logs a one-line summary. With ``verbose=True`` also
+        logs the per-top-level-module (backbone/encoder/decoder) parameter breakdown.
+        """
+        params = sum(p.numel() for p in self.model.parameters())
+        gradients = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        layers = sum(1 for _ in self.model.modules())
+        gflops = self._gflops()
+
+        size = self.config.size or "custom"
+        line = (
+            f"DFINE {size} summary: {layers} layers, {params:,} parameters, {gradients:,} gradients"
+        )
+        if gflops is not None:
+            line += f", {gflops:.1f} GFLOPs"
+        LOGGER.info(colorstr("cyan", "bold", line))
+        if verbose:
+            for cname, child in self.model.named_children():
+                n = sum(p.numel() for p in child.parameters())
+                LOGGER.info(f"  {colorstr('gray', cname):<12} {n / 1e6:.2f}M params")
+        return {"layers": layers, "parameters": params, "gradients": gradients, "gflops": gflops}
+
+    def _gflops(self) -> float | None:
+        """GFLOPs at the model's ``imgsz`` via ``thop`` (a dev/optional dep), else ``None``."""
+        try:
+            import copy
+
+            import thop
+        except ImportError:
+            return None
+        x = torch.rand(1, 3, self.config.imgsz, self.config.imgsz, device=self.device)
+        macs, _ = thop.profile(copy.deepcopy(self.model), inputs=(x,), verbose=False)
+        return macs * 2 / 1e9  # MACs → FLOPs (×2), → giga
+
     def _to_results(
         self,
         image: Image.Image,

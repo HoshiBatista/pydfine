@@ -84,6 +84,22 @@ def test_predict_accepts_ndarray():
     assert r.orig_shape == (200, 300)
 
 
+def test_info_reports_layers_and_params():
+    m = _model()
+    info = m.info()
+    assert set(info) == {"layers", "parameters", "gradients", "gflops"}
+    assert info["layers"] > 0
+    total = sum(p.numel() for p in m.model.parameters())
+    trainable = sum(p.numel() for p in m.model.parameters() if p.requires_grad)
+    assert info["parameters"] == total and info["gradients"] == trainable
+    assert info["gflops"] is None or info["gflops"] > 0  # None unless thop installed
+
+
+def test_info_verbose_runs():
+    m = _model()
+    assert m.info(verbose=True)["parameters"] > 0  # per-module breakdown must not raise
+
+
 def test_benchmark_returns_speed_dict():
     m = _model()
     stats = m.benchmark(imgsz=IMGSZ, runs=3, warmup=1)

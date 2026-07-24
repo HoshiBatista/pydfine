@@ -206,6 +206,15 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — `DFINE.info()` + `dfine info` CLI (model summary).** Ultralytics-style
+  summary card: `info(verbose=False)` returns `{layers, parameters, gradients, gflops}` and logs
+  `DFINE <size> summary: N layers, P parameters, G gradients [, F GFLOPs]`; `verbose=True` also
+  logs the per-top-level-module (backbone/encoder/decoder) param breakdown. GFLOPs is computed
+  at `cfg.imgsz` via `thop` when installed (deep-copied model so nothing is mutated), else
+  `None` — no new hard dependency. New `dfine info <model> [--verbose]` subcommand. Tests:
+  layers>0 + params/gradients match a manual count + gflops None-or-positive, verbose runs
+  (`test_model.py`), CLI smoke (`test_cli.py`). Base import torch-free; suite 341 passed / 12
+  skipped.
 - **2026-07-24 — `DFINE.benchmark()` + `dfine benchmark` CLI (inference speed).** Measures
   forward-pass latency/throughput on random input at the model's resolution: `warmup` untimed
   then `runs` timed passes, CUDA-synchronized around the timed region (postprocessor excluded —
