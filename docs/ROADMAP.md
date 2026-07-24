@@ -206,6 +206,17 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — `Results.save_txt()` (YOLO-format label export).** Ultralytics-style export
+  closing the loop with the existing `yolo_to_coco` converter (predict → auto-label → train).
+  One line per detection, coords **normalized** to the original image: detection writes
+  `class cx cy w h` (`cxcywh`), segment writes `class x1 y1 … xn yn` (the mask's largest
+  external polygon via a lazy-`cv2` `_mask_to_polygon`, falling back to the box when a mask has
+  no contour). `save_conf=True` appends confidence; lines are **appended** (ultralytics
+  semantics — per-image path), the parent dir is created, and empty results write nothing
+  (return `None`). Detection path is dependency-free (polygons need `cv2`, `[video]` extra).
+  Verified the output round-trips through `yolo_to_coco` (class ids survive). Tests: det format
+  + exact normalized coords, `save_conf`, empty, append, seg polygons (`test_results.py`). Base
+  import torch-free; suite 315 passed / 12 skipped.
 - **2026-07-24 — Resume training (`DFINE.train(resume=…)`).** Natural follow-up to the
   checkpoint work: the snapshots already stored a full resumable state (model + optimizer +
   lr_scheduler + ema + epoch) but nothing loaded it. New `Trainer.resume_from(path)` restores

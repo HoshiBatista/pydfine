@@ -53,6 +53,32 @@ def _mask_to_coco_rle(mask: np.ndarray) -> dict:
     return {"size": [h, w], "counts": counts}
 
 
+def _mask_to_polygon(mask: np.ndarray, w: int, h: int) -> list[float] | None:
+    """Largest external contour of a binary ``[H, W]`` mask as flat normalized ``xy…``.
+
+    Returns ``[x1, y1, x2, y2, …]`` normalized to ``w``/``h`` (YOLO-seg polygon), or
+    ``None`` when the mask has no usable contour (< 3 points). OpenCV is imported lazily.
+    """
+    try:
+        import cv2
+    except ImportError as e:  # pragma: no cover - trivial guard
+        raise ImportError(
+            "Results.save_txt() polygon export needs OpenCV — install it with "
+            "`pip install opencv-python` or `pip install pydfine[video]`."
+        ) from e
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    poly = max(contours, key=cv2.contourArea).reshape(-1, 2)
+    if len(poly) < 3:
+        return None
+    out: list[float] = []
+    for x, y in poly:
+        out.extend((float(x) / w, float(y) / h))
+    return out
+
+
 class Boxes:
     """Detected boxes for one image: ``xyxy`` (pixels), ``conf``, ``cls``.
 
@@ -306,3 +332,45 @@ class Results:
         if self.masks is not None and len(self.masks):
             mask = self.masks.data.cpu().numpy().astype(bool)
         return sv.Detections(xyxy=xyxy, confidence=conf, class_id=cls, mask=mask)
+
+    def save_txt(self, txt_file: str | Path, save_conf: bool = False) -> Path | None:
+        """Write detections to a YOLO-format ``.txt`` label file (ultralytics-style).
+
+        One line per detection, coordinates **normalized** to the original image size:
+
+        * detection — ``class cx cy w h`` (box center + size, ``cxcywh``);
+        * segmentation — ``class x1 y1 x2 y2 … xn yn`` (the mask's largest polygon;
+          falls back to the box corners when a mask has no contour).
+
+        ``save_conf=True`` appends the confidence as the final field. Lines are
+        **appended** to ``txt_file`` (matching ultralytics — pass a per-image path), the
+        parent directory is created, and the format round-trips through
+        :func:`~dfine.convert.yolo_to_coco`. Returns the path, or ``None`` when there are
+        no detections (no file is written). Polygon extraction needs OpenCV
+        (``pip install pydfine[video]``); the detection path is dependency-free.
+        """
+        if len(self) == 0:
+            return None
+        h, w = self.orig_shape
+        masks = self.masks.data.cpu().numpy().astype(np.uint8) if self.masks is not None else None
+
+        lines: list[str] = []
+        for i, (xyxy, conf, cls) in enumerate(self.boxes):
+            coords: list[float] | None = None
+            if masks is not None:
+                coords = _mask_to_polygon(masks[i], w, h)
+            if coords is None:
+                x1, y1, x2, y2 = (float(v) for v in xyxy)
+                cx, cy = (x1 + x2) / 2 / w, (y1 + y2) / 2 / h
+                coords = [cx, cy, (x2 - x1) / w, (y2 - y1) / h]
+            row = [int(cls), *coords]
+            fmt = " ".join(["%d"] + ["%.6f"] * len(coords)) % tuple(row)
+            if save_conf:
+                fmt += f" {float(conf):.6f}"
+            lines.append(fmt)
+
+        path = Path(txt_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as f:
+            f.write("\n".join(lines) + "\n")
+        return path

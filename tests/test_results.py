@@ -117,6 +117,56 @@ def test_to_coco_masks_emit_rle_segmentation():
         assert fg == int(r.masks.data[i].sum()) == (18 + i) ** 2
 
 
+def test_save_txt_detection_yolo_format(tmp_path):
+    out = _results(2).save_txt(tmp_path / "labels" / "img.txt")
+    assert out is not None and out.exists()
+    lines = out.read_text().strip().splitlines()
+    assert len(lines) == 2
+    # `class cx cy w h`, all normalized into [0, 1]; class ids preserved (0, 2).
+    for line, cls in zip(lines, (0, 2)):
+        parts = line.split()
+        assert len(parts) == 5 and int(parts[0]) == cls
+        assert all(0.0 <= float(v) <= 1.0 for v in parts[1:])
+    # xyxy [1,1,20,20] on a 96x64 image → cx=10.5/96, cy=10.5/64, w=19/96, h=19/64.
+    # Coords are written to 6 decimals, so compare with an absolute tolerance.
+    cx, cy, bw, bh = (float(v) for v in lines[0].split()[1:])
+    assert cx == pytest.approx(10.5 / 96, abs=1e-6) and cy == pytest.approx(10.5 / 64, abs=1e-6)
+    assert bw == pytest.approx(19 / 96, abs=1e-6) and bh == pytest.approx(19 / 64, abs=1e-6)
+
+
+def test_save_txt_save_conf_appends_confidence(tmp_path):
+    out = _results(2).save_txt(tmp_path / "img.txt", save_conf=True)
+    lines = out.read_text().strip().splitlines()
+    assert len(lines[0].split()) == 6  # class cx cy w h conf
+    assert float(lines[0].split()[-1]) == pytest.approx(0.9)
+
+
+def test_save_txt_empty_writes_nothing(tmp_path):
+    out = tmp_path / "img.txt"
+    assert _results(0).save_txt(out) is None
+    assert not out.exists()
+
+
+def test_save_txt_appends(tmp_path):
+    out = tmp_path / "img.txt"
+    _results(2).save_txt(out)
+    _results(1).save_txt(out)
+    assert len(out.read_text().strip().splitlines()) == 3  # 2 + 1 appended
+
+
+def test_save_txt_segmentation_polygons(tmp_path):
+    pytest.importorskip("cv2")
+    out = _results(2, masks=True).save_txt(tmp_path / "seg.txt")
+    lines = out.read_text().strip().splitlines()
+    assert len(lines) == 2
+    for line, cls in zip(lines, (0, 2)):
+        parts = line.split()
+        assert int(parts[0]) == cls
+        coords = parts[1:]
+        assert len(coords) >= 6 and len(coords) % 2 == 0  # ≥3 polygon points, x/y pairs
+        assert all(0.0 <= float(v) <= 1.0 for v in coords)
+
+
 def test_to_coco_rle_roundtrips_through_coco():
     """The uncompressed RLE is accepted by faster-coco-eval and decodes to our mask.
 
