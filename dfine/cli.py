@@ -62,13 +62,19 @@ def _cmd_convert(args: argparse.Namespace) -> int:
 
 def _cmd_predict(args: argparse.Namespace) -> int:
     model = _build_model(args.model, args.weights)
-    results = model.predict(args.source, conf=args.conf, imgsz=args.imgsz)
-    out_dir = Path(args.output)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    results = model.predict(
+        args.source,
+        conf=args.conf,
+        imgsz=args.imgsz,
+        save=True,
+        save_txt=args.save_txt,
+        save_crop=args.save_crop,
+        save_conf=args.save_conf,
+        project=args.project,
+        name=args.name,
+    )
     for src, res in zip(args.source, results):
-        dst = out_dir / f"{Path(src).stem}_pred.jpg"
-        res.save(dst)
-        print(f"  {Path(src).name}: {len(res)} detections -> {dst}")
+        print(f"  {Path(src).name}: {len(res)} detections")
     return 0
 
 
@@ -142,7 +148,11 @@ def build_parser() -> argparse.ArgumentParser:
     pred.add_argument("source", nargs="+", help="image path(s) to run detection on")
     pred.add_argument("--conf", type=float, default=0.25, help="score threshold")
     pred.add_argument("--imgsz", type=int, default=None, help="inference resolution")
-    pred.add_argument("--output", default="runs/predict", help="output directory")
+    pred.add_argument("--project", default="runs/detect", help="run directory root")
+    pred.add_argument("--name", default="predict", help="run name (auto-incremented)")
+    pred.add_argument("--save-txt", action="store_true", help="also write YOLO-format labels")
+    pred.add_argument("--save-crop", action="store_true", help="also write per-detection crops")
+    pred.add_argument("--save-conf", action="store_true", help="include confidence in --save-txt")
 
     val = sub.add_parser("val", help="evaluate COCO metrics on a dataset")
     _add_model_arg(val)

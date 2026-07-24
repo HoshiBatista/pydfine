@@ -58,7 +58,27 @@ def test_cli_predict_runs_and_saves(tmp_path, monkeypatch):
     )
     img = tmp_path / "img.png"
     Image.fromarray((np.random.rand(48, 64, 3) * 255).astype("uint8")).save(img)
-    out = tmp_path / "out"
-    rc = main(["predict", "n", str(img), "--conf", "0.99", "--imgsz", "320", "--output", str(out)])
+    project = str(tmp_path / "runs")
+    rc = main(
+        [
+            "predict",
+            "n",
+            str(img),
+            "--conf",
+            "0.0",  # keep detections so --save-txt has labels to write
+            "--imgsz",
+            "320",
+            "--project",
+            project,
+            "--save-txt",
+            "--save-conf",
+        ]
+    )
     assert rc == 0
-    assert (out / "img_pred.jpg").exists()
+    run = tmp_path / "runs" / "predict"
+    assert (run / "img.jpg").exists()  # annotated image, named by the source stem
+    # --save-txt wrote YOLO labels under labels/ (conf appended via --save-conf)
+    txt = run / "labels" / "img.txt"
+    assert txt.exists()
+    for line in txt.read_text().strip().splitlines():
+        assert len(line.split()) == 6  # class cx cy w h conf

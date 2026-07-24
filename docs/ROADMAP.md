@@ -206,6 +206,15 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — `dfine predict` CLI on the new save plumbing.** Rewired the CLI predict
+  command to call `model.predict(save=True, …)` instead of its bespoke `<stem>_pred.jpg`
+  loop. Replaced `--output` with ultralytics-consistent `--project` (default `runs/detect`)
+  / `--name` (default `predict`, auto-incremented), and added `--save-txt` / `--save-crop` /
+  `--save-conf` flags. The CLI always saves the annotated image; results land in the same
+  `project/name` run dir (with `labels/`, `crops/`) as the Python API, and the run dir is
+  logged. Updated the CLI predict test (project/name + `--save-txt` labels incl. conf).
+  Suite 327 passed / 12 skipped. Inference save UX is now reachable identically from Python
+  and the CLI.
 - **2026-07-24 — `DFINE.predict(save=/save_txt=/save_crop=…)` run-dir plumbing.** Lifts the
   `Results` save methods to the predict call (ultralytics `model.predict(save=True)`): any of
   `save` (annotated image), `save_txt` (YOLO labels under `labels/`, `save_conf` appends score),
