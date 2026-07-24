@@ -176,10 +176,13 @@ class Results:
         )
         return f"Results(image={self.orig_shape[1]}x{self.orig_shape[0]}, boxes={len(self)}{extra})"
 
+    def _name(self, cls_id: int) -> str:
+        """Class name for ``cls_id`` from ``names`` (falls back to the numeric id)."""
+        return self.names.get(cls_id, str(cls_id)) if self.names else str(cls_id)
+
     def _label(self, cls_id: int, conf: float, track_id: int | None = None) -> str:
-        name = self.names.get(cls_id, str(cls_id)) if self.names else str(cls_id)
         prefix = f"#{track_id} " if track_id is not None else ""
-        return f"{prefix}{name} {conf:.2f}"
+        return f"{prefix}{self._name(cls_id)} {conf:.2f}"
 
     def plot(self, line_width: int | None = None) -> np.ndarray:
         """Draw boxes+labels on a copy of the image; return an RGB HWC uint8 array.
@@ -392,7 +395,7 @@ class Results:
             cls = int(cls)
             x1, y1, x2, y2 = (float(v) for v in xyxy)
             row = {
-                "name": self.names.get(cls, str(cls)) if self.names else str(cls),
+                "name": self._name(cls),
                 "class": cls,
                 "confidence": round(float(conf), decimals),
                 "box": {
@@ -439,7 +442,7 @@ class Results:
         saved: list[Path] = []
         for xyxy, _conf, cls in self.boxes:
             cls = int(cls)
-            name = self.names.get(cls, str(cls)) if self.names else str(cls)
+            name = self._name(cls)
             x1, y1, x2, y2 = (int(round(float(v))) for v in xyxy)
             x1, y1 = max(0, x1), max(0, y1)
             x2, y2 = min(img_w, x2), min(img_h, y2)
@@ -478,6 +481,3 @@ class Results:
             f"{n} {self._name(cls_id)}{'s' if n > 1 else ''}"
             for cls_id, n in sorted(counts.items())
         )
-
-    def _name(self, cls_id: int) -> str:
-        return self.names.get(cls_id, str(cls_id)) if self.names else str(cls_id)

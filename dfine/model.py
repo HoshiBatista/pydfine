@@ -125,6 +125,20 @@ def _source_stems(sources) -> list[str]:
     ]
 
 
+def _dedup_stems(stems: list[str]) -> list[str]:
+    """Disambiguate repeated stems (``a``, ``a`` → ``a``, ``a_2``) so saved files don't collide.
+
+    Same-stem inputs (e.g. ``a.jpg`` and ``a.png`` in one folder) would otherwise overwrite
+    each other's image/crop and *append* into a shared ``.txt`` label file.
+    """
+    seen: dict[str, int] = {}
+    out: list[str] = []
+    for s in stems:
+        seen[s] = seen.get(s, 0) + 1
+        out.append(s if seen[s] == 1 else f"{s}_{seen[s]}")
+    return out
+
+
 def _increment_path(path: Path) -> Path:
     """A non-colliding run dir: ``path``, else ``path2``, ``path3``, … (ultralytics-style)."""
     if not path.exists():
@@ -331,6 +345,7 @@ class DFINE:
         stems = _source_stems(sources)
         if len(stems) != len(results):  # defensive: fall back to positional names
             stems = [f"image{i}" for i in range(len(results))]
+        stems = _dedup_stems(stems)
         save_dir.mkdir(parents=True, exist_ok=True)
         for r, stem in zip(results, stems):
             if save:
@@ -359,6 +374,7 @@ class DFINE:
             raise ValueError(
                 f"benchmark(imgsz={size}) must equal the model's imgsz ({self.config.imgsz})."
             )
+        runs, batch = max(1, runs), max(1, batch)  # avoid div-by-zero / empty batch
         self.model.eval()
         x = torch.rand(batch, 3, size, size, device=self.device)
         cuda = self.device.type == "cuda"

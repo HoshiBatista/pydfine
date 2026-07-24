@@ -194,6 +194,19 @@ def test_predict_no_save_writes_nothing(tmp_path):
     assert not (tmp_path / "runs").exists()
 
 
+def test_predict_same_stem_sources_do_not_collide(tmp_path):
+    # a.jpg and a.png share the stem "a": labels/crops must not overwrite or merge.
+    m = _model()
+    d = tmp_path / "imgs"
+    d.mkdir()
+    _image(320, 320).save(d / "a.jpg")
+    _image(320, 320).save(d / "a.png")
+    m.predict(str(d), conf=0.0, imgsz=IMGSZ, save=True, save_txt=True, project=str(tmp_path / "r"))
+    run = tmp_path / "r" / "predict"
+    assert (run / "a.jpg").exists() and (run / "a_2.jpg").exists()  # second disambiguated
+    assert (run / "labels" / "a.txt").exists() and (run / "labels" / "a_2.txt").exists()
+
+
 def test_names_default_to_coco_for_80_classes():
     m = _model()
     assert m.names[0] == "person"
