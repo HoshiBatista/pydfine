@@ -191,6 +191,22 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-24 — Phase-4 training UX: periodic checkpoints + tqdm progress bar + trimmed
+  loss logs.** Prompted by a v0.0.1 run that had only `last.pth` (no `best.pth`/snapshots).
+  (1) **Checkpoints:** wired the previously-dead `DFINEConfig.checkpoint_freq` field (default
+  changed `1 → -1` = off). `Trainer._save_periodic` now writes a resumable
+  `weights/epoch{N}.pth` (model+optimizer+lr_scheduler+ema+epoch) every `checkpoint_freq`
+  epochs (and always the final epoch); `last.pth` (every epoch) + `best.pth` (on primary-
+  metric improvement — `AP`/`mAP_50_95_mask`/`mIoU`) stay at `output_dir` root as before.
+  `best.pth` already existed since the TS6-era `fit`; v0.0.1 predated it. (2) **Logging:** new
+  `ProgressBar` (`train/logger.py`) — a live **tqdm** bar when installed, graceful compact-
+  line fallback otherwise (like the wandb/matplotlib optionals). `train_one_epoch` now shows
+  only **total loss + lr** in the bar postfix and a clean one-line epoch summary; the full
+  per-term loss breakdown (vfl/bbox/giou/fgl/ddf + aux/dn) still streams to TensorBoard and
+  the returned `stats` dict (unchanged — tests rely on it). `MetricLogger.log_every` kept but
+  now unused by the loop. Added `tqdm` to the `[train]`/`[dev]` extras. Tests: periodic-save
+  on/off, ProgressBar iterate/postfix + no-tqdm fallback. Suite 301 passed / 16 skipped.
+  Committed `456b32d` on `main`.
 - **2026-07-18 — PyPI packaging (Phase 6, final task).** Distribution name is **`pydfine`**
   (free on PyPI); the **import package stays `dfine`** and the CLI command stays `dfine`
   (dist≠import, like scikit-learn→sklearn). Renamed only the distribution: `pyproject
