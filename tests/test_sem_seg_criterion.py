@@ -60,7 +60,7 @@ def test_all_ignore_batch_is_zero_loss():
     crit = SemSegCriterion.from_config(DFINEConfig.preset("n", task="sem_seg", num_classes=C))
     out = _outputs(aux=True, requires_grad=True)
     losses = crit(out, _targets(fill=255))  # every pixel ignored
-    assert all(float(v) == 0.0 for v in losses.values())
+    assert all(float(v.detach()) == 0.0 for v in losses.values())
     # still differentiable (zero grad), so a fully-padded batch never breaks the step.
     sum(losses.values()).backward()
 
