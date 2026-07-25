@@ -50,14 +50,14 @@ registry/YAML stripped and a `from_config(cfg)` constructor added. Status:
 
 | Upstream class | Our file | Status |
 |---|---|---|
-| `HGNetv2` | `native/hgnetv2.py` | ✅ ported + shape tests |
-| `HybridEncoder` | `native/hybrid_encoder.py` | ✅ ported + shape tests |
-| `DFINETransformer` | `native/dfine_decoder.py` | ✅ ported + shape tests |
-| assembled `DFINE` | `native/dfine.py` | ✅ backbone+encoder+decoder + `.load()`/`.deploy()` |
-| `DFINEPostProcessor` | `native/postprocessor.py` | ✅ ported + decode tests |
-| `HungarianMatcher` | `native/matcher.py` | ✅ ported (LSAP) + tests |
-| `DFINECriterion` | `native/criterion.py` | ✅ ported (VFL/L1/GIoU/FGL/DDF) + tests |
-| upstream `.pth` loader | `native/loader.py` | ✅ EMA-preferred strict load |
+| `HGNetv2` | `native/hgnetv2.py` | ported + shape tests |
+| `HybridEncoder` | `native/hybrid_encoder.py` | ported + shape tests |
+| `DFINETransformer` | `native/dfine_decoder.py` | ported + shape tests |
+| assembled `DFINE` | `native/dfine.py` | backbone+encoder+decoder + `.load()`/`.deploy()` |
+| `DFINEPostProcessor` | `native/postprocessor.py` | ported + decode tests |
+| `HungarianMatcher` | `native/matcher.py` | ported (LSAP) + tests |
+| `DFINECriterion` | `native/criterion.py` | ported (VFL/L1/GIoU/FGL/DDF) + tests |
+| upstream `.pth` loader | `native/loader.py` | EMA-preferred strict load |
 
 **Parity:** the port is bit-exact vs genuine upstream (`max|Δ|=0.0` across n/s/m/l/x)
 for raw boxes, final boxes, scores, and labels — see `tests/test_parity.py`.

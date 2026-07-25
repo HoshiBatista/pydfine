@@ -23,7 +23,7 @@ with an `ultralytics`-style developer experience.
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Code of Conduct](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
-📖 **Documentation:** <https://hoshibatista.github.io/pydfine/>
+**Documentation:** <https://hoshibatista.github.io/pydfine/>
 
 Install: `pip install pydfine` (core, torch-free) — `import dfine` to use it.
 

@@ -75,21 +75,21 @@ could be added later without touching the public `DFINE` API. Whichever path: th
 
 ## 4. Repository layout (target)
 
-Legend: ✅ done · ⬜ planned (target path shown).
+Legend: [x] done · [ ] planned (target path shown).
 
 ```
 dfine/
-  __init__.py          # ✅ lazy exports DFINE/Results/Boxes (base import stays torch-free)
-  config.py            # ✅ DFINEConfig dataclass + SIZE_PRESETS + validation
-  model.py             # ✅ DFINE: predict/predict_video/train + input loading/preprocess;
+  __init__.py          # [x] lazy exports DFINE/Results/Boxes (base import stays torch-free)
+  config.py            # [x] DFINEConfig dataclass + SIZE_PRESETS + validation
+  model.py             # [x] DFINE: predict/predict_video/train + input loading/preprocess;
                        #    load/from_pretrained; val/export are phase stubs
-  results.py           # ✅ Results / Boxes (.boxes.xyxy/.conf/.cls, .plot()/.save())
-  registry.py          # ✅ checkpoint catalogue: name -> CheckpointSpec(size,dataset,
+  results.py           # [x] Results / Boxes (.boxes.xyxy/.conf/.cls, .plot()/.save())
+  registry.py          # [x] checkpoint catalogue: name -> CheckpointSpec(size,dataset,
                        #    num_classes,url); resolve_weights/config_for
-  downloads.py         # ✅ weight cache/download (atomic, $DFINE_CACHE_DIR)
+  downloads.py         # [x] weight cache/download (atomic, $DFINE_CACHE_DIR)
   backends/
     __init__.py        # backend package docstring
-    native/            # ✅ Path A port — full inference + loss
+    native/            # [x] Path A port — full inference + loss
       common.py        #   FrozenBatchNorm2d
       ops.py           #   get_activation, inverse_sigmoid, deformable attn core, ...
       box_ops.py       #   box conversions, IoU/GIoU
@@ -106,20 +106,20 @@ dfine/
       matcher.py       #   HungarianMatcher (LSAP)
       criterion.py     #   DFINECriterion (VFL/L1/GIoU/FGL/DDF)
     # transformers.py  # Path B wrapper — optional, not planned yet
-  train/               # ✅ Phase 4 — loop/data/augment/val/multi-GPU done
-    trainer.py         # ✅ train_one_epoch + Trainer (DDP-aware), param groups, ckpt
-    ema.py             # ✅ ModelEMA (weight EMA; unwraps DDP)
-    scheduler.py       # ✅ LinearWarmup + flat-cosine/multistep LR
-    logger.py          # ✅ MetricLogger/SmoothedValue — console progress readout
-    visualizer.py      # ✅ TrainingVisualizer — TensorBoard + loss_curve.png (+ W&B)
-    dataset.py         # ✅ CocoDetection + build_coco_dataloader(s) (multi-scale collate)
-    augment.py         # ✅ train_transforms + TrainCompose (two-phase no-aug policy)
-    evaluator.py       # ✅ COCO eval (faster-coco-eval) — evaluate/coco_val_fn
-    distributed.py     # ✅ DDP/SyncBN + DistributedSampler wrap + spawn (multi-GPU launch)
-  convert.py           # ✅ yolo_to_coco — YOLO dataset -> COCO layout (torch-free)
-  export/              # ⬜ Phase 3
+  train/               # [x] Phase 4 — loop/data/augment/val/multi-GPU done
+    trainer.py         # [x] train_one_epoch + Trainer (DDP-aware), param groups, ckpt
+    ema.py             # [x] ModelEMA (weight EMA; unwraps DDP)
+    scheduler.py       # [x] LinearWarmup + flat-cosine/multistep LR
+    logger.py          # [x] MetricLogger/SmoothedValue — console progress readout
+    visualizer.py      # [x] TrainingVisualizer — TensorBoard + loss_curve.png (+ W&B)
+    dataset.py         # [x] CocoDetection + build_coco_dataloader(s) (multi-scale collate)
+    augment.py         # [x] train_transforms + TrainCompose (two-phase no-aug policy)
+    evaluator.py       # [x] COCO eval (faster-coco-eval) — evaluate/coco_val_fn
+    distributed.py     # [x] DDP/SyncBN + DistributedSampler wrap + spawn (multi-GPU launch)
+  convert.py           # [x] yolo_to_coco — YOLO dataset -> COCO layout (torch-free)
+  export/              # [ ] Phase 3
     onnx.py            #   ONNX export (+ optional onnxsim); TRT/OpenVINO helpers
-  cli.py               # ✅ `dfine models`/`dfine convert`; predict/train/val/export stubs
+  cli.py               # [x] `dfine models`/`dfine convert`; predict/train/val/export stubs
 docs/                  # ARCHITECTURE.md, CONFIG_REFERENCE.md, ROADMAP.md
 tests/                 # parity + unit tests
 ```

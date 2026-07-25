@@ -4,7 +4,7 @@ This is the **source of truth** for public parameter names, groups, and defaults
 Every param here becomes a field on `DFINEConfig` and a `DFINE(...)` kwarg.
 
 Defaults below are taken from upstream `D-FINE/configs/*.yml` + `src/` + the paper.
-Values marked `⚠verify` must be confirmed against upstream before shipping. The
+Values marked `verify` must be confirmed against upstream before shipping. The
 **left column is our public name**; where it differs from the upstream constructor
 arg, the description notes the upstream name.
 
@@ -128,7 +128,7 @@ B4/B5 `[512,1024,2048]` (L/X). See the §11 per-size table for the full mapping.
 | `loss_fgl_weight` | float | 0.15 | Fine-grained localization (DFL) loss. |
 | `loss_ddf_weight` | float | 1.5 | GO-LSD decoupled distillation loss. |
 | `focal_alpha` | float | 0.75 | Focal/VFL alpha (criterion `alpha`). |
-| `focal_gamma` | float | 2.0 | Focal/VFL gamma (⚠verify). |
+| `focal_gamma` | float | 2.0 | Focal/VFL gamma (verify). |
 | `ddf_temperature` | float | 0.05 | GO-LSD temperature (`T_init≈5e-2`). |
 | `aux_loss` | bool | True | Supervise auxiliary decoder layers. |
 
@@ -149,11 +149,11 @@ B4/B5 `[512,1024,2048]` (L/X). See the §11 per-size table for the full mapping.
 | `lr_backbone` | float | 1.25e-4 | Backbone LR (smaller models use higher). |
 | `weight_decay` | float | 1.25e-4 | AdamW weight decay (M/S 1e-4). |
 | `betas` | tuple | (0.9, 0.999) | AdamW betas. |
-| `clip_max_norm` | float | 0.1 | Grad clip (⚠verify). |
+| `clip_max_norm` | float | 0.1 | Grad clip (verify). |
 | `warmup_iters` | int | 500 | LR warmup iterations. |
 | `scheduler` | str | "flatcosine" | `"flatcosine"\|"multistep"`. |
 | `ema_decay` | float | 0.9999 | Weight-EMA decay. |
-| `ema_warmups` | int | 2000 | EMA warmup steps (⚠verify per size). |
+| `ema_warmups` | int | 2000 | EMA warmup steps (verify per size). |
 | `use_amp` | bool | True | Mixed precision. |
 | `no_aug_epoch` | int | 2 | Trailing epochs with advanced augs off (M/S: 4). |
 | `seed` | int | 0 | RNG seed. |

@@ -8,8 +8,8 @@ newest release before reporting an issue.
 
 | Version | Supported |
 | ------- | --------- |
-| latest `0.x` | ✅ |
-| older `0.x`  | ❌ |
+| latest `0.x` | Yes |
+| older `0.x`  | No |
 
 ## Reporting a vulnerability
 
