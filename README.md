@@ -36,11 +36,11 @@ from dfine import DFINE
 
 # Presets fill sensible defaults; every single field is overridable inline.
 model = DFINE(
-    size="l",                 # n | s | m | l | x  -> sets backbone, dims, depths
+    size="l",  # n | s | m | l | x  -> sets backbone, dims, depths
     num_classes=80,
     num_queries=300,
     hidden_dim=256,
-    reg_max=32,               # Fine-grained Distribution Refinement bins
+    reg_max=32,  # Fine-grained Distribution Refinement bins
     backbone="hgnetv2_b4",
     backbone_pretrained=True,
     device="cuda",
@@ -59,11 +59,23 @@ Fully custom architecture, no preset:
 ```python
 model = DFINE(
     num_classes=3,
-    backbone="hgnetv2_b0", use_lab=True, freeze_at=-1,
-    hidden_dim=256, encoder_dim_feedforward=1024, encoder_layers=1, nhead=8,
-    decoder_layers=4, eval_idx=-1, num_levels=3, num_points=[3, 6, 3],
-    reg_max=32, reg_scale=4.0, lqe_layers=2,
-    num_denoising=100, label_noise_ratio=0.5, box_noise_scale=1.0,
+    backbone="hgnetv2_b0",
+    use_lab=True,
+    freeze_at=-1,
+    hidden_dim=256,
+    encoder_dim_feedforward=1024,
+    encoder_layers=1,
+    nhead=8,
+    decoder_layers=4,
+    eval_idx=-1,
+    num_levels=3,
+    num_points=[3, 6, 3],
+    reg_max=32,
+    reg_scale=4.0,
+    lqe_layers=2,
+    num_denoising=100,
+    label_noise_ratio=0.5,
+    box_noise_scale=1.0,
     class_names=["cat", "dog", "bird"],
 )
 ```
@@ -80,17 +92,17 @@ scale**, ready to plot or export.
 from dfine import DFINE
 
 # Instance segmentation — masks + boxes
-model = DFINE.from_pretrained("dfine-seg-l")     # dfine-seg-{n,s,m,l,x}
+model = DFINE.from_pretrained("dfine-seg-l")  # dfine-seg-{n,s,m,l,x}
 r = model.predict("street.jpg", conf=0.4)[0]
-r.boxes.xyxy          # (N, 4) original-scale boxes
-r.masks.data          # (N, H, W) bool masks, aligned 1:1 with boxes
-r.plot()              # boxes + per-instance mask overlays
+r.boxes.xyxy  # (N, 4) original-scale boxes
+r.masks.data  # (N, H, W) bool masks, aligned 1:1 with boxes
+r.plot()  # boxes + per-instance mask overlays
 
 # Semantic segmentation — dense per-pixel label map (boxless)
 model = DFINE(size="l", task="sem_seg", num_classes=19)
 r = model.predict("street.jpg")[0]
-r.sem_seg.data        # (H, W) uint8 class ids (255 = void)
-r.plot()              # per-class color overlay
+r.sem_seg.data  # (H, W) uint8 class ids (255 = void)
+r.plot()  # per-class color overlay
 ```
 
 `predict` returns a `list[Results]`; see the [Results API](docs/api/results.md) for the
@@ -161,8 +173,8 @@ log.
 ```python
 from dfine import DFINEConfig
 
-cfg = DFINEConfig.preset("l", num_classes=3)   # verified upstream defaults
-cfg = DFINEConfig.preset("n")                  # 2-level, hidden_dim=128
+cfg = DFINEConfig.preset("l", num_classes=3)  # verified upstream defaults
+cfg = DFINEConfig.preset("n")  # 2-level, hidden_dim=128
 ```
 
 The ported modules already run end-to-end (needs the `torch` extra installed):

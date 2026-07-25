@@ -30,15 +30,15 @@ model = DFINE(size="l", num_classes=80, device="cuda")
 results = model.predict("street.jpg", conf=0.4)
 results[0].save("out.jpg")
 
-model.train(data="dataset/", epochs=72)   # fine-tune on a COCO dataset
-metrics = model.val(data="dataset/")      # COCO metrics
-model.export(format="onnx")               # deployable ONNX graph
+model.train(data="dataset/", epochs=72)  # fine-tune on a COCO dataset
+metrics = model.val(data="dataset/")  # COCO metrics
+model.export(format="onnx")  # deployable ONNX graph
 ```
 
 Load released COCO weights in one line:
 
 ```python
-model = DFINE.from_pretrained("dfine-s")   # resolve + download + strict-load
+model = DFINE.from_pretrained("dfine-s")  # resolve + download + strict-load
 ```
 
 ## Validate with analytics
@@ -48,7 +48,7 @@ confidence curves, per-class AP, and a worst-predictions gallery:
 
 ```python
 metrics = model.val(data="coco/", plots=True, output_dir="runs/val")
-print(metrics["AP"])          # primary mAP@[.50:.95]
+print(metrics["AP"])  # primary mAP@[.50:.95]
 # runs/val/{confusion_matrix,pr_curve,f1_curve,p_curve,r_curve}.png + worst/
 ```
 

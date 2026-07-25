@@ -16,8 +16,12 @@ A developer should be able to:
 
 ```python
 from dfine import DFINE
-model = DFINE(size="l", num_classes=80)      # or fully custom kwargs
-model.predict(...); model.train(...); model.val(...); model.export(...)
+
+model = DFINE(size="l", num_classes=80)  # or fully custom kwargs
+model.predict(...)
+model.train(...)
+model.val(...)
+model.export(...)
 ```
 
 ## 2. Non-negotiable design principles

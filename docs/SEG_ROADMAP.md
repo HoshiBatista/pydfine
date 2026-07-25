@@ -77,13 +77,13 @@ soft Dice with `ignore_index`).
 Keep the headline surface typed and small:
 
 ```python
-model = DFINE(size="s", task="segment")          # or task="sem_seg"
-model = DFINE.from_pretrained("dfine_seg_s_coco") # ArgoHA HF weights
-results = model.predict("img.jpg")               # list[Results]
+model = DFINE(size="s", task="segment")  # or task="sem_seg"
+model = DFINE.from_pretrained("dfine_seg_s_coco")  # ArgoHA HF weights
+results = model.predict("img.jpg")  # list[Results]
 r = results[0]
-r.masks            # Masks object: .data [N,H,W] bool/float, original scale
-r.boxes            # unchanged (segment still yields boxes)
-r.plot()           # boxes + mask overlays
+r.masks  # Masks object: .data [N,H,W] bool/float, original scale
+r.boxes  # unchanged (segment still yields boxes)
+r.plot()  # boxes + mask overlays
 ```
 
 New `DFINEConfig` fields (typed, defaulted so detect is unchanged):

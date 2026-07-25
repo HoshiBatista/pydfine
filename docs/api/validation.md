@@ -20,8 +20,8 @@ model = DFINE.from_pretrained("dfine-l")
 # A COCO dataset root: val/ + annotations/instances_val.json (a stock MS-COCO
 # val2017/ layout is auto-detected too).
 metrics = model.val(data="coco/")
-print(metrics["AP"])        # primary mAP@[.50:.95]
-print(metrics["AP50"])      # mAP@0.50
+print(metrics["AP"])  # primary mAP@[.50:.95]
+print(metrics["AP50"])  # mAP@0.50
 ```
 
 `val` returns the **12 standard COCO metrics** keyed by name (`COCO_STAT_NAMES`):
@@ -58,7 +58,7 @@ The single most common validation footgun: predicted class ids must match the
 from dfine.train.dataset import build_coco_val_dataloader
 
 loader = build_coco_val_dataloader("coco/", cfg=model.config, batch_size=8)
-metrics = model.val(val_loader=loader)   # loader.dataset must carry the GT `.coco`
+metrics = model.val(val_loader=loader)  # loader.dataset must carry the GT `.coco`
 ```
 
 ### From the CLI
@@ -133,7 +133,7 @@ from dfine.train.metrics import PRCurveMetrics
 loader = build_coco_val_dataloader("coco/", cfg=model.config)
 
 # evaluate(plots=True) logs "Best confidence: X" for you; to compute it directly:
-prm = PRCurveMetrics(num_classes=model.config.num_classes)   # matches at IoU 0.5
+prm = PRCurveMetrics(num_classes=model.config.num_classes)  # matches at IoU 0.5
 # ... feed prm.process_batch(det_boxes, det_scores, det_classes, gt_boxes, gt_classes) ...
 best_conf, mean_f1 = prm.best_confidence()
 results = model.predict("street.jpg", conf=best_conf)
@@ -146,7 +146,7 @@ results = model.predict("street.jpg", conf=best_conf)
 `best.pth` is saved on each improvement:
 
 ```python
-model.train(data="coco/", epochs=72)          # val/ split validated each epoch
+model.train(data="coco/", epochs=72)  # val/ split validated each epoch
 ```
 
 To customize, pass your own hook — see [`coco_val_fn`][dfine.train.evaluator.coco_val_fn]:

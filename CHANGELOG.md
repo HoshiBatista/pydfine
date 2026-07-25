@@ -41,6 +41,9 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
 - Test suite is warning-free: unclosed file handles closed, and torch's own legacy
   TorchScript-based ONNX export deprecations / tracer warnings are filtered narrowly so
   genuinely new warnings still surface.
+- Bumped ruff to `0.16.0` (pyproject + pre-commit) and refreshed the pinned GitHub Actions
+  (`setup-python@v7`, `upload-artifact@v7`, `download-artifact@v8`, `deploy-pages@v5`,
+  `upload-pages-artifact@v5`). Applied ruff 0.16.0's Markdown code-block formatting to the docs.
 
 ## [0.0.1] - 2026-07-18
 

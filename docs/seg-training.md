@@ -64,7 +64,7 @@ or build fresh with your own class count.
 from dfine import DFINE
 
 # Fine-tune the pretrained instance-seg model (needs the pydfine[hf] extra for the weights).
-model = DFINE.from_pretrained("dfine-seg-l")        # dfine-seg-{n,s,m,l,x}
+model = DFINE.from_pretrained("dfine-seg-l")  # dfine-seg-{n,s,m,l,x}
 model.train(data="dataset/", epochs=50, batch_size=8)
 
 # …or from scratch for a custom class count:
@@ -80,7 +80,7 @@ Each epoch the val split is scored with **COCO mask AP** — `mAP_50_95_mask`, `
 ```python
 from dfine import DFINE
 
-model = DFINE(size="l", task="sem_seg", num_classes=19)   # e.g. Cityscapes
+model = DFINE(size="l", task="sem_seg", num_classes=19)  # e.g. Cityscapes
 model.train(data="dataset/", epochs=100, batch_size=8)
 ```
 
@@ -94,8 +94,8 @@ model.train(data="dataset/", epochs=100, batch_size=8)
 by task — you don't pass a `val_loader`:
 
 ```python
-model.train(data="dataset/", epochs=50, val_split=0.2)   # 20% held out for val (default)
-model.train(data="dataset/", epochs=50, val_split=0.0)   # train on everything, no eval
+model.train(data="dataset/", epochs=50, val_split=0.2)  # 20% held out for val (default)
+model.train(data="dataset/", epochs=50, val_split=0.0)  # train on everything, no eval
 ```
 
 The split is **deterministic** (seeded), so runs are reproducible. `images/{train,val}` subdirs
@@ -146,5 +146,5 @@ The trained model exports to a task-aware ONNX graph (masks for `segment`, a fus
 map for `sem_seg`) — see the [Export guide](api/export.md):
 
 ```python
-model.export(imgsz=640)     # segment → (labels, boxes, scores, masks); sem_seg → sem_seg map
+model.export(imgsz=640)  # segment → (labels, boxes, scores, masks); sem_seg → sem_seg map
 ```
