@@ -2,6 +2,9 @@
 
 Thanks for helping build a config-first, ultralytics-style wrapper around D-FINE.
 
+By participating you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md). To report
+a security vulnerability, see [`SECURITY.md`](SECURITY.md) — do **not** open a public issue.
+
 ## Start here
 
 - **[`AGENTS.md`](AGENTS.md)** — the canonical build guide (design principles, layout,
@@ -46,3 +49,7 @@ All three must be green — CI runs the same checks on Python 3.9–3.13.
 
 - Keep each PR focused on one roadmap task; tick its checkbox when green.
 - Fill out the PR template checklist (the "Definition of Done" from `AGENTS.md` §9).
+- Add an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) for any
+  user-visible change.
+- Commit messages use a conventional prefix (`feat`, `fix`, `docs`, `test`, `refactor`,
+  `chore`), e.g. `fix(val): align ConfusionMatrix IoU threshold to 0.5`.

@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: "If you use pydfine in your research, please cite both this software and the original D-FINE paper."
+title: "pydfine: a config-first, ultralytics-style Python library for the D-FINE detector"
+abstract: >-
+  pydfine is a batteries-included, config-first Python port of the D-FINE real-time object
+  detector. The entire model is configured through typed Python parameters on one class,
+  with numeric parity against the upstream released checkpoints.
+type: software
+authors:
+  - name: "pydfine contributors"
+url: "https://github.com/HoshiBatista/pydfine"
+repository-code: "https://github.com/HoshiBatista/pydfine"
+license: Apache-2.0
+version: 0.0.1
+date-released: "2026-07-18"
+keywords:
+  - object-detection
+  - d-fine
+  - detr
+  - computer-vision
+  - pytorch
+  - onnx
+references:
+  - type: article
+    title: "D-FINE: Redefine Regression Task in DETRs as Fine-grained Distribution Refinement"
+    authors:
+      - family-names: Peng
+        given-names: Yansong
+      - family-names: Li
+        given-names: Hebei
+      - family-names: Wu
+        given-names: Peixi
+      - family-names: Zhang
+        given-names: Yueyi
+      - family-names: Sun
+        given-names: Xiaoyan
+      - family-names: Wu
+        given-names: Feng
+    year: 2024
+    url: "https://arxiv.org/abs/2410.13842"
+    notes: "ICLR 2025 Spotlight. Upstream: https://github.com/Peterande/D-FINE"

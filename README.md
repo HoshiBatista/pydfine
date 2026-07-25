@@ -13,7 +13,15 @@ with an `ultralytics`-style developer experience.
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![PyTorch](https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Paper](https://img.shields.io/badge/arXiv-2410.13842-b31b1b.svg)](https://arxiv.org/abs/2410.13842)
-[![GitHub stars](https://img.shields.io/github/stars/HoshiBatista/pydfine?style=social)](https://github.com/HoshiBatista/pydfine)
+[![GitHub stars](https://img.shields.io/github/stars/HoshiBatista/pydfine?style=social)](https://github.com/HoshiBatista/pydfine/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/HoshiBatista/pydfine?style=social)](https://github.com/HoshiBatista/pydfine/network/members)
+
+[![Open issues](https://img.shields.io/github/issues/HoshiBatista/pydfine)](https://github.com/HoshiBatista/pydfine/issues)
+[![Open PRs](https://img.shields.io/github/issues-pr/HoshiBatista/pydfine)](https://github.com/HoshiBatista/pydfine/pulls)
+[![Contributors](https://img.shields.io/github/contributors/HoshiBatista/pydfine)](https://github.com/HoshiBatista/pydfine/graphs/contributors)
+[![Last commit](https://img.shields.io/github/last-commit/HoshiBatista/pydfine)](https://github.com/HoshiBatista/pydfine/commits/main)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Code of Conduct](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
 📖 **Documentation:** <https://hoshibatista.github.io/pydfine/>
 
@@ -214,6 +222,10 @@ agent that reads `AGENTS.md`). Start here:
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | **Canonical agent guide** — architecture, conventions, workflow, commands, definition of done. Read first. |
 | [`CLAUDE.md`](CLAUDE.md) | Claude Code–specific notes; defers to `AGENTS.md`. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Dev setup, checks that must pass, and PR workflow. |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 — expected behavior. |
+| [`SECURITY.md`](SECURITY.md) | How to report a vulnerability privately. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Notable changes per release (Keep a Changelog). |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How D-FINE works and how we re-shape it into Python. |
 | [`docs/CONFIG_REFERENCE.md`](docs/CONFIG_REFERENCE.md) | Every model parameter, default, and per-size preset. The heart of the "one class, many params" design. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phased, checkbox task plan. |
