@@ -134,3 +134,13 @@ select = ["E", "F", "I", "UP", "B", "W"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# Silence known third-party noise from the legacy TorchScript-based ONNX export
+# path (torch's own deprecations / tracer warnings — not ours). Everything else
+# still surfaces so genuinely new warnings stay visible.
+filterwarnings = [
+    "ignore:.*legacy TorchScript-based ONNX export.*:DeprecationWarning",
+    "ignore:.*torch\\.jit\\..*is deprecated.*:DeprecationWarning",
+    "ignore:The feature will be removed.*:DeprecationWarning",
+    "ignore:.*Constant folding.*:UserWarning",
+    "ignore::torch.jit._trace.TracerWarning",
+]

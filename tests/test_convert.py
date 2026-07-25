@@ -37,7 +37,8 @@ def _make_yolo(root, *, with_yaml=True, val_label=True):
 
 
 def _load(path):
-    return json.loads(open(path).read())
+    with open(path) as f:
+        return json.load(f)
 
 
 def test_layout_and_return(tmp_path):

@@ -124,8 +124,8 @@ def test_save_crop_writes_per_class_crops(tmp_path):
     assert (tmp_path / "person" / "frame.png").exists()
     assert (tmp_path / "car" / "frame.png").exists()
     # crop size matches the box: xyxy [1,1,20,20] → 19x19
-    crop = Image.open(tmp_path / "person" / "frame.png")
-    assert crop.size == (19, 19)
+    with Image.open(tmp_path / "person" / "frame.png") as crop:
+        assert crop.size == (19, 19)
 
 
 def test_save_crop_dedups_same_class(tmp_path):
@@ -152,7 +152,8 @@ def test_save_crop_clips_box_to_image(tmp_path):
         torch.tensor([[90.0, 60.0, 200.0, 200.0]]), torch.tensor([0.9]), torch.tensor([0])
     )
     (path,) = Results(img, boxes, names={0: "person"}).save_crop(tmp_path)
-    assert Image.open(path).size == (6, 4)  # (96-90, 64-60)
+    with Image.open(path) as crop:
+        assert crop.size == (6, 4)  # (96-90, 64-60)
 
 
 def test_summary_detection_layout():
