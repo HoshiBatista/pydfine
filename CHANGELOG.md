@@ -8,6 +8,8 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-26
+
 ### Added
 
 - **Per-epoch validation analytics** — `DFINE.train(val_plots=True)` renders the full
@@ -78,5 +80,6 @@ across roadmap phases 0–6.
 - **CLI** — `dfine models/predict/val/train/export/convert`.
 - **Docs site** (MkDocs Material) and API reference.
 
-[Unreleased]: https://github.com/HoshiBatista/pydfine/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/HoshiBatista/pydfine/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/HoshiBatista/pydfine/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/HoshiBatista/pydfine/releases/tag/v0.0.1

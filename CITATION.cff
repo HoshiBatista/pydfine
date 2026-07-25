@@ -11,8 +11,8 @@ authors:
 url: "https://github.com/HoshiBatista/pydfine"
 repository-code: "https://github.com/HoshiBatista/pydfine"
 license: Apache-2.0
-version: 0.0.1
-date-released: "2026-07-18"
+version: 0.1.0
+date-released: "2026-07-26"
 keywords:
   - object-detection
   - d-fine
