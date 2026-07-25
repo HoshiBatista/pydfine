@@ -41,6 +41,20 @@ Load released COCO weights in one line:
 model = DFINE.from_pretrained("dfine-s")   # resolve + download + strict-load
 ```
 
+## Validate with analytics
+
+Score the COCO metrics and render the diagnostic plots — confusion matrix, P/R/F1-vs-
+confidence curves, per-class AP, and a worst-predictions gallery:
+
+```python
+metrics = model.val(data="coco/", plots=True, output_dir="runs/val")
+print(metrics["AP"])          # primary mAP@[.50:.95]
+# runs/val/{confusion_matrix,pr_curve,f1_curve,p_curve,r_curve}.png + worst/
+```
+
+See [Validation & analytics](api/validation.md) for how to read each plot and pick a
+deployment confidence from the F1 curve.
+
 ## CLI
 
 ```bash
@@ -57,5 +71,5 @@ dfine convert yolo/ coco/          # YOLO dataset -> COCO layout
 - [Architecture](ARCHITECTURE.md) — how the model works + module→param map.
 - [Config reference](CONFIG_REFERENCE.md) — every parameter and per-size preset.
 - **API** — [`DFINE`](api/model.md), [`DFINEConfig`](api/config.md),
-  [`Results`/`Boxes`](api/results.md), [tracking](api/tracking.md),
-  [data & convert](api/data.md), [export](api/export.md).
+  [`Results`/`Boxes`](api/results.md), [validation & analytics](api/validation.md),
+  [tracking](api/tracking.md), [data & convert](api/data.md), [export](api/export.md).

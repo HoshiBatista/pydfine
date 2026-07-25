@@ -64,6 +64,7 @@ nav:
       - DFINE: api/model.md
       - DFINEConfig: api/config.md
       - Results & Boxes: api/results.md
+      - Validation & analytics: api/validation.md
       - Tracking: api/tracking.md
       - Data & convert: api/data.md
       - Export: api/export.md

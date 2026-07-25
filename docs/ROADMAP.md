@@ -206,6 +206,21 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-07-25 — Val analytics: unified IoU-match threshold at 0.5 (consistency fix).** Found
+  during a full-codebase bug sweep: `ConfusionMatrix` defaulted to `iou_thresh=0.45` (the
+  ultralytics default) while its siblings `PRCurveMetrics` and `WorstPredictions` use `0.5`.
+  `evaluate(plots=True)` builds all three with their defaults in one pass, so the confusion
+  matrix counted a TP at IoU≥0.45 while the P/R/F1 curves + worst-frames gallery used ≥0.5 —
+  subtly inconsistent match counts across artifacts in the *same* report. Aligned
+  `ConfusionMatrix` to `0.5` so every analytics artifact matches predictions to GT on the same
+  rule. **Numeric COCO metrics are unaffected** — `AP`/`AR` come from the COCO evaluator's
+  precision tensor, not these classes. No test changes needed (the two default-relying tests
+  used identical boxes / conf-filtered detections). Also silenced a stray
+  `requires_grad=True → scalar` UserWarning in `test_sem_seg_criterion` (detach before the
+  float assert). Committed `725d199` (fix) + `eef0482` (test). New docs page
+  `docs/api/validation.md` (`DFINE.val` + the analytics artifacts, with usage templates) wired
+  into the site nav; the sweep otherwise found no correctness bugs (native ports remain
+  bit-exact parity-tested). Suite 357 passed / 12 skipped.
 - **2026-07-25 — Val analytics III: worst-predictions gallery.** New `WorstPredictions`
   (metrics.py): during `evaluate(plots=True)` it counts each frame's mistakes (class-aware IoU
   matching at 0.5, conf-filtered → FP = spurious detections, FN = missed GT, misclass counts as
