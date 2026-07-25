@@ -6,7 +6,14 @@ with an `ultralytics`-style developer experience.
 
 [![PyPI](https://img.shields.io/pypi/v/pydfine)](https://pypi.org/project/pydfine/)
 [![Python](https://img.shields.io/pypi/pyversions/pydfine.svg)](https://pypi.org/project/pydfine/)
+[![Downloads](https://img.shields.io/pypi/dm/pydfine.svg)](https://pypi.org/project/pydfine/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/HoshiBatista/pydfine/actions/workflows/ci.yml/badge.svg)](https://github.com/HoshiBatista/pydfine/actions/workflows/ci.yml)
+[![Docs](https://github.com/HoshiBatista/pydfine/actions/workflows/docs.yml/badge.svg)](https://hoshibatista.github.io/pydfine/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![PyTorch](https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![Paper](https://img.shields.io/badge/arXiv-2410.13842-b31b1b.svg)](https://arxiv.org/abs/2410.13842)
+[![GitHub stars](https://img.shields.io/github/stars/HoshiBatista/pydfine?style=social)](https://github.com/HoshiBatista/pydfine)
 
 📖 **Documentation:** <https://hoshibatista.github.io/pydfine/>
 
@@ -87,9 +94,23 @@ D-FINE-seg. To train either task on your own data, see the
 
 ## Status
 
-Inference is complete and bit-exact with upstream; the training stack (loop, data,
-augmentation, COCO `val`, multi-GPU DDP, visualization) is in — only `export` remains.
-Done so far:
+**Feature-complete** — every roadmap phase (0–6) is done and the package ships on PyPI.
+Inference is bit-exact with upstream (`max|Δ| = 0` across `n/s/m/l/x`); the full training
+stack (loop, data, augmentation, COCO `val` + analytics, multi-GPU DDP, visualization),
+ONNX `export`, tracking, and detection **+ instance/semantic segmentation** are all in.
+
+| Capability | Entry point | Extra |
+|---|---|---|
+| Config-first model | `DFINE(size=…, num_classes=…)` / `DFINEConfig.preset(…)` | core (torch-free config/CLI) |
+| Predict (image / video) | `model.predict(…)` · `model.predict_video(…)` | `[torch]` · `[video]` |
+| Train (single & multi-GPU) | `model.train(data="coco/", epochs=…, devices=N)` | `[train]` |
+| Validate + analytics | `model.val(data="coco/", plots=True)` | `[train]` |
+| ONNX export | `model.export(format="onnx")` | `[export]` |
+| Object tracking | `model.predict_video(…, tracker="bytetrack")` | `[track]` |
+| Instance / semantic seg | `DFINE(task="instance_seg" \| "sem_seg", …)` | `[hf]` |
+| YOLO → COCO convert | `dfine convert yolo/ coco/` | core |
+
+Highlights:
 
 - **Config-first core** — `DFINEConfig` (every model/training param as a typed field),
   verified `n/s/m/l/x` presets, validation, checkpoint registry, `dfine models` CLI.
@@ -126,8 +147,8 @@ Done so far:
   `images/<split>` + `labels/<split>` layout (and `data.yaml` names) and writes the COCO
   layout with 0-indexed categories that line up with the model's labels.
 
-Only `export` (Phase 3) remains. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full
-status.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full phase-by-phase status and decisions
+log.
 
 ```python
 from dfine import DFINEConfig
@@ -159,8 +180,9 @@ out = decoder(encoder(backbone(torch.randn(1, 3, cfg.imgsz, cfg.imgsz))))
 > evaluation** (`val(data="coco/")` → the 12 named COCO metrics, also run each epoch
 > during `train`), all with the `pydfine[train]` extra. **Multi-GPU** is a single kwarg:
 > `train(data="coco/", devices=N)` spawns one DDP worker per GPU (or launch with
-> `torchrun` and call `train(...)` as usual). `export` is phase-stubbed and raises a
-> clear "arriving in Phase N" until implemented.
+> `torchrun` and call `train(...)` as usual). **ONNX export** is live too —
+> `export(format="onnx")` writes a dynamic-batch graph (`pydfine[export]`), with
+> downstream notes for TensorRT (`trtexec --fp16`) and OpenVINO in the docs.
 
 ## Why this exists
 
@@ -168,6 +190,20 @@ Upstream D-FINE is an excellent research repo, but using it means editing YAML,
 copying config include-trees, and launching scripts. This library turns all of that
 into one importable, fully-typed class with presets — so a developer can go from
 `pip install` to a trained custom detector without touching a config file.
+
+## Documentation
+
+Full docs live at **<https://hoshibatista.github.io/pydfine/>**. Handy jumping-off points:
+
+| Page | What's inside |
+|---|---|
+| [Architecture](docs/ARCHITECTURE.md) | How D-FINE works + the module → parameter map. |
+| [Config reference](docs/CONFIG_REFERENCE.md) | Every typed parameter, default, and per-size preset. |
+| [`DFINE` API](docs/api/model.md) | The one-class façade — `predict` / `train` / `val` / `export`. |
+| [Results & Boxes](docs/api/results.md) | `.boxes` / `.masks` / `.sem_seg` containers + `to_supervision()`. |
+| [Validation & analytics](docs/api/validation.md) | COCO metrics, confusion matrix, P/R/F1 curves, worst-predictions gallery. |
+| [Segmentation training](docs/seg-training.md) | Train instance / semantic seg on your own data. |
+| [Export](docs/api/export.md) | ONNX + TensorRT / OpenVINO deployment notes. |
 
 ## For contributors and AI agents
 
