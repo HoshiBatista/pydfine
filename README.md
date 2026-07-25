@@ -6,13 +6,13 @@ with an `ultralytics`-style developer experience.
 
 [![PyPI](https://img.shields.io/pypi/v/pydfine)](https://pypi.org/project/pydfine/)
 [![Python](https://img.shields.io/pypi/pyversions/pydfine.svg)](https://pypi.org/project/pydfine/)
-[![Downloads](https://img.shields.io/pypi/dm/pydfine.svg)](https://pypi.org/project/pydfine/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/HoshiBatista/pydfine/actions/workflows/ci.yml/badge.svg)](https://github.com/HoshiBatista/pydfine/actions/workflows/ci.yml)
 [![Docs](https://github.com/HoshiBatista/pydfine/actions/workflows/docs.yml/badge.svg)](https://hoshibatista.github.io/pydfine/)
+[![Coverage](https://codecov.io/gh/HoshiBatista/pydfine/branch/main/graph/badge.svg)](https://codecov.io/gh/HoshiBatista/pydfine)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![PyTorch](https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![Paper](https://img.shields.io/badge/arXiv-2410.13842-b31b1b.svg)](https://arxiv.org/abs/2410.13842)
+[![D-FINE paper](https://img.shields.io/badge/D--FINE%20paper-arXiv%202410.13842-b31b1b.svg)](https://arxiv.org/abs/2410.13842)
 [![GitHub stars](https://img.shields.io/github/stars/HoshiBatista/pydfine?style=social)](https://github.com/HoshiBatista/pydfine/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/HoshiBatista/pydfine?style=social)](https://github.com/HoshiBatista/pydfine/network/members)
 

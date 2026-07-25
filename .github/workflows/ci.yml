@@ -16,7 +16,7 @@ permissions:
 
 env:
   # Pin ruff so the lint job, pre-commit, and the dev extra all format identically.
-  RUFF_VERSION: "0.15.21"
+  RUFF_VERSION: "0.16.0"
 
 jobs:
   lint:
@@ -115,3 +115,11 @@ jobs:
         with:
           name: coverage-xml
           path: coverage.xml
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
