@@ -35,6 +35,18 @@ dfine models                        # presets resolve?
 
 All three must be green — CI runs the same checks on Python 3.9–3.13.
 
+### Coverage badge
+
+The README coverage badge is **static** — the number is hard-coded, not auto-generated.
+If a change moves total coverage materially, measure it and update the badge by hand:
+
+```bash
+pytest --cov=dfine -q      # read the TOTAL % from the report
+```
+
+Then edit the `coverage-<N>%25` value in the `[![Coverage]...]` badge near the top of
+[`README.md`](README.md).
+
 ## Ground rules
 
 - **No YAML or registry on the user path.** All options are typed fields on
