@@ -19,6 +19,7 @@ Needs ``pip install pydfine[train]`` (``faster-coco-eval``).
 from __future__ import annotations
 
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -153,14 +154,38 @@ def coco_val_fn(
     device: torch.device,
     *,
     iou_type: str = "bbox",
+    plots: bool = False,
+    plots_dir: str | Path | None = None,
+    names: dict[int, str] | None = None,
 ) -> Callable[[nn.Module, Iterable], dict[str, float]]:
     """Build a ``(module, loader) -> metrics`` closure for ``Trainer.fit(val_fn=…)``.
 
     Captures the ``postprocessor``/``device`` so the trainer can score the (EMA) module
     each epoch: ``trainer.fit(train_loader, val_loader=…, val_fn=coco_val_fn(pp, dev))``.
+
+    With ``plots=True`` the analytics bundle (confusion matrix, P/R/F1 curves, per-class AP,
+    worst-predictions gallery) is also written **every epoch** under
+    ``plots_dir/epoch{N}/`` (``plots_dir`` defaults to ``runs/train/val``), where ``N``
+    counts validation calls from 0 — so each epoch's plots are kept side by side rather than
+    overwritten. ``names`` maps class id → label for the plots. The analytics assume
+    contiguous labels (``remap_mscoco_category=False``).
     """
+    base = Path(plots_dir) if plots_dir is not None else Path("runs/train") / "val"
+    state = {"call": 0}
 
     def _val_fn(module: nn.Module, loader: Iterable) -> dict[str, float]:
-        return evaluate(module, postprocessor, loader, device, iou_type=iou_type)
+        out_dir = str(base / f"epoch{state['call']}") if plots else None
+        metrics = evaluate(
+            module,
+            postprocessor,
+            loader,
+            device,
+            iou_type=iou_type,
+            plots=plots,
+            output_dir=out_dir,
+            names=names,
+        )
+        state["call"] += 1
+        return metrics
 
     return _val_fn

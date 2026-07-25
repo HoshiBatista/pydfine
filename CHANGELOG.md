@@ -10,6 +10,10 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
 
 ### Added
 
+- **Per-epoch validation analytics** — `DFINE.train(val_plots=True)` renders the full
+  analytics bundle (confusion matrix, P/R/F1 curves, per-class AP, worst-predictions
+  gallery) every epoch under `output_dir/val/epoch{N}/`. `coco_val_fn` gained
+  `plots`/`plots_dir`/`names` args. Off by default; detection-only, contiguous labels.
 - **Segmentation** — instance and semantic segmentation behind the same `DFINE(task=...)`
   façade: native mask losses + mask costs in the Hungarian matcher, `SemSegCriterion`
   (CE + soft Dice + `ignore_index`), YOLO-style seg datasets with train/val split, ONNX

@@ -105,6 +105,22 @@ def test_coco_val_fn_closure(tmp_path):
     assert metrics["AP"] == pytest.approx(1.0, abs=1e-6)
 
 
+def test_coco_val_fn_plots_write_per_epoch_dirs(tmp_path):
+    pytest.importorskip("matplotlib")
+    root = _make_val_root(tmp_path)
+    loader = build_coco_val_dataloader(root, imgsz=IMGSZ, batch_size=2, num_workers=0)
+    plots_dir = tmp_path / "run" / "val"
+    fn = coco_val_fn(_IdentityPost(), torch.device("cpu"), plots=True, plots_dir=plots_dir)
+
+    # Two "epochs" — a fresh replay model each call (the cursor is single-pass).
+    for _ in range(2):
+        fn(_ReplayModel(_perfect_predictions(loader)), loader)
+
+    # Each call writes its analytics into its own epoch{N}/ subdir (not overwritten).
+    assert (plots_dir / "epoch0" / "confusion_matrix.png").exists()
+    assert (plots_dir / "epoch1" / "confusion_matrix.png").exists()
+
+
 def test_evaluate_rejects_non_coco_loader():
     class _Plain:
         dataset = object()

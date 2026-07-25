@@ -505,6 +505,7 @@ class DFINE:
         resume: str | os.PathLike | bool | None = None,
         use_wandb: bool = False,
         visualize: bool = True,
+        val_plots: bool = False,
     ):
         """Fine-tune the model (Phase 4).
 
@@ -552,6 +553,14 @@ class DFINE:
         When a ``val_loader`` is available (passed, or auto-built from ``data``) and no
         ``val_fn`` is given, COCO metrics are computed each epoch via
         :func:`~dfine.train.evaluator.coco_val_fn` and logged alongside the loss.
+
+        Pass ``val_plots=True`` to also render the full validation-analytics bundle
+        (confusion matrix, P/R/F1 curves, per-class AP, worst-predictions gallery) **every
+        epoch** under ``output_dir/val/epoch{N}/`` — the same artifacts as
+        ``val(plots=True)``, kept per epoch. Needs matplotlib (the ``[train]`` extra) and
+        contiguous labels; it is ignored (with a warning) when
+        ``remap_mscoco_category=True`` or for ``segment``/``sem_seg`` tasks. Off by default
+        since it adds per-epoch compute and disk.
         """
         from .train.distributed import launched_via_torchrun, setup_distributed
 
@@ -569,6 +578,7 @@ class DFINE:
                 resume=resume,
                 use_wandb=use_wandb,
                 visualize=visualize,
+                val_plots=val_plots,
             )
 
         if launched_via_torchrun():
@@ -590,6 +600,7 @@ class DFINE:
             resume=resume,
             use_wandb=use_wandb,
             visualize=visualize,
+            val_plots=val_plots,
         )
         return self
 
@@ -610,6 +621,7 @@ class DFINE:
         resume=None,
         use_wandb=False,
         visualize=True,
+        val_plots=False,
     ):
         """Build the loaders (if ``data=``) and run the training loop in this process."""
         if data is not None:
@@ -648,6 +660,11 @@ class DFINE:
         if val_loader is not None and val_fn is None:
             if self.config.task in ("segment", "sem_seg"):
                 # seg val: mask AP (segment) or mIoU (sem_seg), scored at loader resolution.
+                if val_plots:
+                    LOGGER.warning(
+                        "val_plots is only supported for detection; ignored for "
+                        f"task={self.config.task!r}."
+                    )
                 from .train.seg_evaluator import seg_val_fn
 
                 val_fn = seg_val_fn(
@@ -660,7 +677,22 @@ class DFINE:
             else:
                 from .train.evaluator import coco_val_fn
 
-                val_fn = coco_val_fn(self.postprocessor, self.device)
+                plots = val_plots
+                if plots and remap_mscoco_category:
+                    # Analytics accumulators assume contiguous 0..N-1 labels; with the
+                    # sparse MS-COCO remap on, pred/GT label spaces disagree.
+                    LOGGER.warning(
+                        "val_plots needs contiguous labels — disabled because "
+                        "remap_mscoco_category=True."
+                    )
+                    plots = False
+                val_fn = coco_val_fn(
+                    self.postprocessor,
+                    self.device,
+                    plots=plots,
+                    plots_dir=Path(output_dir) / "val",
+                    names=self.names,
+                )
 
         from .train import Trainer
 
@@ -701,6 +733,7 @@ class DFINE:
         resume,
         use_wandb,
         visualize,
+        val_plots=False,
     ) -> DFINE:
         """Spawn ``world_size`` DDP workers, then load rank 0's trained weights back."""
         if data is None:
@@ -727,6 +760,7 @@ class DFINE:
             resume=resume,
             use_wandb=use_wandb,
             visualize=visualize,
+            val_plots=val_plots,
         )
         try:
             spawn(_train_worker, world_size, args=(self.config, str(init_ckpt), worker_kwargs))

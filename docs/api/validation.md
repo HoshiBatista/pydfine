@@ -149,7 +149,22 @@ results = model.predict("street.jpg", conf=best_conf)
 model.train(data="coco/", epochs=72)  # val/ split validated each epoch
 ```
 
-To customize, pass your own hook — see [`coco_val_fn`][dfine.train.evaluator.coco_val_fn]:
+To also render the full analytics bundle **every epoch**, pass `val_plots=True` — each
+epoch's confusion matrix, P/R/F1 curves, per-class AP, and worst-predictions gallery are
+written to `output_dir/val/epoch{N}/` (kept side by side, not overwritten):
+
+```python
+model.train(data="coco/", epochs=72, val_plots=True)
+# runs/train/val/epoch0/…, runs/train/val/epoch1/…  (same artifacts as val(plots=True))
+```
+
+!!! note
+    `val_plots` needs matplotlib (the `[train]` extra) and **contiguous** labels — it is
+    skipped with a warning when `remap_mscoco_category=True` or for `segment`/`sem_seg`
+    tasks. It is off by default since it adds per-epoch compute and disk.
+
+To customize, pass your own hook — see [`coco_val_fn`][dfine.train.evaluator.coco_val_fn]
+(which itself takes `plots=`, `plots_dir=`, `names=`):
 
 ```python
 from dfine.train.evaluator import coco_val_fn
