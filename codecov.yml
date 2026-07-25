@@ -1,0 +1,29 @@
+# Codecov configuration — https://docs.codecov.com/docs/codecov-yaml
+# Coverage is measured on the `dfine` package (pytest --cov=dfine) and uploaded from the
+# py3.12 CI test job. Statuses are informational so Codecov never blocks a PR merge.
+
+coverage:
+  precision: 1
+  round: down
+  range: "70...100"
+  status:
+    project:
+      default:
+        target: auto        # compare against the base commit
+        threshold: 1%       # allow a 1% dip without a red status
+        informational: true # report only — never fail CI
+    patch:
+      default:
+        target: 80%         # aim for 80% coverage on changed lines
+        informational: true
+
+# Don't count test/support files toward the coverage total.
+ignore:
+  - "tests/**"
+  - "scripts/**"
+  - "setup.py"
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true      # only comment on PRs that move coverage
