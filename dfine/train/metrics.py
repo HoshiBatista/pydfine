@@ -60,7 +60,7 @@ class ConfusionMatrix:
     one image at a time with :meth:`process_batch`.
     """
 
-    def __init__(self, num_classes: int, conf: float = 0.25, iou_thresh: float = 0.45):
+    def __init__(self, num_classes: int, conf: float = 0.25, iou_thresh: float = 0.5):
         self.nc = int(num_classes)
         self.conf = conf
         self.iou_thresh = iou_thresh
