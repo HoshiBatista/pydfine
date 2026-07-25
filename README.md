@@ -9,7 +9,7 @@ with an `ultralytics`-style developer experience.
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/HoshiBatista/pydfine/actions/workflows/ci.yml/badge.svg)](https://github.com/HoshiBatista/pydfine/actions/workflows/ci.yml)
 [![Docs](https://github.com/HoshiBatista/pydfine/actions/workflows/docs.yml/badge.svg)](https://hoshibatista.github.io/pydfine/)
-[![Coverage](https://codecov.io/gh/HoshiBatista/pydfine/branch/main/graph/badge.svg)](https://codecov.io/gh/HoshiBatista/pydfine)
+[![Coverage](https://img.shields.io/badge/coverage-89%25-green.svg)](https://github.com/HoshiBatista/pydfine/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![PyTorch](https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![D-FINE paper](https://img.shields.io/badge/D--FINE%20paper-arXiv%202410.13842-b31b1b.svg)](https://arxiv.org/abs/2410.13842)
