@@ -52,6 +52,7 @@ train = [
     "matplotlib>=3.6",  # loss_curve.png training-progress plot
     "tqdm>=4.64",  # live training progress bar
     "pyyaml>=6.0",
+    "opencv-python>=4.6",  # rasterize YOLO-Seg polygons to instance masks (segment training)
 ]
 export = [
     "onnx>=1.14",

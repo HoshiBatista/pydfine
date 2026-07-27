@@ -44,6 +44,10 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
 - **Segment ONNX export now fails loudly on a non-focal-loss postprocessor** instead of
   emitting a graph whose declared `masks` output the deploy path never produces. (Guards an
   otherwise-unreachable config — all released D-FINE models use focal loss.)
+- **Instance-seg training no longer crashes on a cryptic `No module named 'cv2'`.** OpenCV
+  (used to rasterize YOLO-Seg polygons into instance masks) is now part of the `[train]`
+  extra — which the segmentation-training guide already documented — and `polygons_to_masks`
+  raises a clear, actionable error if it's somehow still missing.
 
 ## [0.1.0] - 2026-07-26
 

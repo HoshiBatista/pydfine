@@ -95,7 +95,13 @@ def polygons_to_masks(polys_norm: list[np.ndarray], h: int, w: int) -> torch.Ten
     """
     if len(polys_norm) == 0:
         return torch.zeros((0, h, w), dtype=torch.uint8)
-    import cv2
+    try:
+        import cv2
+    except ImportError as e:  # opencv ships with [train], but guard a partial install.
+        raise ImportError(
+            "Instance-seg training rasterizes polygons with OpenCV — install it with "
+            "`pip install pydfine[train]` (or `pip install opencv-python`)."
+        ) from e
 
     scale = np.asarray([w, h], dtype=np.float32)
     masks = np.zeros((len(polys_norm), h, w), dtype=np.uint8)
