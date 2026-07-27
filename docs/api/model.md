@@ -34,9 +34,9 @@ model = DFINE(config=cfg)
 ## Predict
 
 ```python
-results = model.predict("street.jpg", conf=0.4)      # list[Results], one per image
+results = model.predict("street.jpg", conf=0.4)  # list[Results], one per image
 r = results[0]
-r.boxes.xyxy, r.boxes.conf, r.boxes.cls              # tensors, original-image scale
+r.boxes.xyxy, r.boxes.conf, r.boxes.cls  # tensors, original-image scale
 r.save("out.jpg")
 
 # Folders, globs, and lists all work; save flags write a run dir.
@@ -62,15 +62,15 @@ model.export(format="onnx", simplify=True)
 ## Inspect and time
 
 ```python
-model.info(verbose=True)             # layers / params / gradients / GFLOPs
-model.benchmark(runs=100, batch=1)   # {"ms_per_image", "fps", "device", ...}
+model.info(verbose=True)  # layers / params / gradients / GFLOPs
+model.benchmark(runs=100, batch=1)  # {"ms_per_image", "fps", "device", ...}
 ```
 
 ## Video
 
 ```python
-model.predict_video("in.mp4", output="out.mp4", track=True)   # annotated mp4 + IDs
-for r in model.predict_video("in.mp4", stream=True):          # per-frame Results
+model.predict_video("in.mp4", output="out.mp4", track=True)  # annotated mp4 + IDs
+for r in model.predict_video("in.mp4", stream=True):  # per-frame Results
     ...
 ```
 

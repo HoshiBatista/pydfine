@@ -34,14 +34,14 @@ script and adjust.
 ```python
 from dfine import DFINE
 
-model = DFINE.from_pretrained("dfine-s")        # build + download + load, one line
+model = DFINE.from_pretrained("dfine-s")  # build + download + load, one line
 result = model.predict("street.jpg", conf=0.4)[0]
 
-print(result.verbose())                          # "3 persons, 1 car"
+print(result.verbose())  # "3 persons, 1 car"
 for xyxy, conf, cls in result.boxes:
     print(result.names[int(cls)], float(conf), xyxy.tolist())
 
-result.save("out.jpg")                           # annotated copy
+result.save("out.jpg")  # annotated copy
 ```
 
 `from_pretrained` reads the size and class count from the checkpoint name. See
@@ -55,12 +55,12 @@ a list can mix folders, globs, and explicit paths.
 
 ```python
 results = model.predict(
-    "images/",                 # or "images/*.jpg", or ["a.jpg", "b.png", "more/"]
+    "images/",  # or "images/*.jpg", or ["a.jpg", "b.png", "more/"]
     conf=0.3,
-    save=True,                 # annotated images -> runs/detect/predict/
-    save_txt=True,             # YOLO-format labels -> .../labels/
-    save_crop=True,            # per-detection crops -> .../crops/
-    save_conf=True,            # append score to the label rows
+    save=True,  # annotated images -> runs/detect/predict/
+    save_txt=True,  # YOLO-format labels -> .../labels/
+    save_crop=True,  # per-detection crops -> .../crops/
+    save_conf=True,  # append score to the label rows
 )
 print(sum(len(r.boxes) for r in results), "detections total")
 ```
@@ -73,15 +73,15 @@ clobber each other.
 ```python
 r = model.predict("street.jpg")[0]
 
-r.boxes.xyxy      # (N, 4) float tensor, original-image pixels
-r.boxes.conf      # (N,)   scores
-r.boxes.cls       # (N,)   integer class ids
-r.boxes.id        # (N,) track ids after predict_video(track=True), else None
-r.names           # {id: name} mapping
-len(r.boxes)      # detection count
+r.boxes.xyxy  # (N, 4) float tensor, original-image pixels
+r.boxes.conf  # (N,)   scores
+r.boxes.cls  # (N,)   integer class ids
+r.boxes.id  # (N,) track ids after predict_video(track=True), else None
+r.names  # {id: name} mapping
+len(r.boxes)  # detection count
 
-img = r.plot()                     # HxWx3 uint8 RGB ndarray (annotated)
-r.save("out.jpg")                  # plot + write
+img = r.plot()  # HxWx3 uint8 RGB ndarray (annotated)
+r.save("out.jpg")  # plot + write
 r.save_txt("out.txt", save_conf=True)
 r.save_crop("crops/", file_name="street.jpg")
 ```
@@ -108,7 +108,7 @@ from dfine import DFINE
 
 model = DFINE(size="l", num_classes=80, imgsz=640)
 model.train(
-    data="coco/",              # train/ + val/ + annotations/instances_{train,val}.json
+    data="coco/",  # train/ + val/ + annotations/instances_{train,val}.json
     epochs=72,
     batch_size=8,
     output_dir="runs/train",
@@ -136,7 +136,7 @@ model's labels.
 ```python
 from dfine import DFINE, yolo_to_coco
 
-written = yolo_to_coco("yolo/", "coco/")     # {"train": ".../instances_train.json", ...}
+written = yolo_to_coco("yolo/", "coco/")  # {"train": ".../instances_train.json", ...}
 
 model = DFINE(size="s", num_classes=3, imgsz=640)
 model.train(data="coco/", epochs=100)
@@ -178,8 +178,8 @@ deployment confidence from the F1 curve.
 ```python
 model = DFINE.from_pretrained("dfine-s")
 
-onnx = model.export(format="onnx", simplify=True)      # dynamic batch by default
-ts = model.export(format="torchscript")                # torch-only, fixed batch/imgsz
+onnx = model.export(format="onnx", simplify=True)  # dynamic batch by default
+ts = model.export(format="torchscript")  # torch-only, fixed batch/imgsz
 ```
 
 The graph fuses the postprocessor: it takes `(images, orig_target_sizes)` and returns
@@ -188,7 +188,8 @@ from the ONNX:
 
 ```python
 from dfine.export import tensorrt_command
-print(tensorrt_command(onnx, fp16=True))               # trtexec ... --fp16
+
+print(tensorrt_command(onnx, fp16=True))  # trtexec ... --fp16
 ```
 
 ## Fully custom architecture
@@ -227,14 +228,14 @@ original image scale. Needs `pydfine[hf]`.
 # Instance segmentation — masks + boxes (dfine-seg-{n,s,m,l,x})
 model = DFINE.from_pretrained("dfine-seg-l")
 r = model.predict("street.jpg", conf=0.4)[0]
-r.boxes.xyxy      # (N, 4) original-scale boxes
-r.masks.data      # (N, H, W) bool masks, 1:1 with boxes
-r.plot()          # boxes + per-instance mask overlays
+r.boxes.xyxy  # (N, 4) original-scale boxes
+r.masks.data  # (N, H, W) bool masks, 1:1 with boxes
+r.plot()  # boxes + per-instance mask overlays
 
 # Semantic segmentation — dense label map, no boxes
 model = DFINE(size="l", task="sem_seg", num_classes=19)
 r = model.predict("street.jpg")[0]
-r.sem_seg.data    # (H, W) uint8 class ids (255 = void)
+r.sem_seg.data  # (H, W) uint8 class ids (255 = void)
 ```
 
 To train either task on your own data, see the
@@ -245,8 +246,8 @@ To train either task on your own data, see the
 ```python
 model = DFINE.from_pretrained("dfine-s")
 
-model.info(verbose=True)     # layers / params / gradients / GFLOPs + per-module split
-model.benchmark(runs=100, batch=1)   # {"ms_per_image", "fps", "device", ...}
+model.info(verbose=True)  # layers / params / gradients / GFLOPs + per-module split
+model.benchmark(runs=100, batch=1)  # {"ms_per_image", "fps", "device", ...}
 ```
 
 `benchmark` times the compute-bound model forward (the postprocessor is excluded).
@@ -256,7 +257,7 @@ GFLOPs need `thop` installed.
 
 ```python
 r = model.predict("street.jpg")[0]
-detections = r.to_supervision()      # supervision.Detections (needs pydfine[interop])
+detections = r.to_supervision()  # supervision.Detections (needs pydfine[interop])
 ```
 
 Use it with the [`supervision`](https://supervision.roboflow.com/) annotators, zones, and
