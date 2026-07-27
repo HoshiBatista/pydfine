@@ -8,6 +8,25 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
 
 ## [Unreleased]
 
+### Added
+
+- **Examples cookbook** ([`docs/examples.md`](docs/examples.md)) — task-oriented recipes
+  covering predict / batch / video+tracking / train (COCO & YOLO) / fine-tune / validate /
+  export / custom architecture / segmentation / benchmark, plus CLI equivalents.
+- **Runnable templates** ([`templates/`](templates/)) — 11 copy-paste, `argparse`-driven
+  scripts (one per workflow) using only the public API, with a README index.
+- Fleshed out the previously-stub [`docs/api/data.md`](docs/api/data.md) (YOLO→COCO layout,
+  class/split resolution) and [`docs/api/model.md`](docs/api/model.md) (build/predict/
+  train/val/export usage).
+
+### Fixed
+
+- **`yolo_to_coco` no longer silently drops splits for Roboflow/Ultralytics datasets.**
+  Split detection now reads the `train`/`val`/`test` paths declared in `data.yaml`
+  (resolving the common `../valid/images` form) before falling back to folder conventions,
+  which now accept `valid`/`validation` as val-split aliases. A `data.yaml`-declared split
+  that can't be located, or a missing `val` split, now warns instead of being dropped.
+
 ## [0.1.0] - 2026-07-26
 
 ### Added
