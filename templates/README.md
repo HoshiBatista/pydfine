@@ -5,6 +5,9 @@ script** with an `argparse` CLI — grab one, adjust the defaults, and go. They 
 the public API (`from dfine import DFINE, DFINEConfig, yolo_to_coco`), so nothing here
 reaches into internals.
 
+Every script is executed end-to-end in CI (`tests/test_templates.py`, on a tiny offline
+nano model), so a template that breaks fails the build — the code here stays runnable.
+
 ```bash
 pip install pydfine[torch]          # inference templates
 pip install pydfine[train]          # training / validation templates
