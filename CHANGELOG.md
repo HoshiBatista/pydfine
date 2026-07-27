@@ -38,6 +38,9 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
   OpenCV.** Mask-polygon export now degrades to the box corners (with a one-time warning)
   when OpenCV isn't installed, instead of raising `ImportError` — so `predict(save_txt=True)`
   on a `dfine-seg-*` model works with just the `[hf]` extra.
+- **`DFINEConfig` rejects an `imgsz` that isn't a multiple of the largest feature stride
+  (32) at construction**, with a clear message, instead of building and then crashing deep
+  in the forward pass with a cryptic tensor-shape error.
 
 ## [0.1.0] - 2026-07-26
 

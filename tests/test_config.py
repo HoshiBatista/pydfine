@@ -112,11 +112,20 @@ def test_from_yaml_non_mapping_raises():
         {"reg_scale": 0},
         {"decoder_layers": 3, "eval_idx": 5},
         {"use_encoder_idx": [9]},
+        {"imgsz": 100},  # not a multiple of the largest feat stride (32)
+        {"imgsz": 336},
     ],
 )
 def test_validation_rejects(kwargs):
     with pytest.raises(ValueError):
         DFINEConfig(**kwargs)
+
+
+def test_imgsz_must_be_multiple_of_stride():
+    with pytest.raises(ValueError, match="multiple of 32"):
+        DFINEConfig(imgsz=640 + 16)
+    # a valid multiple builds fine
+    assert DFINEConfig(imgsz=512).imgsz == 512
 
 
 def test_length_consistency_holds_for_all_presets():

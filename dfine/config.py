@@ -268,6 +268,14 @@ class DFINEConfig:
         for name in ("hidden_dim", "num_queries", "reg_max", "imgsz", "batch"):
             if getattr(self, name) < 1:
                 raise ValueError(f"{name} must be >= 1, got {getattr(self, name)}.")
+        stride = max(self.feat_strides)
+        if self.imgsz % stride != 0:
+            # The backbone downsamples by up to `stride`; a non-multiple imgsz otherwise
+            # builds fine but crashes deep in the forward with a cryptic shape mismatch.
+            raise ValueError(
+                f"imgsz must be a multiple of {stride} (the largest feature stride), "
+                f"got {self.imgsz}."
+            )
         if self.reg_scale <= 0:
             raise ValueError(f"reg_scale must be > 0, got {self.reg_scale}.")
         if not 0.0 <= self.conf <= 1.0:
