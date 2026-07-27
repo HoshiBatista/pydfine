@@ -102,6 +102,58 @@ def test_wrap_loader_distributed_shards_and_set_epoch(gloo_group):
     dloader.set_epoch(3)  # forwarded to the sampler, must not raise
 
 
+def test_segment_trainer_enables_find_unused_under_ddp(gloo_group, tmp_path):
+    # Regression: the instance-segment mask head only runs on batches with GT masks, so an
+    # all-background batch leaves it gradient-free. Under DDP that raises unless
+    # find_unused_parameters is set — the Trainer must enable it for task="segment". Two
+    # mask-less batches are needed because DDP reports the unused params on the *next* iteration.
+    pytest.importorskip("scipy")
+    from dfine import DFINEConfig
+    from dfine.backends.native import DFINE as NativeDFINE
+    from dfine.train.trainer import Trainer, train_one_epoch
+
+    imgsz = 320
+    cfg = DFINEConfig.preset(
+        "n",
+        imgsz=imgsz,
+        backbone_pretrained=False,
+        freeze_norm=False,
+        freeze_at=-1,
+        task="segment",
+        num_denoising=0,
+    )
+    trainer = Trainer(
+        NativeDFINE.from_config(cfg),
+        cfg,
+        device=torch.device("cpu"),
+        output_dir=str(tmp_path),
+        use_ema=False,
+        visualize=False,
+    )
+    assert isinstance(trainer.model, DDP)
+    assert trainer.model.find_unused_parameters is True  # wired on for segment
+
+    samples = torch.rand(1, 3, imgsz, imgsz)
+    empty = [
+        {
+            "labels": torch.zeros(0, dtype=torch.int64),
+            "boxes": torch.zeros(0, 4),
+            "masks": torch.zeros(0, imgsz, imgsz, dtype=torch.uint8),
+        }
+    ]
+    batches = [(samples, empty), (samples.clone(), empty)]
+    # Must not raise "Expected to have finished reduction in the prior iteration ...".
+    train_one_epoch(
+        trainer.model,
+        trainer.criterion,
+        batches,
+        trainer.optimizer,
+        torch.device("cpu"),
+        0,
+        print_freq=1000,
+    )
+
+
 @pytest.mark.skipif(
     os.environ.get("DFINE_TEST_MULTIGPU") != "1",
     reason="set DFINE_TEST_MULTIGPU=1 to run the 2-process CPU/gloo spawn end-to-end",

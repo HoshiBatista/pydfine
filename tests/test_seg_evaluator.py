@@ -58,6 +58,40 @@ def test_confusion_matrix_rejects_out_of_range_class():
         cm.update(torch.tensor([0, 1]), torch.tensor([0, 5]))
 
 
+def test_confusion_matrix_compute_all_reduces_under_ddp(monkeypatch):
+    # Under DDP the confusion matrix must be summed across ranks so mIoU covers the whole val
+    # set, not just this rank's shard. Exercise the all-reduce path with a real 1-process gloo
+    # group (all_reduce over one rank leaves the counts unchanged) so compute() stays correct.
+    import socket
+
+    import torch.distributed as dist
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    dist.init_process_group("gloo", init_method=f"tcp://127.0.0.1:{port}", rank=0, world_size=1)
+    try:
+        monkeypatch.setattr(dist, "get_world_size", lambda *a, **k: 2)  # force the reduce branch
+        # Spy on all_reduce: with only 1 real rank the sum is a no-op, so assert it is *called*
+        # (that's what actually makes the score span all ranks under real multi-GPU).
+        calls = {"n": 0}
+        real_all_reduce = dist.all_reduce
+
+        def spy(t, *a, **k):
+            calls["n"] += 1
+            return real_all_reduce(t, *a, **k)
+
+        monkeypatch.setattr(dist, "all_reduce", spy)
+        cm = SemSegConfusionMatrix(num_classes=2, ignore_index=255)
+        cm.update(torch.tensor([0, 0, 1, 1]), torch.tensor([0, 1, 1, 1]))
+        m = cm.compute()
+        assert calls["n"] == 1  # compute() summed the confusion matrix across ranks
+        assert abs(m["mIoU"] - (0.5 + 2 / 3) / 2) < 1e-4  # IoU_0=1/2, IoU_1=2/3
+        assert cm.cm.sum().item() == 4  # running matrix untouched by the reduce (worked on a copy)
+    finally:
+        dist.destroy_process_group()
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA for the device-mix path")
 def test_confusion_matrix_update_accepts_cuda_tensors():
     # During training pred/gt come off a CUDA model while self.cm lives on CPU; update()

@@ -85,6 +85,20 @@ def evaluate(
     from faster_coco_eval.utils.pytorch import FasterCocoEvaluator
 
     evaluator = FasterCocoEvaluator(_coco_gt(data_loader), [iou_type])
+
+    # Analytics plots (confusion matrix / PR curves / worst frames) accumulate locally per
+    # process, so under multi-GPU each rank sees only its data shard AND every rank would race
+    # writing the same PNGs. Disable them there; the COCO metrics below are still gathered
+    # across ranks by FasterCocoEvaluator and remain correct.
+    from .distributed import get_world_size
+
+    if plots and get_world_size() > 1:
+        LOGGER.warning(
+            "val analytics plots are disabled under multi-GPU (per-rank shards would be partial "
+            "and ranks would race writing the same files); COCO metrics are unaffected."
+        )
+        plots = False
+
     cm = prm = worst = None
     if plots:
         from .metrics import ConfusionMatrix, PRCurveMetrics, WorstPredictions

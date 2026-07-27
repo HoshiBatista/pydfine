@@ -34,6 +34,26 @@ __all__ = [
 ]
 
 
+def _all_reduce_confusion(cm: torch.Tensor) -> torch.Tensor:
+    """Sum a CPU confusion matrix across DDP ranks (no-op single-process).
+
+    Copies so the caller's running matrix is untouched. NCCL can't reduce CPU tensors, so for
+    that backend the buffer is moved to the current CUDA device and the result brought back.
+    """
+    import torch.distributed as dist
+
+    if not (dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1):
+        return cm
+    dev = (
+        torch.device("cuda", torch.cuda.current_device())
+        if dist.get_backend() == "nccl"
+        else torch.device("cpu")
+    )
+    buf = cm.to(dev)
+    dist.all_reduce(buf)
+    return buf.to("cpu")
+
+
 class SemSegConfusionMatrix:
     """Streaming ``[C, C]`` pixel confusion matrix (rows = GT, cols = pred) for mIoU.
 
@@ -63,8 +83,12 @@ class SemSegConfusionMatrix:
         self.cm += cm.reshape(self.num_classes, self.num_classes)
 
     def compute(self) -> dict[str, float]:
-        """Return ``{"mIoU", "pixel_acc"}`` (mIoU averaged over classes present in GT)."""
-        cm = self.cm.double()
+        """Return ``{"mIoU", "pixel_acc"}`` (mIoU averaged over classes present in GT).
+
+        Under multi-GPU the per-rank confusion matrix is all-reduced first, so the score
+        reflects the whole val set rather than just this rank's shard.
+        """
+        cm = _all_reduce_confusion(self.cm).double()
         diag = cm.diag()
         union = cm.sum(1) + cm.sum(0) - diag
         present = cm.sum(1) > 0  # classes with GT pixels

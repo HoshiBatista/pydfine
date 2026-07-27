@@ -41,6 +41,18 @@ _ENC_DEC_NORM = r"^(?=.*(?:encoder|decoder))(?=.*(?:norm|bn)).*$"
 _ENC_DEC_NORM_BIAS = r"^(?=.*(?:encoder|decoder))(?=.*(?:norm|bn|bias)).*$"
 
 
+def _ddp_find_unused(cfg) -> bool:
+    """Whether DDP must be told to expect gradient-free params.
+
+    The instance-segment mask head only runs on batches that carry GT masks (the decoder's
+    ``_should_do_masks`` gate), so an all-background batch leaves ``mask_head``/``mask_decoder``
+    gradient-free — and ``DistributedDataParallel`` errors unless ``find_unused_parameters`` is
+    set. ``detect``/``sem_seg`` exercise every head every step, so they only opt in via the
+    explicit config flag.
+    """
+    return bool(getattr(cfg, "find_unused_parameters", False)) or cfg.task == "segment"
+
+
 def build_param_groups(model: nn.Module, cfg) -> list[dict]:
     """AdamW param groups: backbone LR, zero-WD norms, base for the rest.
 
@@ -227,7 +239,7 @@ class Trainer:
             self.module,
             device=self.device,
             sync_bn=cfg.sync_bn,
-            find_unused_parameters=cfg.find_unused_parameters,
+            find_unused_parameters=_ddp_find_unused(cfg),
         )
 
         self.output_dir = Path(output_dir)

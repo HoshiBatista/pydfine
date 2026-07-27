@@ -121,6 +121,29 @@ def test_coco_val_fn_plots_write_per_epoch_dirs(tmp_path):
     assert (plots_dir / "epoch1" / "confusion_matrix.png").exists()
 
 
+def test_evaluate_skips_plots_under_multigpu(tmp_path, monkeypatch):
+    # Under multi-GPU the analytics accumulators only see this rank's shard and every rank
+    # races writing the same PNGs — evaluate() must skip the plots (COCO metrics, gathered by
+    # FasterCocoEvaluator, stay correct). Pretend we're in a 2-rank group.
+    pytest.importorskip("matplotlib")
+    import dfine.train.distributed as D
+
+    monkeypatch.setattr(D, "get_world_size", lambda: 2)
+    root = _make_val_root(tmp_path)
+    loader = build_coco_val_dataloader(root, imgsz=IMGSZ, batch_size=2, num_workers=0)
+    out_dir = tmp_path / "val_out"
+    metrics = evaluate(
+        _ReplayModel(_perfect_predictions(loader)),
+        _IdentityPost(),
+        loader,
+        torch.device("cpu"),
+        plots=True,
+        output_dir=str(out_dir),
+    )
+    assert metrics["AP"] == pytest.approx(1.0, abs=1e-6)  # metrics unaffected
+    assert not (out_dir / "confusion_matrix.png").exists()  # analytics skipped, no write race
+
+
 def test_evaluate_rejects_non_coco_loader():
     class _Plain:
         dataset = object()
