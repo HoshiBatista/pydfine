@@ -798,7 +798,8 @@ class DFINE:
 
         With ``plots=True`` also writes a confusion matrix + precision–recall curves and
         logs the per-class AP table under ``output_dir`` (default ``runs/val``); needs
-        matplotlib (the ``[train]`` extra). The confusion matrix assumes contiguous labels.
+        matplotlib (the ``[train]`` extra). The confusion matrix assumes contiguous labels,
+        so ``plots`` is ignored (with a warning) when ``remap_mscoco_category=True``.
         """
         if data is None and val_loader is None:
             raise ValueError("Provide validation data via `data=` or `val_loader=`.")
@@ -814,6 +815,16 @@ class DFINE:
                 num_workers=num_workers,
                 remap_mscoco_category=remap_mscoco_category,
             )
+
+        if plots and remap_mscoco_category:
+            # The analytics (confusion matrix / per-class AP) assume contiguous 0..N-1 labels;
+            # with the sparse MS-COCO remap the GT label space disagrees, so the plots would be
+            # silently wrong. Mirror DFINE.train's guard and skip them (COCO metrics unaffected).
+            LOGGER.warning(
+                "val(plots=True) needs contiguous labels — plots disabled because "
+                "remap_mscoco_category=True (COCO metrics are unaffected)."
+            )
+            plots = False
 
         from .train.evaluator import evaluate
 

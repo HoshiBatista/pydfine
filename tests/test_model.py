@@ -275,6 +275,43 @@ def test_val_plots_writes_analytics(tmp_path):
     assert (out / "worst").is_dir() and any((out / "worst").glob("*.jpg"))
 
 
+def test_val_plots_disabled_under_remap(tmp_path):
+    # The confusion matrix assumes contiguous labels; with remap_mscoco_category=True the GT
+    # label space is sparse, so the analytics would be silently wrong. val() must skip them
+    # (and warn) just like DFINE.train does — while still returning the COCO metrics.
+    pytest.importorskip("faster_coco_eval")
+    pytest.importorskip("matplotlib")
+    import io
+    import logging
+
+    from dfine.train.evaluator import COCO_STAT_NAMES
+    from tests.test_dataset import _write_split
+
+    _write_split(tmp_path / "val", tmp_path / "annotations" / "instances_val.json", ((200, 150),))
+    m = DFINE(size="n", imgsz=IMGSZ, backbone_pretrained=False)
+    out = tmp_path / "valrun"
+
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    dfine_logger = logging.getLogger("dfine")
+    dfine_logger.addHandler(handler)
+    try:
+        metrics = m.val(
+            data=str(tmp_path),
+            batch_size=1,
+            num_workers=0,
+            plots=True,
+            remap_mscoco_category=True,
+            output_dir=str(out),
+        )
+    finally:
+        dfine_logger.removeHandler(handler)
+
+    assert set(metrics) == set(COCO_STAT_NAMES)  # metrics still returned
+    assert "plots disabled" in buf.getvalue()  # and the guard warned
+    assert not (out / "confusion_matrix.png").exists()  # no silently-wrong plot written
+
+
 def test_train_requires_data_or_loader():
     m = _model()
     with pytest.raises(ValueError, match="data=|train_loader="):
