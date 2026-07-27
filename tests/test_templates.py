@@ -326,7 +326,17 @@ CASES = [
 ]
 
 
-@pytest.mark.parametrize("case", CASES, ids=[c[0] for c in CASES])
+# The training templates run a real (tiny) fit + val, so they're heavy — mark them `slow`
+# so the default `pytest` stays fast; CI runs them in a dedicated `-m slow` step.
+_SLOW = {"train_coco", "train_from_yolo", "finetune", "train_seg_instance", "train_seg_semantic"}
+
+
+def _case_param(case):
+    marks = (pytest.mark.slow,) if case[0] in _SLOW else ()
+    return pytest.param(case, id=case[0], marks=marks)
+
+
+@pytest.mark.parametrize("case", [_case_param(c) for c in CASES])
 def test_template_runs(case, tiny, tmp_path, monkeypatch):
     _id, script, argv, needs, assets = case
     for mod in needs:

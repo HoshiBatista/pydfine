@@ -108,7 +108,13 @@ jobs:
             --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --no-cache-dir -e ".[dev]"
       - name: Run tests with coverage
+        # The default addopts deselect `-m slow`, so this is the fast suite. Coverage of the
+        # `dfine` package is unaffected — the slow tests only re-exercise template scripts.
         run: pytest -q --cov=dfine --cov-report=term-missing --cov-report=xml
+      - name: Run slow tests (template training end-to-end)
+        # The heavy template fits/vals, gated behind `-m slow`; kept out of the coverage run
+        # so it stays fast, but still guarded on every Python version.
+        run: pytest -m slow
       - name: Upload coverage XML
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v7

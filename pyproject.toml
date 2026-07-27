@@ -134,7 +134,12 @@ select = ["E", "F", "I", "UP", "B", "W"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# Deselect `slow` tests by default (the heavy end-to-end template training runs); run them
+# explicitly with `pytest -m slow`. CI runs both, in separate steps.
+addopts = "-q -m 'not slow'"
+markers = [
+    "slow: heavy end-to-end tests (template training runs) — deselected by default, run with `-m slow`",
+]
 # Silence known third-party noise from the legacy TorchScript-based ONNX export
 # path (torch's own deprecations / tracer warnings — not ours). Everything else
 # still surfaces so genuinely new warnings stay visible.
