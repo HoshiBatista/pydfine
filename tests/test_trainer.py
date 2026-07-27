@@ -434,6 +434,43 @@ def test_visualizer_tb_logdir(tmp_path):
     v.close()
 
 
+@pytest.mark.parametrize(
+    "metric_key, value",
+    [("AP", 0.42), ("mAP_50_95_mask", 0.31), ("mIoU", 0.77)],
+)
+def test_loss_curve_panel_tracks_task_primary_metric(tmp_path, metric_key, value):
+    # The progress curve's second panel must follow the task's primary metric — detection AP,
+    # instance-seg mask AP, or sem_seg mIoU — not just "AP", so seg runs get a metric panel too.
+    pytest.importorskip("matplotlib")
+    from dfine.train.visualizer import TrainingVisualizer
+
+    v = TrainingVisualizer(tmp_path, use_tensorboard=False, plot=True)
+    v.log_step(0, total_loss=1.0, lrs=[1e-4], loss_dict={"loss": 1.0})
+    v.log_epoch(0, {"loss": 1.0}, {metric_key: value})
+
+    assert v._metric_key == metric_key  # locked onto this task's metric
+    assert v._epoch_metric == [value]
+    assert (tmp_path / "loss_curve.png").exists()  # the metric panel rendered
+    v.close()
+
+
+def test_loss_curve_panel_ignores_metricless_and_foreign_keys(tmp_path):
+    # A val dict without any known primary metric (or from a different task once locked) must
+    # not pollute the tracked series.
+    pytest.importorskip("matplotlib")
+    from dfine.train.visualizer import TrainingVisualizer
+
+    v = TrainingVisualizer(tmp_path, use_tensorboard=False, plot=True)
+    v.log_step(0, total_loss=1.0, lrs=[1e-4], loss_dict={"loss": 1.0})
+    v.log_epoch(0, {"loss": 1.0}, {"pixel_acc": 0.9})  # no primary metric present
+    assert v._metric_key is None and v._epoch_metric == []
+
+    v.log_epoch(1, {"loss": 0.9}, {"mIoU": 0.5})  # locks onto mIoU
+    v.log_epoch(2, {"loss": 0.8}, {"AP": 0.6})  # foreign key ignored after lock
+    assert v._metric_key == "mIoU" and v._epoch_metric == [0.5]
+    v.close()
+
+
 def test_tensorboard_hint_logged_before_train(tmp_path):
     import io
     import logging

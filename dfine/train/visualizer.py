@@ -16,6 +16,16 @@ from pathlib import Path
 
 __all__ = ["TrainingVisualizer"]
 
+# Primary validation metric per task, highest priority first — the one drawn on the
+# progress curve's second panel. Mirrors the Trainer's best-checkpoint metric selection
+# (detection AP / instance-seg mask AP / semantic-seg mIoU); keep the two in sync.
+_PRIMARY_METRIC_KEYS = ("AP", "mAP_50_95_mask", "mIoU")
+_METRIC_LABELS = {
+    "AP": ("val AP@[.50:.95]", "validation mAP"),
+    "mAP_50_95_mask": ("val mask AP@[.50:.95]", "validation mask mAP"),
+    "mIoU": ("val mIoU", "validation mIoU"),
+}
+
 
 class TrainingVisualizer:
     """Fan training scalars out to TensorBoard, a loss-curve PNG, and optional wandb.
@@ -44,7 +54,8 @@ class TrainingVisualizer:
         self._steps: list[int] = []
         self._losses: list[float] = []
         self._epoch_x: list[int] = []
-        self._epoch_ap: list[float] = []
+        self._epoch_metric: list[float] = []
+        self._metric_key: str | None = None  # locked to the task's primary metric on first val
 
         self.writer = None
         if use_tensorboard:
@@ -98,7 +109,12 @@ class TrainingVisualizer:
     def log_epoch(
         self, epoch: int, train_stats: dict[str, float], metrics: dict[str, float] | None = None
     ) -> None:
-        """Record end-of-epoch train averages + optional validation metrics."""
+        """Record end-of-epoch train averages + optional validation metrics.
+
+        The progress curve's second panel tracks the task's primary validation metric —
+        detection ``AP``, instance-seg ``mAP_50_95_mask``, or sem_seg ``mIoU`` — locked to
+        whichever appears first so a run always plots the right score, not just detection AP.
+        """
         if self.writer is not None:
             for k, v in train_stats.items():
                 self.writer.add_scalar(f"Epoch/train_{k}", v, epoch)
@@ -109,11 +125,21 @@ class TrainingVisualizer:
             payload.update({f"metrics/{k}": v for k, v in (metrics or {}).items()})
             payload["epoch"] = epoch
             self.wandb.log(payload)
-        if metrics and "AP" in metrics:
-            self._epoch_x.append(epoch)
-            self._epoch_ap.append(metrics["AP"])
+        key = self._primary_metric_key(metrics)
+        if key is not None:
+            self._metric_key = self._metric_key or key
+            if key == self._metric_key:  # ignore a stray other-task key mid-run
+                self._epoch_x.append(epoch)
+                self._epoch_metric.append(metrics[key])
         if self.plot:
             self._draw()
+
+    @staticmethod
+    def _primary_metric_key(metrics: dict[str, float] | None) -> str | None:
+        """The task's primary validation metric present in ``metrics`` (by priority), else None."""
+        if not metrics:
+            return None
+        return next((k for k in _PRIMARY_METRIC_KEYS if k in metrics), None)
 
     def _draw(self) -> None:
         try:
@@ -127,8 +153,8 @@ class TrainingVisualizer:
             return
         if not self._steps:
             return
-        has_ap = bool(self._epoch_x)
-        nrows = 2 if has_ap else 1
+        has_metric = bool(self._epoch_x)
+        nrows = 2 if has_metric else 1
         fig, axes = plt.subplots(nrows, 1, figsize=(8, 3.0 * nrows), squeeze=False)
         loss_ax = axes[0][0]
         loss_ax.plot(self._steps, self._losses, color="tab:blue", lw=1.2)
@@ -136,13 +162,16 @@ class TrainingVisualizer:
         loss_ax.set_ylabel("total loss")
         loss_ax.set_title("train loss")
         loss_ax.grid(alpha=0.3)
-        if has_ap:
-            ap_ax = axes[1][0]
-            ap_ax.plot(self._epoch_x, self._epoch_ap, "o-", color="tab:red", lw=1.2)
-            ap_ax.set_xlabel("epoch")
-            ap_ax.set_ylabel("val AP50:95")
-            ap_ax.set_title("validation mAP")
-            ap_ax.grid(alpha=0.3)
+        if has_metric:
+            ylabel, title = _METRIC_LABELS.get(
+                self._metric_key, ("val metric", "validation metric")
+            )
+            metric_ax = axes[1][0]
+            metric_ax.plot(self._epoch_x, self._epoch_metric, "o-", color="tab:red", lw=1.2)
+            metric_ax.set_xlabel("epoch")
+            metric_ax.set_ylabel(ylabel)
+            metric_ax.set_title(title)
+            metric_ax.grid(alpha=0.3)
         fig.suptitle("D-FINE training progress")
         fig.tight_layout()
         fig.savefig(self.output_dir / "loss_curve.png", dpi=110)
