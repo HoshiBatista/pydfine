@@ -170,16 +170,29 @@ def test_valid_folder_alias_without_yaml(tmp_path):
     assert set(written) == {"train", "val"}
 
 
-def test_missing_val_split_warns(tmp_path, caplog):
+def test_missing_val_split_warns(tmp_path):
     """Only a train split present -> loud warning instead of silent drop."""
+    import io
+    import logging
+
     root = tmp_path / "yolo"
     (root / "images/train").mkdir(parents=True)
     Image.new("RGB", (100, 100)).save(root / "images/train/a.jpg")
 
-    with caplog.at_level("WARNING"):
+    # convert logs under the "dfine" logger, whose propagate=False (set once dfine.log is
+    # imported by any other test) hides it from pytest's root-attached caplog. Capture from
+    # a handler on the "dfine" logger — it still receives the "dfine.convert" child records —
+    # matching test_log.py::test_logger_emits_message, so the check is import-order-agnostic.
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    dfine_logger = logging.getLogger("dfine")
+    dfine_logger.addHandler(handler)
+    try:
         written = yolo_to_coco(root, tmp_path / "coco", class_names=["x"])
+    finally:
+        dfine_logger.removeHandler(handler)
     assert set(written) == {"train"}
-    assert "no validation split found" in caplog.text
+    assert "no validation split found" in buf.getvalue()
 
 
 def test_out_of_bounds_box_is_clipped(tmp_path):
