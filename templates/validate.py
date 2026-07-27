@@ -41,7 +41,8 @@ def main() -> None:
         output_dir=args.output_dir,
     )
 
-    for key in ("AP", "AP50", "AP75", "APsmall", "APmedium", "APlarge"):
+    # Keys are the COCO_STAT_NAMES the evaluator returns (note the underscores).
+    for key in ("AP", "AP50", "AP75", "AP_small", "AP_medium", "AP_large"):
         print(f"  {key:<10} {metrics[key]:.4f}")
     if args.plots:
         print(f"analytics -> {args.output_dir}/ (confusion_matrix, pr_curve, f1_curve, worst/)")

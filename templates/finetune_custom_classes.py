@@ -29,6 +29,7 @@ def main() -> None:
     ap.add_argument("--epochs", type=int, default=48, help="fine-tune epochs")
     ap.add_argument("--batch-size", type=int, default=8, help="per-step batch size")
     ap.add_argument("--imgsz", type=int, default=640, help="training resolution")
+    ap.add_argument("--predict", default=None, help="optional image to run + save after training")
     args = ap.parse_args()
 
     # num_classes defines the head; class_names must match it and gives readable labels.
@@ -47,7 +48,9 @@ def main() -> None:
     print(f"AP={metrics['AP']:.4f}  AP50={metrics['AP50']:.4f}")
 
     # Trained weights are live on `model`; best.pth/last.pth are under runs/train.
-    model.predict("sample.jpg", conf=0.4, save=True)  # replace with a real image path
+    if args.predict:  # optional: run the trained model on an image and save the annotated copy
+        model.predict(args.predict, conf=0.4, save=True)
+        print(f"prediction saved under runs/detect/ for {args.predict}")
 
 
 if __name__ == "__main__":
