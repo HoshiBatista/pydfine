@@ -68,6 +68,8 @@ dfine convert yolo/ coco/          # YOLO dataset -> COCO layout
 
 ## Learn more
 
+- [Examples cookbook](examples.md) — task-oriented recipes for every workflow. Runnable
+  versions live in [`templates/`](https://github.com/HoshiBatista/pydfine/tree/main/templates).
 - [Architecture](ARCHITECTURE.md) — how the model works + module→param map.
 - [Config reference](CONFIG_REFERENCE.md) — every parameter and per-size preset.
 - **API** — [`DFINE`](api/model.md), [`DFINEConfig`](api/config.md),

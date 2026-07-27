@@ -217,6 +217,8 @@ Full docs live at **<https://hoshibatista.github.io/pydfine/>**. Handy jumping-o
 
 | Page | What's inside |
 |---|---|
+| [Examples cookbook](docs/examples.md) | Task-oriented recipes for predict / train / val / export / seg / tracking. |
+| [Templates](templates/) | Runnable copy-paste scripts (one per workflow). |
 | [Architecture](docs/ARCHITECTURE.md) | How D-FINE works + the module → parameter map. |
 | [Config reference](docs/CONFIG_REFERENCE.md) | Every typed parameter, default, and per-size preset. |
 | [`DFINE` API](docs/api/model.md) | The one-class façade — `predict` / `train` / `val` / `export`. |

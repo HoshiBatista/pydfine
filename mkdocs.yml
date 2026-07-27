@@ -57,6 +57,7 @@ exclude_docs: |
 
 nav:
   - Home: index.md
+  - Examples cookbook: examples.md
   - Architecture: ARCHITECTURE.md
   - Config reference: CONFIG_REFERENCE.md
   - Segmentation training: seg-training.md
