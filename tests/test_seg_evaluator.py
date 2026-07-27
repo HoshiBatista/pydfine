@@ -58,6 +58,18 @@ def test_confusion_matrix_rejects_out_of_range_class():
         cm.update(torch.tensor([0, 1]), torch.tensor([0, 5]))
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA for the device-mix path")
+def test_confusion_matrix_update_accepts_cuda_tensors():
+    # During training pred/gt come off a CUDA model while self.cm lives on CPU; update()
+    # must move them to CPU rather than mixing a CUDA operand into the CPU matrix math.
+    cm = SemSegConfusionMatrix(num_classes=3)
+    gt = torch.tensor([[0, 1], [2, 2]], device="cuda")
+    cm.update(gt.clone(), gt)
+    m = cm.compute()
+    assert m["mIoU"] == 1.0 and m["pixel_acc"] == 1.0
+    assert cm.cm.device.type == "cpu"
+
+
 # --- end-to-end sem_seg mIoU --------------------------------------------------
 
 

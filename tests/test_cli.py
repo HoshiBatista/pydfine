@@ -84,6 +84,38 @@ def test_cli_predict_runs_and_saves(tmp_path, monkeypatch):
         assert len(line.split()) == 6  # class cx cy w h conf
 
 
+def test_cli_predict_threads_imgsz_into_model_build(tmp_path, monkeypatch):
+    # Regression: `dfine predict --imgsz S` must build the model *at* S, not just pass S to
+    # predict() — predict() requires imgsz to equal the model's imgsz, so a model left at the
+    # 640 default would raise for any --imgsz. The other test stubs _build_model with a fixed
+    # imgsz=320 model + --imgsz 320, so it can't catch this; here we assert the value is
+    # actually forwarded into model construction.
+    pytest.importorskip("torch")
+    np = pytest.importorskip("numpy")
+    from PIL import Image
+
+    import dfine.cli as cli
+    from dfine.model import DFINE
+
+    captured: dict = {}
+
+    def fake_build(model_arg, weights=None, **overrides):
+        captured.update(overrides)
+        return DFINE(
+            size="n",
+            backbone_pretrained=False,
+            num_classes=80,
+            imgsz=overrides.get("imgsz", 640),
+        )
+
+    monkeypatch.setattr(cli, "_build_model", fake_build)
+    img = tmp_path / "img.png"
+    Image.fromarray((np.random.rand(48, 64, 3) * 255).astype("uint8")).save(img)
+    rc = main(["predict", "n", str(img), "--imgsz", "320", "--project", str(tmp_path / "runs")])
+    assert rc == 0
+    assert captured.get("imgsz") == 320  # --imgsz reached model construction, not just predict()
+
+
 def _stub_build_model(monkeypatch):
     import dfine.cli as cli
     from dfine.model import DFINE

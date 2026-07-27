@@ -63,7 +63,11 @@ def _cmd_convert(args: argparse.Namespace) -> int:
 def _cmd_predict(args: argparse.Namespace) -> int:
     from .model import _resolve_sources
 
-    model = _build_model(args.model, args.weights)
+    # Build the model *at* the requested resolution: predict() requires imgsz to match the
+    # model's (the encoder's positional embeddings are precomputed for it), so threading
+    # --imgsz only into predict() would raise. Mirrors `_cmd_benchmark`/`_cmd_export`.
+    overrides = {"imgsz": args.imgsz} if args.imgsz else {}
+    model = _build_model(args.model, args.weights, **overrides)
     results = model.predict(
         args.source,
         conf=args.conf,
