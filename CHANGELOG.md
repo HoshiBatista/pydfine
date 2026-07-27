@@ -41,6 +41,9 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
 - **`DFINEConfig` rejects an `imgsz` that isn't a multiple of the largest feature stride
   (32) at construction**, with a clear message, instead of building and then crashing deep
   in the forward pass with a cryptic tensor-shape error.
+- **Segment ONNX export now fails loudly on a non-focal-loss postprocessor** instead of
+  emitting a graph whose declared `masks` output the deploy path never produces. (Guards an
+  otherwise-unreachable config — all released D-FINE models use focal loss.)
 
 ## [0.1.0] - 2026-07-26
 

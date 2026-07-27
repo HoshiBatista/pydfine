@@ -144,6 +144,14 @@ def test_export_segment_adds_masks_output(tmp_path):
     assert [o.name for o in graph.output] == ["labels", "boxes", "scores", "masks"]
 
 
+def test_export_segment_rejects_non_focal_postprocessor(tmp_path):
+    """A non-focal postprocessor can't emit `masks`; segment export must refuse it."""
+    m = _model(task="segment")
+    m.postprocessor.use_focal_loss = False
+    with pytest.raises(ValueError, match="focal-loss postprocessor"):
+        export_onnx(m.model, m.postprocessor, tmp_path / "seg.onnx", task="segment", imgsz=IMGSZ)
+
+
 def test_export_segment_onnx_matches_torch(tmp_path):
     m = _model(task="segment")
     ref = SegInstanceDeployModel(m.model, m.postprocessor).eval()

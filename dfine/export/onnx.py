@@ -87,6 +87,16 @@ def _build_deploy(model, postprocessor, task):
     if task == "sem_seg":
         return SemSegDeployModel(model), ["images"], ["sem_seg"]
     if task == "segment":
+        # The segment graph declares a 4th `masks` output, which the postprocessor only
+        # emits on the focal-loss deploy path (`labels, boxes, scores, masks`). A non-focal
+        # postprocessor would return just 3 tensors, silently mismatching output_names.
+        # All released D-FINE configs use focal loss; guard the unreachable case loudly.
+        if not getattr(postprocessor, "use_focal_loss", True):
+            raise ValueError(
+                "segment ONNX export needs a focal-loss postprocessor (use_focal_loss=True): "
+                "the non-focal deploy path emits no `masks` output, so it can't satisfy the "
+                "segment graph's (labels, boxes, scores, masks) contract."
+            )
         names = ["images", "orig_target_sizes"]
         return (
             SegInstanceDeployModel(model, postprocessor),
