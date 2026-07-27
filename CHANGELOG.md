@@ -48,6 +48,10 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
   (used to rasterize YOLO-Seg polygons into instance masks) is now part of the `[train]`
   extra — which the segmentation-training guide already documented — and `polygons_to_masks`
   raises a clear, actionable error if it's somehow still missing.
+- **Training LR logging is no longer shifted one iteration ahead during warmup.** The logged
+  / TensorBoard learning rate is now snapshotted before `warmup.step()` advances it, so the
+  reported warmup curve matches the LR the optimizer actually applied that step (training
+  itself was unaffected).
 
 ## [0.1.0] - 2026-07-26
 

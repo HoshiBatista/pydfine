@@ -157,6 +157,11 @@ def train_one_epoch(
 
         if ema is not None:
             ema.update(model)
+        # Snapshot the LRs actually applied to this step *before* warmup.step() advances
+        # them for the next iteration, so the logged/plotted warmup curve isn't shifted one
+        # iteration ahead of the LR the optimizer used.
+        applied_lrs = [pg["lr"] for pg in optimizer.param_groups]
+        cur_lr = applied_lrs[0]
         if warmup is not None:
             warmup.step()
 
@@ -164,8 +169,6 @@ def train_one_epoch(
         if not math.isfinite(loss_value):
             terms = {k: v.item() for k, v in loss_dict.items()}
             raise RuntimeError(f"Loss is {loss_value}, stopping training. Loss terms: {terms}")
-
-        cur_lr = optimizer.param_groups[0]["lr"]
         logger.update(loss=loss_value, **{k: v.item() for k, v in loss_dict.items()})
         logger.update(lr=cur_lr)
         bar.set_postfix(loss=loss_value, lr=cur_lr)
@@ -173,7 +176,7 @@ def train_one_epoch(
             visualizer.log_step(
                 global_step,
                 loss_value,
-                [pg["lr"] for pg in optimizer.param_groups],
+                applied_lrs,
                 {k: v.item() for k, v in loss_dict.items()},
             )
 
