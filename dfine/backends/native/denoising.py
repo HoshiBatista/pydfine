@@ -75,8 +75,11 @@ def get_contrastive_denoising_training_group(
         known_bbox = torch.clip(known_bbox, min=0.0, max=1.0)
         input_query_bbox = box_xyxy_to_cxcywh(known_bbox)
         input_query_bbox[input_query_bbox < 0] *= -1
-        input_query_bbox_unact = inverse_sigmoid(input_query_bbox)
 
+    # Computed unconditionally: with box_noise_scale <= 0 (box noising disabled) the boxes are
+    # un-noised but still need logit-space queries. Upstream only reached this inside the
+    # box_noise_scale > 0 branch (its call site hardcodes 1.0), so 0 would raise UnboundLocalError.
+    input_query_bbox_unact = inverse_sigmoid(input_query_bbox)
     input_query_logits = class_embed(input_query_class)
 
     tgt_size = num_denoising + num_queries

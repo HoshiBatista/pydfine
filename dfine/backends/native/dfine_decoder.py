@@ -878,7 +878,11 @@ class DFINETransformer(nn.Module):
                     self.denoising_class_embed,
                     num_denoising=self.num_denoising,
                     label_noise_ratio=self.label_noise_ratio,
-                    box_noise_scale=1.0,
+                    # Upstream hardcodes 1.0 here (its configs never override it); thread the
+                    # configured value so `cfg.box_noise_scale` isn't a silent no-op. The default
+                    # is 1.0, so the released-recipe path is unchanged (and denoising is
+                    # training-only, so weight/eval parity is unaffected).
+                    box_noise_scale=self.box_noise_scale,
                 )
             )
         else:
