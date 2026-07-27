@@ -34,6 +34,10 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
 - **`yolo_to_coco` clips out-of-bounds boxes correctly.** A box crossing the left/top image
   border is now clipped in both origin and width/height; the old code clamped only the
   origin, leaving the width/height overestimated.
+- **`Results.save_txt()` / `summary()` no longer crash on a segmentation result without
+  OpenCV.** Mask-polygon export now degrades to the box corners (with a one-time warning)
+  when OpenCV isn't installed, instead of raising `ImportError` — so `predict(save_txt=True)`
+  on a `dfine-seg-*` model works with just the `[hf]` extra.
 
 ## [0.1.0] - 2026-07-26
 

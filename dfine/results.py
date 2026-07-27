@@ -10,6 +10,7 @@ to zip over them, or index into it.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +18,9 @@ import torch
 from PIL import Image, ImageDraw
 
 __all__ = ["Boxes", "Masks", "Results", "SemSeg"]
+
+logger = logging.getLogger(__name__)
+_warned_missing_cv2 = False
 
 _PALETTE = [
     (255, 56, 56),
@@ -57,15 +61,22 @@ def _mask_largest_polygon(mask: np.ndarray) -> np.ndarray | None:
     """Largest external contour of a binary ``[H, W]`` mask as a pixel-space ``[K, 2]``.
 
     Returns the ``(x, y)`` vertices of the biggest contour, or ``None`` when the mask has
-    no usable contour (< 3 points). Callers normalize as needed. OpenCV is imported lazily.
+    no usable contour (< 3 points) **or** OpenCV isn't installed — callers then fall back
+    to the box corners, so polygon export degrades gracefully rather than crashing a
+    ``save_txt``/``summary`` call on a segmentation result. OpenCV is imported lazily; a
+    one-time warning is logged when it's missing.
     """
+    global _warned_missing_cv2
     try:
         import cv2
-    except ImportError as e:  # pragma: no cover - trivial guard
-        raise ImportError(
-            "Polygon export from masks needs OpenCV — install it with "
-            "`pip install opencv-python` or `pip install pydfine[video]`."
-        ) from e
+    except ImportError:  # OpenCV is only in the [video] extra; degrade to box corners.
+        if not _warned_missing_cv2:
+            logger.warning(
+                "OpenCV not installed — exporting boxes instead of mask polygons. "
+                "Install it with `pip install pydfine[video]` for polygon output."
+            )
+            _warned_missing_cv2 = True
+        return None
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
@@ -345,7 +356,8 @@ class Results:
         parent directory is created, and the format round-trips through
         :func:`~dfine.convert.yolo_to_coco`. Returns the path, or ``None`` when there are
         no detections (no file is written). Polygon extraction needs OpenCV
-        (``pip install pydfine[video]``); the detection path is dependency-free.
+        (``pip install pydfine[video]``); without it — or when a mask has no contour — the
+        row falls back to the box corners, so the detection path is dependency-free.
         """
         if len(self) == 0:
             return None

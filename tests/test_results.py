@@ -285,6 +285,34 @@ def test_save_txt_segmentation_polygons(tmp_path):
         assert all(0.0 <= float(v) <= 1.0 for v in coords)
 
 
+def test_save_txt_segmentation_falls_back_to_boxes_without_cv2(tmp_path, monkeypatch):
+    """Without OpenCV, a segmentation save_txt degrades to box rows instead of crashing."""
+    import builtins
+
+    import dfine.results as results_mod
+
+    real_import = builtins.__import__
+
+    def no_cv2(name, *args, **kwargs):
+        if name == "cv2" or name.startswith("cv2."):
+            raise ImportError("No module named 'cv2'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_cv2)
+    monkeypatch.setattr(results_mod, "_warned_missing_cv2", False)
+
+    r = _results(2, masks=True)
+    out = r.save_txt(tmp_path / "seg.txt")
+    lines = out.read_text().strip().splitlines()
+    assert len(lines) == 2
+    for line in lines:  # box fallback -> exactly `class cx cy w h` (5 fields)
+        parts = line.split()
+        assert len(parts) == 5
+        assert all(0.0 <= float(v) <= 1.0 for v in parts[1:])
+    # summary drops the polygon segments instead of raising
+    assert all("segments" not in row for row in r.summary())
+
+
 def test_to_coco_rle_roundtrips_through_coco():
     """The uncompressed RLE is accepted by faster-coco-eval and decodes to our mask.
 
