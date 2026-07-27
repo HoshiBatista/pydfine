@@ -414,7 +414,20 @@ def build_coco_dataloaders(
         from .augment import train_transforms
 
         stop_epoch = (cfg.epochs - cfg.no_aug_epoch) if cfg is not None else None
-        transforms = train_transforms(imgsz, stop_epoch=stop_epoch)
+        # Thread the cfg.aug_* toggles so they aren't silent no-ops. Only pass overrides that
+        # *disable* an op (photometric/iou-crop off = probability 0), leaving the default
+        # strengths owned by train_transforms — so an all-enabled config is byte-identical.
+        overrides: dict = {}
+        if cfg is not None:
+            if not cfg.aug_photometric:
+                overrides["photometric_p"] = 0.0
+            if not cfg.aug_zoom_out:
+                overrides["zoom_out"] = False
+            if not cfg.aug_iou_crop:
+                overrides["iou_crop_p"] = 0.0
+            if not cfg.aug_hflip:
+                overrides["hflip"] = False
+        transforms = train_transforms(imgsz, stop_epoch=stop_epoch, **overrides)
 
     train_loader = build_coco_dataloader(
         train_img_dir,

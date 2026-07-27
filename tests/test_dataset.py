@@ -269,6 +269,48 @@ def test_build_coco_dataloaders_augment_train_step(tmp_path):
         assert t["boxes"].shape[1] == 4
 
 
+def _train_ops(train_loader):
+    """Class names of the ops in a train loader's augmentation compose."""
+    return [type(o).__name__ for o in train_loader.dataset._transforms.ops]
+
+
+def test_aug_toggles_thread_into_train_transforms(tmp_path):
+    # Regression: cfg.aug_* used to be silent no-ops (train_transforms was called without
+    # them). Each toggle must now shape the built pipeline; the all-enabled default is unchanged.
+    from dfine import DFINEConfig
+    from dfine.train.augment import RandomIoUCrop
+
+    root = _make_coco_root(tmp_path, with_val=False)
+
+    def build(**kw):
+        cfg = DFINEConfig.preset("n", imgsz=IMGSZ, **kw)
+        tl, _ = build_coco_dataloaders(root, cfg=cfg, batch_size=1, num_workers=0)
+        return tl
+
+    default_ops = _train_ops(build())
+    assert "RandomHorizontalFlip" in default_ops and "RandomZoomOut" in default_ops
+
+    # Structural toggles drop the op entirely.
+    assert "RandomHorizontalFlip" not in _train_ops(build(aug_hflip=False))
+    assert "RandomZoomOut" not in _train_ops(build(aug_zoom_out=False))
+
+    # Probability toggles keep the op but set p=0 (disabled), leaving defaults otherwise.
+    photo_on = next(
+        o for o in build().dataset._transforms.ops if type(o).__name__ == "RandomPhotometricDistort"
+    )
+    photo_off = next(
+        o
+        for o in build(aug_photometric=False).dataset._transforms.ops
+        if type(o).__name__ == "RandomPhotometricDistort"
+    )
+    assert float(photo_on.p) == 0.5 and float(photo_off.p) == 0.0
+
+    iou_off = next(
+        o for o in build(aug_iou_crop=False).dataset._transforms.ops if isinstance(o, RandomIoUCrop)
+    )
+    assert float(iou_off.p) == 0.0
+
+
 def test_build_coco_dataloaders_missing_root(tmp_path):
     with pytest.raises(FileNotFoundError):
         build_coco_dataloaders(str(tmp_path / "does_not_exist"))
