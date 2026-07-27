@@ -243,17 +243,22 @@ def _convert_split(
     out_image_dir.mkdir(parents=True, exist_ok=True)
 
     images, annotations = [], []
-    ann_id, used_names = 1, {}
+    ann_id, used_names = 1, set()
     for img_id, img_path in enumerate(_iter_images(image_dir), start=1):
         with Image.open(img_path) as im:
             w, h = im.size
 
         file_name = img_path.name
         if file_name in used_names:
-            used_names[file_name] += 1
-            file_name = f"{img_path.stem}_{used_names[file_name]}{img_path.suffix}"
-        else:
-            used_names[file_name] = 0
+            # Disambiguate against every output name already emitted — including a real
+            # source file that happens to match the ``stem_N`` pattern — so no two images
+            # ever collapse onto the same output file (which would drop an image and leave
+            # its COCO entry pointing at the wrong pixels).
+            n = 2
+            while f"{img_path.stem}_{n}{img_path.suffix}" in used_names:
+                n += 1
+            file_name = f"{img_path.stem}_{n}{img_path.suffix}"
+        used_names.add(file_name)
         dst = out_image_dir / file_name
         if copy_images:
             shutil.copy2(img_path, dst)
@@ -275,10 +280,14 @@ def _convert_split(
             if parsed is None:
                 continue
             cls, (cx, cy, bw, bh) = parsed
-            x = max(0.0, (cx - bw / 2) * w)
-            y = max(0.0, (cy - bh / 2) * h)
-            bw_px = min(bw * w, w - x)
-            bh_px = min(bh * h, h - y)
+            # Clip each edge to the image, then derive width/height. Clamping only the
+            # origin (as before) left the width overestimated for a box crossing the
+            # left/top border, since it kept the full normalized width.
+            x1 = min(max((cx - bw / 2) * w, 0.0), w)
+            y1 = min(max((cy - bh / 2) * h, 0.0), h)
+            x2 = min(max((cx + bw / 2) * w, 0.0), w)
+            y2 = min(max((cy + bh / 2) * h, 0.0), h)
+            x, y, bw_px, bh_px = x1, y1, x2 - x1, y2 - y1
             if bw_px <= 0 or bh_px <= 0:
                 continue
             num_classes_seen.append(cls)

@@ -182,6 +182,49 @@ def test_missing_val_split_warns(tmp_path, caplog):
     assert "no validation split found" in caplog.text
 
 
+def test_out_of_bounds_box_is_clipped(tmp_path):
+    """A box crossing the left edge is clipped in both origin *and* width."""
+    root = tmp_path / "yolo"
+    (root / "images/train").mkdir(parents=True)
+    (root / "labels/train").mkdir(parents=True)
+    Image.new("RGB", (100, 100)).save(root / "images/train/x.jpg")
+    # cx=0.1, w=0.4 -> left edge -0.1 (clipped to 0), right edge 0.3 -> width 30, not 40.
+    (root / "labels/train/x.txt").write_text("0 0.1 0.5 0.4 0.4\n")
+    out = tmp_path / "coco"
+    yolo_to_coco(root, out, class_names=["x"])
+    coco = _load(out / "annotations/instances_train.json")
+    assert coco["annotations"][0]["bbox"] == pytest.approx([0.0, 30.0, 30.0, 40.0])
+
+
+def test_duplicate_names_never_collide(tmp_path):
+    """Same-named images across subdirs (+ a real stem_N file) get distinct outputs.
+
+    Regression: the old counter renamed the 2nd `img.jpg` to `img_1.jpg`, colliding with
+    an actual `img_1.jpg` — one image was overwritten and a COCO entry pointed at the
+    wrong pixels.
+    """
+    root = tmp_path / "yolo"
+    for sub in ("images/train/a", "images/train/b", "labels/train/a", "labels/train/b"):
+        (root / sub).mkdir(parents=True)
+    Image.new("RGB", (100, 100), (10, 10, 10)).save(root / "images/train/a/img.jpg")
+    Image.new("RGB", (100, 100), (20, 20, 20)).save(root / "images/train/b/img.jpg")
+    Image.new("RGB", (100, 100), (30, 30, 30)).save(root / "images/train/a/img_1.jpg")
+    for p in ("a/img", "b/img", "a/img_1"):
+        (root / "labels/train" / f"{p}.txt").write_text("0 0.5 0.5 0.4 0.4\n")
+
+    out = tmp_path / "coco"
+    yolo_to_coco(root, out, class_names=["x"])
+    coco = _load(out / "annotations/instances_train.json")
+
+    names = [i["file_name"] for i in coco["images"]]
+    assert len(names) == 3
+    assert len(set(names)) == 3, f"output file names collided: {names}"
+    # every referenced file actually exists on disk (none overwritten)
+    for name in names:
+        assert (out / "train" / name).exists()
+    assert len(coco["annotations"]) == 3
+
+
 def test_missing_splits_raises(tmp_path):
     (tmp_path / "empty").mkdir()
     with pytest.raises(FileNotFoundError, match="No YOLO splits"):

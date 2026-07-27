@@ -26,6 +26,14 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
   (resolving the common `../valid/images` form) before falling back to folder conventions,
   which now accept `valid`/`validation` as val-split aliases. A `data.yaml`-declared split
   that can't be located, or a missing `val` split, now warns instead of being dropped.
+- **`yolo_to_coco` no longer overwrites images on an output-name collision.** Same-named
+  images from different subdirectories are now disambiguated against *every* emitted name
+  (including a real source file matching the `stem_N` pattern), so no two images collapse
+  onto one output file — which previously dropped an image and left its COCO entry pointing
+  at the wrong pixels.
+- **`yolo_to_coco` clips out-of-bounds boxes correctly.** A box crossing the left/top image
+  border is now clipped in both origin and width/height; the old code clamped only the
+  origin, leaving the width/height overestimated.
 
 ## [0.1.0] - 2026-07-26
 
