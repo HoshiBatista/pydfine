@@ -132,6 +132,56 @@ def test_symlink_mode(tmp_path):
     assert (out / "train/img1.jpg").is_symlink()
 
 
+def test_roboflow_valid_split_from_yaml(tmp_path):
+    """Roboflow layout: `valid/` folder + data.yaml declaring `../valid/images` paths.
+
+    Previously the val split was silently dropped (only `train`/`val`/`test` folder
+    names were auto-detected, and data.yaml split paths were ignored).
+    """
+    root = tmp_path / "yolo"
+    for sub in ("train/images", "train/labels", "valid/images", "valid/labels"):
+        (root / sub).mkdir(parents=True)
+    Image.new("RGB", (100, 100)).save(root / "train/images/a.jpg")
+    Image.new("RGB", (100, 100)).save(root / "valid/images/b.jpg")
+    (root / "train/labels/a.txt").write_text("0 0.5 0.5 0.4 0.4\n")
+    (root / "valid/labels/b.txt").write_text("1 0.5 0.5 0.4 0.4\n")
+    (root / "data.yaml").write_text(
+        "train: ../train/images\nval: ../valid/images\nnames: ['cat', 'dog']\n"
+    )
+
+    out = tmp_path / "coco"
+    written = yolo_to_coco(root, out)
+    assert set(written) == {"train", "val"}
+    assert (out / "annotations/instances_val.json").exists()
+    val = _load(out / "annotations/instances_val.json")
+    assert [i["file_name"] for i in val["images"]] == ["b.jpg"]
+    assert val["annotations"][0]["category_id"] == 1
+
+
+def test_valid_folder_alias_without_yaml(tmp_path):
+    """`valid/images` is recognized as the val split even with no data.yaml."""
+    root = tmp_path / "yolo"
+    for sub in ("train/images", "valid/images"):
+        (root / sub).mkdir(parents=True)
+    Image.new("RGB", (100, 100)).save(root / "train/images/a.jpg")
+    Image.new("RGB", (100, 100)).save(root / "valid/images/b.jpg")
+
+    written = yolo_to_coco(root, tmp_path / "coco", class_names=["x"])
+    assert set(written) == {"train", "val"}
+
+
+def test_missing_val_split_warns(tmp_path, caplog):
+    """Only a train split present -> loud warning instead of silent drop."""
+    root = tmp_path / "yolo"
+    (root / "images/train").mkdir(parents=True)
+    Image.new("RGB", (100, 100)).save(root / "images/train/a.jpg")
+
+    with caplog.at_level("WARNING"):
+        written = yolo_to_coco(root, tmp_path / "coco", class_names=["x"])
+    assert set(written) == {"train"}
+    assert "no validation split found" in caplog.text
+
+
 def test_missing_splits_raises(tmp_path):
     (tmp_path / "empty").mkdir()
     with pytest.raises(FileNotFoundError, match="No YOLO splits"):

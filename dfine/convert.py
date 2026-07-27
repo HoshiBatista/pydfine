@@ -87,10 +87,21 @@ def _parse_label_line(line: str) -> tuple[int, list[float]] | None:
     return cls, [cx, cy, w, h]
 
 
-def _resolve_class_names(yolo_root: Path, class_names) -> list[str] | None:
-    """Explicit names win; else read ``data.yaml`` ``names``; else ``None`` (infer later)."""
-    if class_names is not None:
-        return list(class_names)
+# Folder-name aliases per canonical split, for convention-based detection. Roboflow
+# names its validation split ``valid``; some tools use ``validation``.
+_SPLIT_DIR_ALIASES = {
+    "train": ("train",),
+    "val": ("val", "valid", "validation"),
+    "test": ("test",),
+}
+
+# ``data.yaml`` keys -> canonical split. Roboflow declares ``val: .../valid/images``,
+# so the key is ``val`` even when the folder is ``valid``; we accept both keys.
+_YAML_SPLIT_KEYS = (("train", "train"), ("val", "val"), ("valid", "val"), ("test", "test"))
+
+
+def _load_data_yaml(yolo_root: Path) -> dict | None:
+    """Parse ``data.yaml``/``data.yml`` if present, else ``None`` (PyYAML imported lazily)."""
     for cand in ("data.yaml", "data.yml"):
         yaml_path = yolo_root / cand
         if yaml_path.is_file():
@@ -99,30 +110,124 @@ def _resolve_class_names(yolo_root: Path, class_names) -> list[str] | None:
             except ImportError as exc:  # pragma: no cover
                 raise ImportError(
                     f"Reading {cand} needs PyYAML — install `pip install pydfine[train]` "
-                    "or pass class_names=[...] explicitly."
+                    "or pass class_names=[...] / splits={...} explicitly."
                 ) from exc
-            names = yaml.safe_load(yaml_path.read_text()).get("names")
-            if isinstance(names, dict):
-                return [names[k] for k in sorted(names)]
-            if names is not None:
-                return list(names)
+            data = yaml.safe_load(yaml_path.read_text())
+            return data if isinstance(data, dict) else None
     return None
 
 
+def _resolve_class_names(yolo_root: Path, class_names) -> list[str] | None:
+    """Explicit names win; else read ``data.yaml`` ``names``; else ``None`` (infer later)."""
+    if class_names is not None:
+        return list(class_names)
+    data = _load_data_yaml(yolo_root)
+    if data is not None:
+        names = data.get("names")
+        if isinstance(names, dict):
+            return [names[k] for k in sorted(names)]
+        if names is not None:
+            return list(names)
+    return None
+
+
+def _resolve_split_dir(raw: str, base: Path, yolo_root: Path) -> Path | None:
+    """Resolve a ``data.yaml`` split path to an existing image dir, or ``None``.
+
+    Tries, in order: the path as written (relative to ``base``, i.e. the ``path:`` root
+    or the yaml's dir), relative to ``yolo_root``, and — for the common Roboflow quirk
+    where the path is written as ``../valid/images`` — the path with leading ``..``
+    segments stripped and anchored at ``yolo_root``.
+    """
+    p = Path(raw)
+    if p.is_absolute():
+        candidates = [p]
+    else:
+        candidates = [base / p, yolo_root / p]
+        stripped = [part for part in p.parts if part != ".."]
+        if stripped:
+            candidates.append(yolo_root.joinpath(*stripped))
+    for cand in candidates:
+        cand = Path(os.path.normpath(cand))
+        if cand.is_dir():
+            return cand
+    return None
+
+
+def _splits_from_yaml(yolo_root: Path) -> tuple[dict[str, Path], dict[str, str]]:
+    """Read split image dirs declared in ``data.yaml``.
+
+    Returns ``(resolved, declared_missing)`` where ``resolved`` maps a canonical split
+    to an existing image dir and ``declared_missing`` maps a split to the raw yaml path
+    that could not be located on disk (for a warning).
+    """
+    resolved: dict[str, Path] = {}
+    missing: dict[str, str] = {}
+    data = _load_data_yaml(yolo_root)
+    if data is None:
+        return resolved, missing
+    base = yolo_root
+    if isinstance(data.get("path"), str):
+        base = Path(os.path.normpath(yolo_root / data["path"]))
+    for key, split in _YAML_SPLIT_KEYS:
+        raw = data.get(key)
+        if not isinstance(raw, str) or split in resolved:
+            continue
+        found = _resolve_split_dir(raw, base, yolo_root)
+        if found is not None:
+            resolved[split] = found
+            missing.pop(split, None)
+        elif split not in missing:
+            missing[split] = raw
+    return resolved, missing
+
+
 def _detect_splits(yolo_root: Path, splits) -> dict[str, Path]:
-    """Map ``split -> image dir``. Explicit ``splits`` win; else auto-detect conventions."""
+    """Map ``split -> image dir``.
+
+    Precedence: explicit ``splits`` arg > paths declared in ``data.yaml`` > folder
+    conventions (``images/<split>`` and ``<split>/images``, including ``valid`` for the
+    val split). Warns for any ``data.yaml`` split it can't locate, and for a missing
+    validation split, instead of silently dropping it.
+    """
     if splits is not None:
         return {s: (yolo_root / p if not os.path.isabs(p) else Path(p)) for s, p in splits.items()}
-    found: dict[str, Path] = {}
-    for split in ("train", "val", "test"):
-        for cand in (yolo_root / "images" / split, yolo_root / split / "images"):
-            if cand.is_dir():
-                found[split] = cand
+
+    found, declared_missing = _splits_from_yaml(yolo_root)
+    for split, aliases in _SPLIT_DIR_ALIASES.items():
+        if split in found:
+            continue
+        for alias in aliases:
+            for cand in (yolo_root / "images" / alias, yolo_root / alias / "images"):
+                if cand.is_dir():
+                    found[split] = cand
+                    declared_missing.pop(split, None)
+                    break
+            if split in found:
                 break
+
     if not found:
         raise FileNotFoundError(
-            f"No YOLO splits found under {yolo_root!r} (looked for images/<split> and "
-            "<split>/images). Pass splits={'train': 'path/to/images', ...} explicitly."
+            f"No YOLO splits found under {yolo_root!r} (looked for images/<split>, "
+            "<split>/images, and train/val/test paths in data.yaml). Pass "
+            "splits={'train': 'path/to/images', ...} explicitly."
+        )
+
+    for split, raw in declared_missing.items():
+        logger.warning(
+            "data.yaml declares a %s split %r but no such image directory was found "
+            "under %s — skipping it (pass splits={...} to point at it explicitly).",
+            split,
+            raw,
+            yolo_root,
+        )
+    if "val" not in found:
+        logger.warning(
+            "no validation split found under %s (looked for images/val, val/images, "
+            "images/valid, valid/images, and a val/valid path in data.yaml) — only %s "
+            "will be converted, so DFINE.val(data=…) will have nothing to evaluate.",
+            yolo_root,
+            sorted(found),
         )
     return found
 
@@ -210,7 +315,9 @@ def yolo_to_coco(
         class_names: class names (index = class id). Falls back to ``data.yaml``'s
             ``names``, then to inferred ``class_<i>`` if neither is available.
         splits: explicit ``{split: image_dir}`` (relative to ``yolo_root`` or absolute).
-            Defaults to auto-detecting ``images/<split>`` and ``<split>/images``.
+            Defaults to the ``train``/``val``/``test`` paths declared in ``data.yaml``,
+            then to auto-detecting ``images/<split>`` and ``<split>/images`` (``valid``
+            is accepted as a val-split folder alias).
         copy_images: copy images (default) or symlink them into the output.
         split_names: override the split→folder map (default ``train→train``,
             ``val→val``, ``test→test``).
