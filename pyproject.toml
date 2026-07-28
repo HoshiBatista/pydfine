@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pydfine"
-version = "0.1.0"
+version = "0.2.0"
 description = "Ultralytics-style, config-first Python library for the D-FINE real-time object detector."
 readme = "README.md"
 requires-python = ">=3.9"

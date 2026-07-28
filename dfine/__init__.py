@@ -14,7 +14,7 @@ from .config import SIZE_PRESETS, SIZES, DFINEConfig, list_presets
 from .convert import yolo_to_coco
 from .registry import list_checkpoints
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "DFINEConfig",

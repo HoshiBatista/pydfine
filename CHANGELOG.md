@@ -8,19 +8,46 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-27
+
 ### Added
 
 - **Examples cookbook** ([`docs/examples.md`](docs/examples.md)) — task-oriented recipes
   covering predict / batch / video+tracking / train (COCO & YOLO) / fine-tune / validate /
   export / custom architecture / segmentation / benchmark, plus CLI equivalents.
-- **Runnable templates** ([`templates/`](templates/)) — 11 copy-paste, `argparse`-driven
-  scripts (one per workflow) using only the public API, with a README index.
+- **Runnable templates** ([`templates/`](templates/)) — 16 copy-paste, `argparse`-driven
+  scripts using only the public API, with a README index. New this release:
+  `train_segmentation.py`, `deploy_onnxruntime.py` (run an exported ONNX graph with no
+  torch at serve time), `results_interop.py`, `config_as_yaml.py`, and `track_and_count.py`.
+  Every template is now executed end-to-end in CI so the docs' copy-paste code can't rot.
+- **Loss-curve panel follows the task's primary validation metric** — the training
+  `loss_curve.png` now plots detection `AP`, instance-seg `mAP_50_95_mask`, or sem_seg
+  `mIoU` (whichever the run reports), instead of only detection `AP`.
 - Fleshed out the previously-stub [`docs/api/data.md`](docs/api/data.md) (YOLO→COCO layout,
   class/split resolution) and [`docs/api/model.md`](docs/api/model.md) (build/predict/
   train/val/export usage).
 
 ### Fixed
 
+- **Multi-GPU (DDP) training/validation correctness** — three fixes: an instance-`segment`
+  run no longer crashes DDP on an all-background batch (the mask head is left gradient-free,
+  so `find_unused_parameters` is now enabled for `task="segment"`); the semantic-seg `mIoU`
+  is all-reduced across ranks so it reflects the whole val set, not one shard; and detection
+  analytics plots are skipped under multi-GPU (per-rank shards were partial and ranks raced
+  writing the same PNGs) — COCO metrics are unaffected.
+- **`cfg.box_noise_scale` is now honored** — the decoder hardcoded `1.0` at the denoising
+  call site, so the documented config knob was a silent no-op; it is now threaded through
+  (and `box_noise_scale=0` no longer raises). Default `1.0` keeps released recipes unchanged.
+- **`cfg.aug_photometric` / `aug_zoom_out` / `aug_iou_crop` / `aug_hflip` are now honored** —
+  they were built but never passed into the augmentation pipeline, so e.g.
+  `DFINE(aug_hflip=False)` still flipped. An all-enabled config is byte-identical to before.
+- **Semantic-seg validation no longer crashes on GPU** — the pixel confusion matrix mixed a
+  CUDA prediction into CPU matrix math; predictions/targets are now moved to CPU first.
+- **`predict(imgsz=…)` on the CLI is honored** — `dfine predict --imgsz` now builds the model
+  at that resolution instead of raising (matching `benchmark`/`export`).
+- **`DFINE.val(plots=True, remap_mscoco_category=True)` no longer writes a wrong confusion
+  matrix** — the analytics assume contiguous labels, so plots are now skipped (with a
+  warning) under the sparse-id remap, mirroring `DFINE.train`. COCO metrics are unaffected.
 - **`yolo_to_coco` no longer silently drops splits for Roboflow/Ultralytics datasets.**
   Split detection now reads the `train`/`val`/`test` paths declared in `data.yaml`
   (resolving the common `../valid/images` form) before falling back to folder conventions,
@@ -125,6 +152,7 @@ across roadmap phases 0–6.
 - **CLI** — `dfine models/predict/val/train/export/convert`.
 - **Docs site** (MkDocs Material) and API reference.
 
-[Unreleased]: https://github.com/HoshiBatista/pydfine/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/HoshiBatista/pydfine/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/HoshiBatista/pydfine/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HoshiBatista/pydfine/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/HoshiBatista/pydfine/releases/tag/v0.0.1
