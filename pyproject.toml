@@ -86,7 +86,7 @@ docs = [
 ]
 dev = [
     "pydfine[torch]",  # torch/torchvision/pillow — so the full suite runs (not skips)
-    "ruff==0.16.0",  # pinned to match .pre-commit-config + CI lint (format stability)
+    "ruff==0.16.1",  # pinned to match .pre-commit-config + CI lint (format stability)
     "pytest>=7.0",
     "pytest-cov>=4.0",  # coverage reporting in CI
     "pre-commit>=3.5",
