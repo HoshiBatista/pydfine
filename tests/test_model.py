@@ -33,11 +33,34 @@ def test_construct_from_preset_and_overrides():
     assert m.model.decoder.enc_score_head.out_features == 3
 
 
+def test_constructor_honours_config_device(monkeypatch):
+    import dfine.model as model_module
+
+    seen = []
+    real_resolve = model_module._resolve_device
+
+    def capture(device):
+        seen.append(device)
+        return real_resolve(device)
+
+    monkeypatch.setattr(model_module, "_resolve_device", capture)
+    _model(device="cpu")
+    assert seen == ["cpu"]
+
+
 def test_construct_custom_no_preset():
     # size=None -> pure config from params (still valid for N-like 2-level).
     m = DFINE(backbone_pretrained=False, imgsz=IMGSZ)
     assert m.config.size is None
     assert isinstance(m, DFINE)
+
+
+def test_from_pretrained_uses_checkpoint_task_without_downloading(monkeypatch):
+    """Segmentation catalogue entries must build the mask head before loading weights."""
+    monkeypatch.setattr(DFINE, "load", lambda self, *_args, **_kwargs: self)
+    model = DFINE.from_pretrained("dfine-seg-n", device="cpu")
+    assert model.config.task == "segment"
+    assert hasattr(model.model.decoder, "mask_decoder")
 
 
 def test_predict_single_returns_results():
@@ -322,6 +345,73 @@ def test_train_rejects_both_data_and_loader():
     m = _model()
     with pytest.raises(ValueError, match="not both"):
         m.train(train_loader=object(), data="somewhere")
+
+
+def test_train_rejects_non_positive_epochs():
+    m = _model()
+    with pytest.raises(ValueError, match="epochs must be >= 1"):
+        m.train(train_loader=[], epochs=0)
+
+
+def test_train_epochs_override_reaches_loader_and_trainer(monkeypatch, tmp_path):
+    """Runtime epochs must resize the scheduler and no-aug policy, not only the loop."""
+    import dfine.train as train_pkg
+    import dfine.train.dataset as dataset
+
+    captured = {}
+    loader = []
+
+    def fake_loaders(_data, *, cfg, **_kwargs):
+        captured["loader_cfg"] = cfg
+        return loader, None
+
+    class FakeTrainer:
+        def __init__(self, model, cfg, **_kwargs):
+            self.model = model
+            captured["trainer_cfg"] = cfg
+
+        def fit(self, train_loader, *, epochs, **_kwargs):
+            assert train_loader is loader
+            captured["fit_epochs"] = epochs
+            return self.model.eval()
+
+    monkeypatch.setattr(dataset, "build_coco_dataloaders", fake_loaders)
+    monkeypatch.setattr(train_pkg, "Trainer", FakeTrainer)
+    model = _model()
+    model.train(
+        data="unused",
+        epochs=7,
+        remap_mscoco_category=True,
+        output_dir=str(tmp_path),
+        visualize=False,
+    )
+
+    assert captured["loader_cfg"].epochs == 7
+    assert captured["loader_cfg"].remap_mscoco_category is True
+    assert captured["trainer_cfg"].epochs == 7
+    assert captured["fit_epochs"] == 7
+    assert model.postprocessor.remap_mscoco_category is True
+
+
+def test_train_without_ema_returns_inference_ready_model(tmp_path):
+    """Disabling EMA must not leave training-only denoising active for the next predict."""
+    model = _model(
+        ema_decay=0.0,
+        warmup_iters=0,
+        use_amp=False,
+        freeze_norm=False,
+        freeze_at=-1,
+    )
+    samples = torch.rand(1, 3, IMGSZ, IMGSZ)
+    targets = [{"labels": torch.tensor([0]), "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]])}]
+    model.train(
+        train_loader=[(samples, targets)],
+        epochs=1,
+        output_dir=str(tmp_path),
+        visualize=False,
+    )
+    assert not model.model.training
+    assert len(model.predict(_image(64, 64))) == 1
 
 
 def test_train_from_data_path(tmp_path):

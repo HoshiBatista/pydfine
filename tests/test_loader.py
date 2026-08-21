@@ -95,6 +95,21 @@ def test_model_load_method(tmp_path):
     assert missing == [] and unexpected == []
 
 
+def test_strict_load_regenerates_buffers_for_custom_imgsz(tmp_path):
+    src = _model(imgsz=640)
+    ckpt_path = tmp_path / "fake-640.pth"
+    torch.save({"model": src.state_dict()}, ckpt_path)
+
+    dst = _model(imgsz=320)
+    expected_anchors = dst.decoder.anchors.clone()
+    expected_valid_mask = dst.decoder.valid_mask.clone()
+    missing, unexpected = load_checkpoint(dst, ckpt_path, strict=True)
+
+    assert missing == [] and unexpected == []
+    assert torch.equal(dst.decoder.anchors, expected_anchors)
+    assert torch.equal(dst.decoder.valid_mask, expected_valid_mask)
+
+
 # --- opt-in real-weight parity -----------------------------------------------
 #
 # Two ways to supply weights (both skipped when absent, so CI stays green):

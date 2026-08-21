@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,14 +8,14 @@ version = "0.2.0"
 description = "Ultralytics-style, config-first Python library for the D-FINE real-time object detector."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "pydfine contributors" }]
 keywords = ["d-fine", "object-detection", "detr", "computer-vision", "pytorch", "onnx"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
@@ -115,8 +115,8 @@ Paper = "https://arxiv.org/abs/2410.13842"
 [project.scripts]
 dfine = "dfine.cli:main"
 
-[tool.setuptools]
-license-files = ["LICENSE", "NOTICE"]
+[tool.setuptools.package-data]
+dfine = ["py.typed"]
 
 [tool.setuptools.packages.find]
 include = ["dfine*"]

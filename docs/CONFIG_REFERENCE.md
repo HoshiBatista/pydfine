@@ -22,8 +22,8 @@ Presets (`size=`) set the size-dependent fields (§9). Anything set explicitly i
 | `num_classes` | int | 80 | Number of object classes. |
 | `class_names` | list[str]\|None | None | Optional names; defaults to COCO-80 when `num_classes==80`. |
 | `imgsz` | int | 640 | Square inference/training resolution (`eval_spatial_size`). |
-| `device` | str | "cpu" | `"cpu"\|"cuda"\|"cuda:0"\|"mps"`. |
-| `remap_mscoco_category` | bool | False | COCO-id remap; keep False for custom datasets. |
+| `device` | str | "cpu" | Runtime device used when `DFINE(..., device=...)` is omitted: `"cpu"\|"cuda"\|"cuda:0"\|"mps"`. |
+| `remap_mscoco_category` | bool | False | COCO-id remap; keep False for contiguous custom datasets. `train()`/`val()` inherit it unless explicitly overridden. |
 | `mask_dim` | int | 256 | Mask-feature dim of the shared fuser (**128 for N**); used by `task="segment"` **and** `task="sem_seg"`. |
 
 The mask head is enabled automatically for `task="segment"`/`"sem_seg"` (the derived
@@ -78,8 +78,9 @@ B4/B5 `[512,1024,2048]` (L/X). See the §11 per-size table for the full mapping.
 | `feat_channels` | list[int] | `[256,256,256]` | Per-level channels (`[384]*3` for X). |
 | `num_points` | list[int] | `[3,6,3]` | Deformable sampling points per level (`[6,6]` for N). |
 | `decoder_nhead` | int | 8 | Decoder attention heads (upstream `nhead`). |
-| `decoder_offset_scale` | float | 0.5 | Deformable-attn offset scale. Upstream hard-codes 0.5; not currently wired to the module. |
+| `decoder_offset_scale` | float | 0.5 | Deformable-attn offset scale. |
 | `decoder_method` | str | "default" | `"default"\|"discrete"` deformable sampling (upstream `cross_attn_method`). |
+| `query_select_method` | str | "default" | Encoder-query selection: `"default"\|"one2many"\|"agnostic"`. |
 | `layer_scale` | float | 1.0 | Hidden-dim scale for the wide (aux) decoder layers. |
 
 ### 4a. Fine-grained Distribution Refinement (FDR)
@@ -115,6 +116,8 @@ B4/B5 `[512,1024,2048]` (L/X). See the §11 per-size table for the full mapping.
 | `cost_class` | float | 2.0 | Classification match cost. |
 | `cost_bbox` | float | 5.0 | L1 box match cost. |
 | `cost_giou` | float | 2.0 | GIoU match cost. |
+| `cost_mask` | float | 1.0 | Instance-mask BCE matching cost. |
+| `cost_mask_dice` | float | 1.0 | Instance-mask Dice matching cost. |
 | `matcher_alpha` | float | 0.25 | Matcher focal alpha (distinct from criterion `alpha`). |
 | `matcher_gamma` | float | 2.0 | Matcher focal gamma. |
 
@@ -127,6 +130,13 @@ B4/B5 `[512,1024,2048]` (L/X). See the §11 per-size table for the full mapping.
 | `loss_giou_weight` | float | 2.0 | GIoU loss. |
 | `loss_fgl_weight` | float | 0.15 | Fine-grained localization (DFL) loss. |
 | `loss_ddf_weight` | float | 1.5 | GO-LSD decoupled distillation loss. |
+| `loss_mask_bce_weight` | float | 1.0 | Instance-mask BCE loss weight. |
+| `loss_mask_dice_weight` | float | 1.0 | Instance-mask Dice loss weight. |
+| `loss_ce_weight` | float | 1.0 | Semantic-segmentation cross-entropy weight. |
+| `loss_dice_weight` | float | 1.0 | Semantic-segmentation Dice loss weight. |
+| `loss_aux_weight` | float | 0.4 | Semantic-segmentation auxiliary-head loss weight. |
+| `sem_seg_ignore_index` | int | 255 | Semantic label ignored by the loss; must fit uint8 (0..255). |
+| `sem_seg_label_smoothing` | float | 0.0 | Semantic cross-entropy label smoothing. |
 | `focal_alpha` | float | 0.75 | Focal/VFL alpha (criterion `alpha`). |
 | `focal_gamma` | float | 2.0 | Focal/VFL gamma (verify). |
 | `ddf_temperature` | float | 0.05 | GO-LSD temperature (`T_init≈5e-2`). |
@@ -136,7 +146,7 @@ B4/B5 `[512,1024,2048]` (L/X). See the §11 per-size table for the full mapping.
 
 | Param | Type | Default | Description |
 |---|---|---|---|
-| `num_top_queries` | int | 300 | Top-k detections kept. |
+| `num_top_queries` | int | 300 | Top-k detections kept; cannot exceed `num_queries * num_classes`. |
 | `conf` | float | 0.4 | Default score threshold at predict time. |
 
 ## 9. Training / optimization (`DFINE.train`)
@@ -146,14 +156,17 @@ B4/B5 `[512,1024,2048]` (L/X). See the §11 per-size table for the full mapping.
 | `epochs` | int | 72 | Total epochs (L/X: 72+2; M/S: 120+4). |
 | `batch` | int | 32 | Total batch size. |
 | `lr` | float | 2.5e-4 | Base LR (L/X 2.5e-4; M/S 2e-4). |
-| `lr_backbone` | float | 1.25e-4 | Backbone LR (smaller models use higher). |
+| `lr_backbone` | float | 1.25e-5 | Backbone LR (smaller models use higher). |
 | `weight_decay` | float | 1.25e-4 | AdamW weight decay (M/S 1e-4). |
+| `zero_wd_encdec_bias` | bool | False | Add encoder/decoder biases to the zero-weight-decay group (True for N/S/M). |
 | `betas` | tuple | (0.9, 0.999) | AdamW betas. |
 | `clip_max_norm` | float | 0.1 | Grad clip (verify). |
 | `warmup_iters` | int | 500 | LR warmup iterations. |
+| `lr_milestones` | list[int]\|None | None | Epoch milestones for `scheduler="multistep"`; None uses `[500]`. |
+| `lr_gamma` | float | 0.1 | LR multiplier at each multistep milestone. |
 | `scheduler` | str | "flatcosine" | `"flatcosine"\|"multistep"`. |
 | `ema_decay` | float | 0.9999 | Weight-EMA decay. |
-| `ema_warmups` | int | 2000 | EMA warmup steps (verify per size). |
+| `ema_warmups` | int | 1000 | EMA warmup steps. |
 | `use_amp` | bool | True | Mixed precision. |
 | `no_aug_epoch` | int | 2 | Trailing epochs with advanced augs off (M/S: 4). |
 | `seed` | int | 0 | RNG seed. |

@@ -139,3 +139,60 @@ def test_cli_info_runs(monkeypatch):
     pytest.importorskip("torch")
     _stub_build_model(monkeypatch)
     assert main(["info", "n", "--verbose"]) == 0  # summary content covered by test_model.py
+
+
+def test_cli_train_threads_class_count_and_coco_remap(monkeypatch, tmp_path):
+    import dfine.cli as cli
+
+    captured = {}
+
+    class FakeModel:
+        def train(self, **kwargs):
+            captured["train"] = kwargs
+
+    def fake_build(model_arg, weights=None, **overrides):
+        captured["build"] = (model_arg, weights, overrides)
+        return FakeModel()
+
+    monkeypatch.setattr(cli, "_build_model", fake_build)
+    rc = main(
+        [
+            "train",
+            "n",
+            "--data",
+            "coco",
+            "--num-classes",
+            "3",
+            "--remap",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    assert rc == 0
+    assert captured["build"][2] == {"remap_mscoco_category": True, "num_classes": 3}
+    assert captured["train"]["remap_mscoco_category"] is True
+
+
+def test_cli_train_rejects_class_override_for_released_checkpoint():
+    with pytest.raises(ValueError, match="cannot be combined"):
+        main(["train", "dfine-n", "--data", "coco", "--num-classes", "3"])
+
+
+def test_cli_export_threads_imgsz_into_checkpoint_build(monkeypatch, tmp_path):
+    import dfine.cli as cli
+
+    captured = {}
+
+    class FakeModel:
+        def export(self, **kwargs):
+            captured["export"] = kwargs
+            return tmp_path / "model.onnx"
+
+    def fake_build(model_arg, weights=None, **overrides):
+        captured["build"] = (model_arg, weights, overrides)
+        return FakeModel()
+
+    monkeypatch.setattr(cli, "_build_model", fake_build)
+    assert main(["export", "dfine-n", "--imgsz", "320"]) == 0
+    assert captured["build"][2] == {"imgsz": 320}
+    assert captured["export"]["imgsz"] == 320

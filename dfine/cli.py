@@ -90,35 +90,42 @@ def _cmd_predict(args: argparse.Namespace) -> int:
 
 def _cmd_val(args: argparse.Namespace) -> int:
     model = _build_model(args.model, args.weights, remap_mscoco_category=args.remap)
-    metrics = model.val(data=args.data, plots=args.plots, output_dir=args.output_dir)
+    metrics = model.val(
+        data=args.data,
+        remap_mscoco_category=args.remap,
+        plots=args.plots,
+        output_dir=args.output_dir,
+    )
     for key, value in metrics.items():
         print(f"  {key:<10} {value:.4f}")
     return 0
 
 
 def _cmd_train(args: argparse.Namespace) -> int:
-    model = _build_model(args.model, args.weights)
+    if args.num_classes is not None and args.model.lower() in CHECKPOINTS:
+        raise ValueError(
+            "--num-classes changes the prediction head and cannot be combined with a released "
+            "checkpoint; use a bare size (n/s/m/l/x) or matching local --weights."
+        )
+    overrides = {"remap_mscoco_category": args.remap}
+    if args.num_classes is not None:
+        overrides["num_classes"] = args.num_classes
+    model = _build_model(args.model, args.weights, **overrides)
     model.train(
         data=args.data,
         epochs=args.epochs,
         batch_size=args.batch_size,
         output_dir=args.output_dir,
         devices=args.devices,
+        remap_mscoco_category=args.remap,
     )
     print(f"training done -> {args.output_dir}")
     return 0
 
 
 def _cmd_export(args: argparse.Namespace) -> int:
-    from .model import DFINE
-
-    if args.model.lower() in CHECKPOINTS:
-        model = DFINE.from_pretrained(args.model.lower())
-    else:
-        overrides = {"imgsz": args.imgsz} if args.imgsz else {}
-        model = DFINE(size=args.model, **overrides)
-        if args.weights:
-            model.load(args.weights)
+    overrides = {"imgsz": args.imgsz} if args.imgsz else {}
+    model = _build_model(args.model, args.weights, **overrides)
     path = model.export(
         format=args.format,
         file=args.file,
@@ -180,6 +187,10 @@ def build_parser() -> argparse.ArgumentParser:
     tr.add_argument("--data", required=True, help="COCO dataset root")
     tr.add_argument("--epochs", type=int, default=None, help="override the preset's epoch count")
     tr.add_argument("--batch-size", type=int, default=4, help="per-step batch size")
+    tr.add_argument(
+        "--num-classes", type=int, default=None, help="dataset class count (bare size only)"
+    )
+    tr.add_argument("--remap", action="store_true", help="remap sparse MS-COCO ids (stock COCO)")
     tr.add_argument("--output-dir", default="runs/train", help="checkpoints/logs directory")
     tr.add_argument("--devices", type=int, default=None, help="number of GPUs (multi-GPU DDP)")
 

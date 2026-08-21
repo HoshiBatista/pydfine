@@ -164,10 +164,13 @@ config, loads the launcher's weight snapshot, shards the loaders with a
 launcher. Or run `torchrun --nproc_per_node=N your_script.py` and call `train(...)`
 without `devices` — `launched_via_torchrun()` makes each worker join the existing group.
 The `Trainer` targets the de-paralleled module for the optimizer/EMA/checkpoints and
-lets only rank 0 write artifacts. Phase 4 is complete; next is Phase 3 (ONNX export).
+lets only rank 0 write artifacts.
 
-## 7. Export — planned (Phase 3, not yet implemented)
+## 7. Export — implemented (Phase 3)
 
-Deploy graph → ONNX (dynamic batch), then TensorRT (`trtexec --fp16`) or OpenVINO
-downstream. Keep the two-input signature `(images, orig_target_sizes)` so exported
-graphs match the torch path. `DFINE.export()` currently raises a clear phase stub.
+`DFINE.export()` writes ONNX (dynamic batch by default) or a fixed-shape TorchScript
+graph. Detection uses `(images, orig_target_sizes)` and returns
+`(labels, boxes, scores)`; instance segmentation adds masks; semantic segmentation uses
+one `images` input and returns a uint8 label map. `tensorrt_command()` builds the
+downstream `trtexec` invocation; OpenVINO can consume the ONNX directly. Export traces
+on CPU for portable artifacts and deep-copies deploy modules, leaving the live model intact.

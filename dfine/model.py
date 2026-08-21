@@ -45,9 +45,16 @@ def _cleanup_masks(masks: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
 
 
 def _resolve_device(device: str | torch.device | None) -> torch.device:
-    if device is not None:
-        return torch.device(device)
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    resolved = torch.device(
+        device if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
+    if (
+        resolved.type == "cuda"
+        and resolved.index is None
+        and int(os.environ.get("WORLD_SIZE", "1")) > 1
+    ):
+        return torch.device("cuda", int(os.environ.get("LOCAL_RANK", "0")))
+    return resolved
 
 
 def _coco_names() -> dict[int, str]:
@@ -203,7 +210,7 @@ class DFINE:
             self.config = config
         else:
             self.config = DFINEConfig.preset(size, **params) if size else DFINEConfig(**params)
-        self.device = _resolve_device(device)
+        self.device = _resolve_device(self.config.device if device is None else device)
         self.names = _build_names(self.config)
 
         from .backends.native import DFINE as _NativeDFINE
@@ -230,16 +237,11 @@ class DFINE:
         ``name`` is a catalogue entry (``"dfine-s"``, ``"dfine-l-obj365"`` ...); the
         size and ``num_classes`` are taken from it. See ``dfine models``.
         """
-        from .registry import resolve
+        from .registry import config_for, resolve
 
         spec = resolve(name)
-        model = cls(
-            size=spec.size,
-            device=device,
-            num_classes=spec.num_classes,
-            backbone_pretrained=False,
-            **overrides,
-        )
+        cfg = config_for(spec, **{"backbone_pretrained": False, **overrides})
+        model = cls(config=cfg, device=device)
         model.load(name)
         return model
 
@@ -264,6 +266,15 @@ class DFINE:
         load_checkpoint(self.model, path, use_ema=use_ema, strict=True)
         self.model.to(self.device)
         return self
+
+    def _resolve_coco_remap(self, value: bool | None) -> bool:
+        """Resolve a call-level COCO remap override and keep config/postprocessor aligned."""
+        resolved = self.config.remap_mscoco_category if value is None else bool(value)
+        if resolved != self.config.remap_mscoco_category:
+            self.config = self.config.override(remap_mscoco_category=resolved)
+        if hasattr(self.postprocessor, "remap_mscoco_category"):
+            self.postprocessor.remap_mscoco_category = resolved
+        return resolved
 
     @torch.no_grad()
     def predict(
@@ -496,7 +507,7 @@ class DFINE:
         batch_size: int = 4,
         num_workers: int = 4,
         augment: bool = True,
-        remap_mscoco_category: bool = False,
+        remap_mscoco_category: bool | None = None,
         val_split: float = 0.2,
         devices: int | None = None,
         val_loader=None,
@@ -564,6 +575,10 @@ class DFINE:
         """
         from .train.distributed import launched_via_torchrun, setup_distributed
 
+        if epochs is not None and int(epochs) < 1:
+            raise ValueError(f"epochs must be >= 1, got {epochs}.")
+        remap_mscoco_category = self._resolve_coco_remap(remap_mscoco_category)
+
         if devices is not None and int(devices) > 1 and not launched_via_torchrun():
             return self._train_multigpu(
                 int(devices),
@@ -624,6 +639,11 @@ class DFINE:
         val_plots=False,
     ):
         """Build the loaders (if ``data=``) and run the training loop in this process."""
+        run_epochs = self.config.epochs if epochs is None else int(epochs)
+        if run_epochs < 1:
+            raise ValueError(f"epochs must be >= 1, got {run_epochs}.")
+        run_config = self.config.override(epochs=run_epochs)
+
         if data is not None:
             if train_loader is not None:
                 raise ValueError("Pass either `data=` or `train_loader=`, not both.")
@@ -634,7 +654,7 @@ class DFINE:
 
                 train_loader, auto_val_loader = build_seg_dataloaders(
                     data,
-                    cfg=self.config,
+                    cfg=run_config,
                     batch_size=batch_size,
                     num_workers=num_workers,
                     val_split=val_split,
@@ -646,7 +666,7 @@ class DFINE:
 
                 train_loader, auto_val_loader = build_coco_dataloaders(
                     data,
-                    cfg=self.config,
+                    cfg=run_config,
                     batch_size=batch_size,
                     num_workers=num_workers,
                     augment=augment,
@@ -698,16 +718,21 @@ class DFINE:
 
         trainer = Trainer(
             self.model,
-            self.config,
+            run_config,
             device=self.device,
             output_dir=output_dir,
             visualize=visualize,
             use_wandb=use_wandb,
         )
         best = trainer.fit(
-            train_loader, epochs=epochs, val_loader=val_loader, val_fn=val_fn, resume=resume
+            train_loader,
+            epochs=run_epochs,
+            val_loader=val_loader,
+            val_fn=val_fn,
+            resume=resume,
         )
-        self.model = best.to(self.device)
+        self.model = best.to(self.device).eval()
+        self.postprocessor.eval()
 
     def _bind_local_rank_device(self) -> None:
         """Pin this process to its ``LOCAL_RANK`` GPU (torchrun path; no-op on CPU)."""
@@ -741,12 +766,20 @@ class DFINE:
                 "Multi-GPU training (`devices>1`) needs `data=` (a COCO root); in-memory "
                 "loaders can't be shipped to worker processes."
             )
+        if torch.cuda.is_available() and world_size > torch.cuda.device_count():
+            visible = torch.cuda.device_count()
+            raise ValueError(f"devices={world_size} exceeds the {visible} visible CUDA devices.")
         from .train.distributed import spawn
 
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
         init_ckpt = out / "_init_weights.pth"
         torch.save(self.model.state_dict(), init_ckpt)
+        original_device = self.device
+        self.model.to("cpu")
+        self.postprocessor.to("cpu")
+        if original_device.type == "cuda":
+            torch.cuda.empty_cache()
 
         worker_kwargs = dict(
             data=str(data),
@@ -764,10 +797,15 @@ class DFINE:
         )
         try:
             spawn(_train_worker, world_size, args=(self.config, str(init_ckpt), worker_kwargs))
+        except BaseException:
+            self.model.to(original_device)
+            self.postprocessor.to(original_device)
+            raise
         finally:
             init_ckpt.unlink(missing_ok=True)
 
         self.load(str(out / "last.pth"))
+        self.postprocessor.to(self.device)
         return self
 
     def val(
@@ -777,7 +815,7 @@ class DFINE:
         val_loader=None,
         batch_size: int = 4,
         num_workers: int = 4,
-        remap_mscoco_category: bool = False,
+        remap_mscoco_category: bool | None = None,
         plots: bool = False,
         output_dir: str = "runs/val",
     ) -> dict[str, float]:
@@ -805,6 +843,7 @@ class DFINE:
             raise ValueError("Provide validation data via `data=` or `val_loader=`.")
         if data is not None and val_loader is not None:
             raise ValueError("Pass either `data=` or `val_loader=`, not both.")
+        remap_mscoco_category = self._resolve_coco_remap(remap_mscoco_category)
         if data is not None:
             from .train.dataset import build_coco_val_dataloader
 
@@ -865,7 +904,8 @@ class DFINE:
         Returns the output :class:`~pathlib.Path`. ONNX needs ``pip install pydfine[export]``;
         TorchScript needs only torch. ``file`` defaults to ``dfine-<size>.<ext>``. ONNX-only
         knobs (``dynamic``/``simplify``/``opset``) are ignored for TorchScript. Use
-        :func:`dfine.export.tensorrt_command` for a downstream ``trtexec`` engine.
+        :func:`dfine.export.tensorrt_command` for a downstream ``trtexec`` engine. Export
+        traces on CPU so the saved artifact is portable regardless of the live model's device.
         """
         fmt = format.lower()
         if fmt not in ("onnx", "torchscript"):
@@ -892,7 +932,7 @@ class DFINE:
                 task=self.config.task,
                 imgsz=imgsz,
                 batch=batch,
-                device=self.device,
+                device="cpu",
             )
 
         from .export.onnx import export_onnx
@@ -908,7 +948,7 @@ class DFINE:
             opset=opset,
             dynamic=dynamic,
             simplify=simplify,
-            device=self.device,
+            device="cpu",
         )
 
     @staticmethod

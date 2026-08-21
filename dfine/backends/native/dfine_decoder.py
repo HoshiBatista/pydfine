@@ -197,6 +197,7 @@ class TransformerDecoderLayer(nn.Module):
         n_levels=4,
         n_points=4,
         cross_attn_method="default",
+        offset_scale=0.5,
         layer_scale=None,
     ):
         super().__init__()
@@ -209,7 +210,12 @@ class TransformerDecoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
 
         self.cross_attn = MSDeformableAttention(
-            d_model, n_head, n_levels, n_points, method=cross_attn_method
+            d_model,
+            n_head,
+            n_levels,
+            n_points,
+            method=cross_attn_method,
+            offset_scale=offset_scale,
         )
         self.dropout2 = nn.Dropout(dropout)
 
@@ -458,6 +464,7 @@ class DFINETransformer(nn.Module):
         num_levels=3,
         num_points=4,
         nhead=8,
+        offset_scale=0.5,
         num_layers=6,
         dim_feedforward=1024,
         dropout=0.0,
@@ -519,6 +526,7 @@ class DFINETransformer(nn.Module):
             num_levels,
             num_points,
             cross_attn_method=cross_attn_method,
+            offset_scale=offset_scale,
         )
         decoder_layer_wide = TransformerDecoderLayer(
             hidden_dim,
@@ -529,6 +537,7 @@ class DFINETransformer(nn.Module):
             num_levels,
             num_points,
             cross_attn_method=cross_attn_method,
+            offset_scale=offset_scale,
             layer_scale=layer_scale,
         )
         self.decoder = TransformerDecoder(
@@ -639,6 +648,7 @@ class DFINETransformer(nn.Module):
             num_levels=cfg.num_levels,
             num_points=cfg.num_points,
             nhead=cfg.decoder_nhead,
+            offset_scale=cfg.decoder_offset_scale,
             num_layers=cfg.decoder_layers,
             dim_feedforward=cfg.decoder_dim_feedforward,
             num_denoising=cfg.num_denoising,

@@ -92,8 +92,8 @@ class DFINE(nn.Module):
         see :func:`dfine.registry.list_checkpoints`. The architecture (size +
         ``num_classes``) is derived from the checkpoint so obj365's 366-class head
         is wired automatically; the weights are downloaded/cached and strict-loaded.
-        Extra ``overrides`` pass through to the config (avoid changing ``imgsz`` —
-        it's baked into the checkpoint's anchor buffer).
+        Extra ``overrides`` pass through to the config. Resolution-dependent anchor
+        buffers are regenerated when ``imgsz`` differs from the release resolution.
         """
         from ...downloads import download_weights
         from ...registry import config_for, resolve

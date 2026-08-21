@@ -60,6 +60,9 @@ Fully custom architecture, no preset:
 model = DFINE(
     num_classes=3,
     backbone="hgnetv2_b0",
+    return_idx=[1, 2, 3],
+    in_channels=[256, 512, 1024],
+    feat_strides=[8, 16, 32],
     use_lab=True,
     freeze_at=-1,
     hidden_dim=256,

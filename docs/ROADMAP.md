@@ -43,9 +43,9 @@ ported modules into one model behind the public API.
       `Results`; batched; conf filter; input loading (path/PIL/ndarray/list) +
       `Resize(imgsz)+ToTensor` preprocessing (matches upstream `torch_inf.py`).
       Config-first ctor (`DFINE(size=..., **overrides)`), `.load(name|path)`,
-      `.from_pretrained(name)`, device auto-select; `train/val/export/predict_video`
-      are phase-stubbed. Exposed lazily from `dfine/__init__.py` (base import stays
-      torch-free).
+      `.from_pretrained(name)`, config/runtime device selection, plus implemented
+      `train/val/export/predict_video`. Exposed lazily from `dfine/__init__.py` (base
+      import stays torch-free).
 - [x] `Results`/`Boxes` (`.boxes.xyxy/.conf/.cls`, `.plot()/.save()`, `__len__`,
       iterate) in `dfine/results.py`. Weight download/cache = `dfine/downloads.py`.
 - [x] `DFINE.predict_video()` — frame-by-frame detect over a video (OpenCV);
@@ -206,6 +206,16 @@ ported modules into one model behind the public API.
 ---
 
 ## Notes / decisions log
+- **2026-08-21 — Full bug-fix audit.** Fixed catalogue task loss in the public
+  `from_pretrained` path (segmentation checkpoints now build their mask head), synchronized
+  call-level `epochs` with dataloaders/schedulers, restored eval mode after non-EMA training,
+  unified COCO remapping across config/train/val/CLI, and validated custom HGNet channel/
+  stride wiring. Strict checkpoint loading now regenerates only resolution-dependent decoder
+  buffers, so released weights work with a build-time custom `imgsz`. Hardened config limits,
+  wired `decoder_offset_scale`, honored `DFINEConfig.device`, bound torchrun to `LOCAL_RANK`,
+  removed the launcher's duplicate GPU model before DDP spawn, made concurrent downloads use
+  unique atomic temporary files, and added `py.typed` plus current PEP 639 license metadata.
+  Tests now form a local package, avoiding collision with unrelated installed `tests` modules.
 - **2026-07-25 — Val analytics: unified IoU-match threshold at 0.5 (consistency fix).** Found
   during a full-codebase bug sweep: `ConfusionMatrix` defaulted to `iou_thresh=0.45` (the
   ultralytics default) while its siblings `PRCurveMetrics` and `WorstPredictions` use `0.5`.
@@ -557,10 +567,9 @@ ported modules into one model behind the public API.
   postproc stays a separate module. `native/loader.py` unwraps upstream `.pth`
   (prefers `ema.module`, strips `module.`) and does a `strict=True` load. **Gotcha:**
   the decoder registers `anchors`/`valid_mask` as *persistent* buffers sized to
-  `eval_spatial_size`, so `imgsz` must match the checkpoint's train resolution (640,
-  the preset default = all official COCO releases) or strict load fails on those two
-  buffers. Parity proven offline against a real released-format N `.pth` (0 missing/0
-  unexpected).
+  `eval_spatial_size`. The 2026-08-21 loader update keeps freshly generated versions of
+  only those buffers when `imgsz` differs, while all learned weights still load strictly.
+  Parity proven offline against a real released-format N `.pth` (0 missing/0 unexpected).
 - **2026-07-12** — Checkpoint "which model to use" logic. `registry.py` now maps each
   released asset to a `CheckpointSpec(size, dataset, num_classes, filename, url)`.
   Three dataset variants: `coco`/`obj2coco` → 80 classes, `obj365` → 366 (the *only*
@@ -575,7 +584,8 @@ ported modules into one model behind the public API.
   run it with the 5 downloaded COCO `.pth` to close the parity tick.
 - **2026-07-12** — Public API landed (`model.py` + `results.py`), the headline
   `DFINE(...)` façade from the README. `DFINE(size=..., **overrides)` is config-first
-  (device is a runtime kwarg, not a config field); `.predict(source, conf, imgsz)`
+  (`DFINEConfig.device` supplies the default and the runtime `device=` kwarg overrides it);
+  `.predict(source, conf, imgsz)`
   loads path/PIL/ndarray/list → `Resize(imgsz)+ToTensor` (no mean/std norm, matches
   upstream `torch_inf.py`) → native model → postprocessor → `list[Results]`. Boxes
   come back in original pixel scale (postprocessor already rescales). `.load()` takes a

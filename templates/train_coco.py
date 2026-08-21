@@ -43,9 +43,18 @@ def main() -> None:
     # A bare size builds an ImageNet-backbone model; a checkpoint name starts from released
     # COCO weights. Set imgsz/num_classes at build time — they define the architecture.
     if args.model in ("n", "s", "m", "l", "x"):
-        model = DFINE(size=args.model, num_classes=args.num_classes, imgsz=args.imgsz)
+        model = DFINE(
+            size=args.model,
+            num_classes=args.num_classes,
+            imgsz=args.imgsz,
+            remap_mscoco_category=args.remap,
+        )
     else:
-        model = DFINE.from_pretrained(args.model)
+        model = DFINE.from_pretrained(
+            args.model,
+            imgsz=args.imgsz,
+            remap_mscoco_category=args.remap,
+        )
 
     model.train(
         data=args.data,

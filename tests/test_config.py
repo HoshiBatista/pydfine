@@ -128,6 +128,30 @@ def test_imgsz_must_be_multiple_of_stride():
     assert DFINEConfig(imgsz=512).imgsz == 512
 
 
+def test_backbone_outputs_must_match_encoder_inputs():
+    with pytest.raises(ValueError, match=r"expected \[256, 512, 1024\]"):
+        DFINEConfig(backbone="hgnetv2_b0")
+    cfg = DFINEConfig(
+        backbone="hgnetv2_b0",
+        return_idx=[1, 2, 3],
+        in_channels=[256, 512, 1024],
+        feat_strides=[8, 16, 32],
+    )
+    assert cfg.in_channels == [256, 512, 1024]
+
+
+def test_num_top_queries_cannot_exceed_available_predictions():
+    with pytest.raises(ValueError, match="num_top_queries"):
+        DFINEConfig.preset("n", num_classes=1, num_queries=10, num_top_queries=11)
+
+
+def test_sem_seg_uint8_limits_are_validated():
+    with pytest.raises(ValueError, match="at most 255 classes"):
+        DFINEConfig.preset("n", task="sem_seg", num_classes=256)
+    with pytest.raises(ValueError, match="sem_seg_ignore_index"):
+        DFINEConfig.preset("n", task="sem_seg", sem_seg_ignore_index=256)
+
+
 def test_length_consistency_holds_for_all_presets():
     for size in SIZES:
         cfg = DFINEConfig.preset(size)

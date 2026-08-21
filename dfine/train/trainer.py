@@ -285,7 +285,9 @@ class Trainer:
         """
         from .distributed import barrier, de_parallel, wrap_loader_distributed
 
-        epochs = epochs or self.cfg.epochs
+        epochs = self.cfg.epochs if epochs is None else int(epochs)
+        if epochs < 1:
+            raise ValueError(f"epochs must be >= 1, got {epochs}.")
         self._best_metric = -1.0
         start_epoch = 0
         if resume:

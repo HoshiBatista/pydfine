@@ -18,6 +18,16 @@ from typing import Any
 
 SIZES = ("n", "s", "m", "l", "x")
 
+_HGNET_STAGE_CHANNELS: dict[str, tuple[int, int, int, int]] = {
+    "hgnetv2_b0": (64, 256, 512, 1024),
+    "hgnetv2_b1": (64, 256, 512, 1024),
+    "hgnetv2_b2": (96, 384, 768, 1536),
+    "hgnetv2_b3": (128, 512, 1024, 2048),
+    "hgnetv2_b4": (128, 512, 1024, 2048),
+    "hgnetv2_b5": (128, 512, 1024, 2048),
+}
+_HGNET_STAGE_STRIDES = (4, 8, 16, 32)
+
 
 @dataclass(frozen=True)
 class DFINEConfig:
@@ -257,6 +267,23 @@ class DFINEConfig:
         if not self.backbone.startswith("hgnetv2_b") or self.backbone[-1] not in "012345":
             raise ValueError(f"backbone must be hgnetv2_b0..b5, got {self.backbone!r}.")
 
+        if any(i < 0 or i >= 4 for i in self.return_idx):
+            raise ValueError(
+                f"return_idx must contain HGNetV2 stage indices 0..3, got {self.return_idx}."
+            )
+        expected_channels = [_HGNET_STAGE_CHANNELS[self.backbone][i] for i in self.return_idx]
+        if self.in_channels != expected_channels:
+            raise ValueError(
+                f"in_channels {self.in_channels} do not match {self.backbone} outputs selected by "
+                f"return_idx={self.return_idx}; expected {expected_channels}."
+            )
+        expected_strides = [_HGNET_STAGE_STRIDES[i] for i in self.return_idx]
+        if self.feat_strides != expected_strides:
+            raise ValueError(
+                f"feat_strides {self.feat_strides} do not match return_idx={self.return_idx}; "
+                f"expected {expected_strides}."
+            )
+
         n = self.num_levels
         for name in ("in_channels", "feat_strides", "feat_channels", "num_points", "return_idx"):
             got = len(getattr(self, name))
@@ -284,6 +311,23 @@ class DFINEConfig:
             raise ValueError(
                 f"eval_idx={self.eval_idx} out of range for decoder_layers={self.decoder_layers}."
             )
+        top_query_limit = self.num_queries * self.num_classes
+        if not 1 <= self.num_top_queries <= top_query_limit:
+            raise ValueError(
+                f"num_top_queries must be in [1, {top_query_limit}] for this decoder, "
+                f"got {self.num_top_queries}."
+            )
+        if self.task == "sem_seg":
+            if self.num_classes > 255:
+                raise ValueError(
+                    "sem_seg supports at most 255 classes because predictions use uint8 "
+                    f"label maps, got {self.num_classes}."
+                )
+            if not 0 <= self.sem_seg_ignore_index <= 255:
+                raise ValueError(
+                    "sem_seg_ignore_index must fit a uint8 label map (0..255), "
+                    f"got {self.sem_seg_ignore_index}."
+                )
 
 
 def list_presets() -> tuple[str, ...]:

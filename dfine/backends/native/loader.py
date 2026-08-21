@@ -58,6 +58,20 @@ def extract_state_dict(checkpoint: dict, use_ema: bool = True) -> dict:
     return _strip_module_prefix(state_dict)
 
 
+def _use_generated_resolution_buffers(model: nn.Module, state_dict: dict) -> dict:
+    """Keep generated decoder buffers when the requested input resolution differs."""
+    current = model.state_dict()
+    replacements = {}
+    for key in ("decoder.anchors", "decoder.valid_mask"):
+        loaded = state_dict.get(key)
+        generated = current.get(key)
+        if loaded is not None and generated is not None and loaded.shape != generated.shape:
+            replacements[key] = generated
+    if not replacements:
+        return state_dict
+    return {**state_dict, **replacements}
+
+
 def load_checkpoint(model: nn.Module, path, use_ema: bool = True, strict: bool = True):
     """Load an upstream ``.pth`` into ``model`` in place.
 
@@ -67,4 +81,5 @@ def load_checkpoint(model: nn.Module, path, use_ema: bool = True, strict: bool =
     """
     checkpoint = torch.load(path, map_location="cpu", weights_only=False)
     state_dict = extract_state_dict(checkpoint, use_ema=use_ema)
+    state_dict = _use_generated_resolution_buffers(model, state_dict)
     return model.load_state_dict(state_dict, strict=strict)

@@ -62,6 +62,19 @@ def test_boxes_len_and_iter():
     assert xyxy.shape == (4,) and float(conf) == pytest.approx(0.9) and int(cls) == 0
 
 
+def test_results_index_and_slice_keep_boxes_and_masks_aligned():
+    r = _results(2, masks=True)
+    one = r[1]
+    assert len(one) == len(one.masks) == 1
+    assert one.boxes.xyxy.shape == (1, 4)
+    assert int(one.boxes.cls[0]) == 2
+    assert torch.equal(one.masks.data[0], r.masks.data[1])
+
+    first = r[:1]
+    assert len(first) == len(first.masks) == 1
+    assert int(first.boxes.cls[0]) == 0
+
+
 def test_results_orig_shape_and_repr():
     r = _results()
     assert r.orig_shape == (64, 96)  # (h, w)

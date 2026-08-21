@@ -23,7 +23,7 @@ pip install pydfine[track]          # video tracking template
 | [`train_coco.py`](train_coco.py) | Fine-tune a preset on a COCO dataset root. | `[train]` |
 | [`train_from_yolo.py`](train_from_yolo.py) | Convert a YOLO dataset then train on it. | `[train]` |
 | [`train_segmentation.py`](train_segmentation.py) | Train instance / semantic segmentation from a YOLO-style root. | `[train]` |
-| [`finetune_custom_classes.py`](finetune_custom_classes.py) | Start from COCO weights, retrain the head for your classes. | `[train]` |
+| [`finetune_custom_classes.py`](finetune_custom_classes.py) | Fine-tune an ImageNet-pretrained backbone for custom classes. | `[train]` |
 | [`validate.py`](validate.py) | COCO metrics + the analytics plot bundle. | `[train]` |
 | [`export_onnx.py`](export_onnx.py) | Export ONNX / TorchScript for deployment. | `[export]` |
 | [`deploy_onnxruntime.py`](deploy_onnxruntime.py) | Run an exported ONNX graph with onnxruntime (no torch at serve time). | onnxruntime |

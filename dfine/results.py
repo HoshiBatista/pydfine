@@ -111,6 +111,20 @@ class Boxes:
         for i in range(len(self)):
             yield self.xyxy[i], self.conf[i], self.cls[i]
 
+    def __getitem__(self, index) -> Boxes:
+        """Return a box subset while preserving the leading detection dimension."""
+        xyxy = self.xyxy[index]
+        conf = self.conf[index]
+        cls = self.cls[index]
+        track_id = None if self.id is None else self.id[index]
+        if isinstance(index, int):
+            xyxy = xyxy.unsqueeze(0)
+            conf = conf.unsqueeze(0)
+            cls = cls.unsqueeze(0)
+            if track_id is not None:
+                track_id = track_id.unsqueeze(0)
+        return Boxes(xyxy, conf, cls, track_id)
+
     def __repr__(self) -> str:
         return f"Boxes(n={len(self)})"
 
@@ -131,6 +145,13 @@ class Masks:
     def __iter__(self):
         for i in range(len(self)):
             yield self.data[i]
+
+    def __getitem__(self, index) -> Masks:
+        """Return a mask subset while preserving the leading instance dimension."""
+        data = self.data[index]
+        if isinstance(index, int):
+            data = data.unsqueeze(0)
+        return Masks(data)
 
     def __repr__(self) -> str:
         h, w = (self.data.shape[-2], self.data.shape[-1]) if len(self) else (0, 0)
@@ -178,6 +199,11 @@ class Results:
 
     def __len__(self) -> int:
         return len(self.boxes)
+
+    def __getitem__(self, index) -> Results:
+        """Return a detection subset, keeping boxes and instance masks aligned."""
+        masks = None if self.masks is None else self.masks[index]
+        return Results(self.orig_img, self.boxes[index], self.names, masks, self.sem_seg)
 
     def __repr__(self) -> str:
         extra = (

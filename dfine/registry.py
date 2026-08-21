@@ -143,9 +143,8 @@ def config_for(spec: CheckpointSpec | str, **overrides) -> DFINEConfig:
     """Build a :class:`DFINEConfig` whose architecture matches a checkpoint.
 
     Applies the preset for the checkpoint's size and its ``num_classes`` (so
-    obj365's 366-class head is wired), then any user overrides. Keep ``imgsz`` at
-    its 640 default: the decoder's persistent ``anchors`` buffer is sized to it,
-    so a mismatch breaks the strict load.
+    obj365's 366-class head is wired), then any user overrides. The loader keeps
+    freshly generated resolution-dependent buffers when ``imgsz`` is overridden.
     """
     from .config import DFINEConfig
 

@@ -49,6 +49,11 @@ def test_decoder_dim_feedforward_wiring():
     assert dec.decoder.layers[0].linear1.out_features == 512
 
 
+def test_decoder_offset_scale_wiring():
+    dec = DFINETransformer.from_config(_cfg("n").override(decoder_offset_scale=0.25))
+    assert dec.decoder.layers[0].cross_attn.offset_scale == 0.25
+
+
 def test_x_decoder_hidden_dim_stays_256():
     # X runs the *encoder* at 384 but upstream leaves the decoder at 256 (only
     # feat_channels becomes 384, which input_proj maps 384->256). Regression guard

@@ -9,6 +9,7 @@ filename, and released assets are immutable.
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
 
 __all__ = ["cache_dir", "download", "download_weights"]
@@ -35,9 +36,15 @@ def download(url: str, filename: str | None = None, cache_dir_override=None, pro
 
     import torch.hub
 
-    tmp = dst.with_suffix(dst.suffix + ".part")
-    torch.hub.download_url_to_file(url, str(tmp), progress=progress)
-    tmp.replace(dst)
+    tmp = dst.with_name(f".{dst.name}.{os.getpid()}.{uuid.uuid4().hex}.part")
+    try:
+        torch.hub.download_url_to_file(url, str(tmp), progress=progress)
+        if dst.exists():
+            tmp.unlink()
+        else:
+            tmp.replace(dst)
+    finally:
+        tmp.unlink(missing_ok=True)
     return dst
 
 
