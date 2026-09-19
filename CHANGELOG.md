@@ -8,6 +8,46 @@ version is `0.x`, minor/patch boundaries are best-effort and the public API may 
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-19
+
+A correctness- and packaging-focused patch release. No public API changes; drop-in
+upgrade from 0.2.0.
+
+### Fixed
+
+- **`DFINE.from_pretrained` built the wrong architecture** — it re-derived the model from
+  `size`/`num_classes` instead of the catalogue entry's real config. It now builds through
+  the new `registry.config_for(spec, …)`, so pretrained models (incl. the 366-class
+  Objects365 and segmentation checkpoints) assemble and strict-load correctly.
+- **Loading weights at a non-default `imgsz` crashed** — the resolution-dependent decoder
+  buffers (`decoder.anchors` / `decoder.valid_mask`) mismatched shape under `strict=True`.
+  The loader now keeps the freshly generated buffers, so `DFINE(size=…, imgsz=…).load(…)`
+  works at any supported resolution.
+- **Weight-download race / corruption** — the `.part` temp file could clobber a concurrent
+  download or leave a stray fragment on failure. Downloads now use a unique per-process temp
+  name and clean up on error.
+- **Multi-GPU device resolution** — a bare `cuda` (no index) under DDP now pins to
+  `LOCAL_RANK`; the launcher validates `devices ≤ visible GPUs`, moves the model to CPU
+  before spawning workers (frees VRAM), and restores it on failure.
+- **Config validation gaps** — `in_channels`/`feat_strides` are now checked against the
+  backbone's `return_idx` stages, `num_top_queries` against the decoder's query/class count,
+  and `sem_seg` class count / `ignore_index` against the uint8 label-map limit. Bad configs
+  fail fast with a clear message instead of deep inside the forward pass.
+- **Model left in train mode after `train()`** — the model and postprocessor are now set to
+  `.eval()` when training finishes, so an immediate `predict()` behaves correctly. Added an
+  `epochs >= 1` guard.
+- **Tracker memory leak on long videos** — `BYTETracker.removed_stracks` grew every frame and
+  was never bounded, so a long `predict_video(track=True)` run leaked memory and slowed down
+  over time. It is now capped (most-recent 1000), which is behavior-preserving.
+- **Postprocessor `F.softmax` without an explicit `dim`** — the (currently unused, non-focal)
+  branch normalized over the wrong axis and emitted a deprecation warning; it now passes
+  `dim=-1`. The focal path — and detection parity — are unchanged.
+
+### Packaging
+
+- Ship the PEP 561 `py.typed` marker (as an empty file) and add it to `MANIFEST.in`, so
+  type checkers pick up the library's inline type hints from an installed wheel.
+
 ## [0.2.0] - 2026-07-27
 
 ### Added
@@ -152,7 +192,8 @@ across roadmap phases 0–6.
 - **CLI** — `dfine models/predict/val/train/export/convert`.
 - **Docs site** (MkDocs Material) and API reference.
 
-[Unreleased]: https://github.com/HoshiBatista/pydfine/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/HoshiBatista/pydfine/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/HoshiBatista/pydfine/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/HoshiBatista/pydfine/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HoshiBatista/pydfine/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/HoshiBatista/pydfine/releases/tag/v0.0.1
