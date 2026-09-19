@@ -15,6 +15,9 @@ from .kalman_filter import KalmanFilterXYAH
 
 __all__ = ["BYTETracker", "STrack", "TrackState"]
 
+# Upper bound on retained removed tracks (see BYTETracker.update); keeps the most recent.
+_MAX_REMOVED_STRACKS = 1000
+
 
 class TrackState:
     """Lifecycle states for a track."""
@@ -298,6 +301,11 @@ class BYTETracker:
         self.lost_stracks.extend(lost)
         self.lost_stracks = _subtract(self.lost_stracks, self.removed_stracks)
         self.removed_stracks.extend(removed)
+        # Cap the removed-track history: it is only used to prune `lost_stracks` above, so
+        # older entries never match again. Left unbounded it would grow every frame — a
+        # memory leak (and an ever-slower `_subtract`) on long videos.
+        if len(self.removed_stracks) > _MAX_REMOVED_STRACKS:
+            self.removed_stracks = self.removed_stracks[-_MAX_REMOVED_STRACKS:]
         self.tracked_stracks, self.lost_stracks = _remove_duplicates(
             self.tracked_stracks, self.lost_stracks
         )
