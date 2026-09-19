@@ -85,7 +85,7 @@ class DFINEPostProcessor(nn.Module):
             )
 
         else:
-            scores = F.softmax(logits)[:, :, :-1]
+            scores = F.softmax(logits, dim=-1)[:, :, :-1]
             scores, labels = scores.max(dim=-1)
             if scores.shape[1] > self.num_top_queries:
                 scores, index = torch.topk(scores, self.num_top_queries, dim=-1)
